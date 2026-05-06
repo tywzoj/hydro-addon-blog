@@ -1,0 +1,19 @@
+{
+  "git.ignoreLimitWarning": true,
+  "files.eol": "\n",
+  "files.insertFinalNewline": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit",
+    "source.removeUnusedImports": "explicit",
+  },
+  "editor.formatOnSave": false,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.detectIndentation": true,
+  "typescript.tsdk": "./node_modules/typescript/lib",
+  "typescript.suggest.autoImports": true,
+  "npm.packageManager": "yarn",
+  "cSpell.words": [
+    "tywzoj",
+    "hydrooj"
+  ]
+}

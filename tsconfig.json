@@ -10,7 +10,6 @@
     "noFallthroughCasesInSwitch": false,
     "noUnusedLocals": false,
     "esModuleInterop": true,
-    "moduleResolution": "node",
     "isolatedModules": true,
     "allowSyntheticDefaultImports": true
   },

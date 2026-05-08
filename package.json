@@ -1,17 +1,23 @@
 {
-  "name": "hydro-addon-training-log",
+  "name": "hydro-addon-blog",
   "version": "1.0.0",
-  "repository": "https://github.com/tywzoj/hydro-addon-training-log.git",
-  "author": "Antares <antares.mi@outlook.com>",
+  "repository": "https://github.com/tywzoj/hydro-addon-blog.git",
+  "author": "Antares <antares.mi@outlook.com>, undefined <i@undefined.moe>",
   "main": "index.ts",
   "license": "AGPL-3.0-only",
-  "dependencies": {},
+  "scripts": {
+    "postinstall": "patch-package"
+  },
+  "dependencies": {
+    "postinstall-postinstall": "^2.1.0"
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@hydrooj/ui-default": "^4.58.0-beta.21",
     "@types/fs-extra": "^11.0.4",
     "@types/jquery": "^3.5.34",
     "@types/js-yaml": "^4",
+    "@types/lodash": "^4.17.24",
     "@types/node": "^25.3.0",
     "@types/superagent": "^8.1.9",
     "eslint": "^10.0.2",
@@ -19,7 +25,8 @@
     "eslint-plugin-prettier": "^5.5.5",
     "eslint-plugin-simple-import-sort": "^12.1.1",
     "globals": "^17.3.0",
-    "hydrooj": "^5.0.0-beta.18",
+    "hydrooj": "^5.0.1",
+    "patch-package": "^8.0.1",
     "prettier": "^3.8.1",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.1"

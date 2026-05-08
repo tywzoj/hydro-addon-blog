@@ -1,0 +1,13 @@
+diff --git a/node_modules/@hydrooj/framework/validator.ts b/node_modules/@hydrooj/framework/validator.ts
+index 0766483..4b5d9ad 100644
+--- a/node_modules/@hydrooj/framework/validator.ts
++++ b/node_modules/@hydrooj/framework/validator.ts
+@@ -89,7 +89,7 @@ const saslprepString = <T = string>(regex?: RegExp, cb?: (i: string) => boolean,
+ ] as [(v) => string, (v) => boolean];
+ 
+ export const Types = {
+-    Content: [(v) => v.toString().trim(), (v) => v?.toString()?.trim() && v.toString().trim().length < 65536],
++    Content: [(v) => v.toString().trim(), (v) => !!v?.toString()?.trim() && v.toString().trim().length < 65536],
+     Key: saslprepString(/^[\w-]{1,255}$/),
+     /** @deprecated */
+     Name: saslprepString(/^.{1,255}$/),

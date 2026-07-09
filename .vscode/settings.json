@@ -9,8 +9,8 @@
   "editor.formatOnSave": false,
   "editor.defaultFormatter": "esbenp.prettier-vscode",
   "editor.detectIndentation": true,
-  "typescript.tsdk": "./node_modules/typescript/lib",
-  "typescript.suggest.autoImports": true,
+  "js/ts.tsdk.path": "./node_modules/typescript/lib",
+  "js/ts.suggest.autoImports": true,
   "npm.packageManager": "yarn",
   "cSpell.words": [
     "tywzoj",

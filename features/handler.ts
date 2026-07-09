@@ -4,13 +4,18 @@ import { DiscussionNotFoundError, Handler, OplogModel, param, PRIV, Types, UserM
 import { BlogModel } from "./model";
 import type { BlogDoc } from "./types";
 
+const ROUTE_BLOG_LIST_USER = "blog_list_user" as const;
+const ROUTE_BLOG_DETAIL = "blog_detail" as const;
+const ROUTE_BLOG_CREATE = "blog_create" as const;
+const ROUTE_BLOG_EDIT = "blog_edit" as const;
+
 class BlogListUserHandler extends Handler {
     @param("uid", Types.Int)
     @param("page", Types.PositiveInt, true)
     async get(domainId: string, uid: number, page = 1) {
         const [ddocs, dpcount] = await this.ctx.db.paginate(BlogModel.getMulti({ owner: uid }), page, 10);
         const udoc = await UserModel.getById(domainId, uid);
-        this.response.template = "blog_main.html";
+        this.response.template = "blog_list.html";
         this.response.body = {
             ddocs,
             dpcount,
@@ -69,42 +74,48 @@ class BlogDetailHandler extends BlogBaseHandler {
     }
 }
 
+class BlogCreateHandler extends Handler {
+    get() {
+        this.response.template = "blog_edit.html";
+    }
+
+    @param("title", Types.Title)
+    @param("content", Types.Content)
+    async postSubmit(_, title: string, content: string) {
+        await this.limitRate("add_blog", 3600, 60);
+        const did = await BlogModel.add(this.user._id, title, content, this.request.ip);
+        this.response.body = { did };
+        this.response.redirect = this.url(ROUTE_BLOG_DETAIL, { uid: this.user._id, did });
+    }
+}
+
 class BlogEditHandler extends BlogBaseHandler {
     get() {
         this.response.template = "blog_edit.html";
         this.response.body = { ddoc: this.ddoc };
     }
 
-    @param("title", Types.Title)
-    @param("content", Types.Content)
-    async postCreate(_, title: string, content: string) {
-        await this.limitRate("add_blog", 3600, 60);
-        const did = await BlogModel.add(this.user._id, title, content, this.request.ip);
-        this.response.body = { did };
-        this.response.redirect = this.url("blog_detail", { uid: this.user._id, did });
-    }
-
     @param("did", Types.ObjectId)
     @param("title", Types.Title)
     @param("content", Types.Content)
-    async postUpdate(_, did: ObjectId, title: string, content: string) {
+    async postSubmit(_, did: ObjectId, title: string, content: string) {
         if (!this.user.own(this.ddoc)) this.checkPriv(PRIV.PRIV_EDIT_SYSTEM);
         await Promise.all([BlogModel.edit(did, title, content), OplogModel.log(this, "blog.edit", this.ddoc)]);
         this.response.body = { did };
-        this.response.redirect = this.url("blog_detail", { uid: this.user._id, did });
+        this.response.redirect = this.url(ROUTE_BLOG_DETAIL, { uid: this.user._id, did });
     }
 
     @param("did", Types.ObjectId)
     async postDelete(_, did: ObjectId) {
         if (!this.user.own(this.ddoc)) this.checkPriv(PRIV.PRIV_EDIT_SYSTEM);
         await Promise.all([BlogModel.del(did), OplogModel.log(this, "blog.delete", this.ddoc)]);
-        this.response.redirect = this.url("blog_main", { uid: this.ddoc.owner });
+        this.response.redirect = this.url(ROUTE_BLOG_LIST_USER, { uid: this.ddoc.owner });
     }
 }
 
 export function applyHandler(ctx: Context) {
-    ctx.Route("blog_main", "/blog/:uid", BlogListUserHandler);
-    ctx.Route("blog_create", "/blog/:uid/create", BlogEditHandler, PRIV.PRIV_USER_PROFILE);
-    ctx.Route("blog_detail", "/blog/:uid/:did", BlogDetailHandler);
-    ctx.Route("blog_edit", "/blog/:uid/:did/edit", BlogEditHandler, PRIV.PRIV_USER_PROFILE);
+    ctx.Route(ROUTE_BLOG_LIST_USER, "/blog/:uid", BlogListUserHandler);
+    ctx.Route(ROUTE_BLOG_DETAIL, "/blog/:uid/:did", BlogDetailHandler);
+    ctx.Route(ROUTE_BLOG_CREATE, "/blog/:uid/create", BlogCreateHandler, PRIV.PRIV_USER_PROFILE);
+    ctx.Route(ROUTE_BLOG_EDIT, "/blog/:uid/:did/edit", BlogEditHandler, PRIV.PRIV_USER_PROFILE);
 }

@@ -77,6 +77,7 @@ class BlogDetailHandler extends BlogBaseHandler {
 class BlogCreateHandler extends Handler {
     get() {
         this.response.template = "blog_edit.html";
+        this.response.body = { ddoc: null };
     }
 
     @param("title", Types.Title)

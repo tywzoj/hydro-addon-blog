@@ -116,7 +116,8 @@ class BlogEditHandler extends BlogBaseHandler {
 
 export function applyHandler(ctx: Context) {
     ctx.Route(ROUTE_BLOG_LIST_USER, "/blog/:uid", BlogListUserHandler);
-    ctx.Route(ROUTE_BLOG_DETAIL, "/blog/:uid/:did", BlogDetailHandler);
+    // The create must be placed before the detail route, otherwise it will be treated as a did parameter
     ctx.Route(ROUTE_BLOG_CREATE, "/blog/:uid/create", BlogCreateHandler, PRIV.PRIV_USER_PROFILE);
+    ctx.Route(ROUTE_BLOG_DETAIL, "/blog/:uid/:did", BlogDetailHandler);
     ctx.Route(ROUTE_BLOG_EDIT, "/blog/:uid/:did/edit", BlogEditHandler, PRIV.PRIV_USER_PROFILE);
 }

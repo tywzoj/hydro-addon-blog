@@ -1,7 +1,7 @@
 import type { Filter, NumberKeys, ObjectId } from "hydrooj";
 import { DocumentModel } from "hydrooj";
 
-import type { BlogDoc } from "./types";
+import type { BlogDoc, BlogStatusDoc } from "./types";
 
 export const TYPE_BLOG = 70 as const;
 const SYSTEM_DOMAIN = "system" as const;
@@ -12,6 +12,10 @@ declare module "hydrooj" {
     }
     interface DocType {
         [TYPE_BLOG]: BlogDoc;
+    }
+
+    interface DocStatusType {
+        [TYPE_BLOG]: BlogStatusDoc;
     }
 }
 
@@ -71,16 +75,19 @@ export class BlogModel {
     }
 
     static async setStar(did: ObjectId, uid: number, star: boolean): Promise<void> {
-        await DocumentModel.setStatus(SYSTEM_DOMAIN, TYPE_BLOG, did, uid, { star });
+        await this.setStatus(did, uid, { star });
     }
 
-    static async getStatus(did: ObjectId, uid: number): Promise<any> {
-        return await DocumentModel.getStatus(SYSTEM_DOMAIN, TYPE_BLOG, did, uid);
+    static async getStatus(did: ObjectId, uid: number): Promise<BlogStatusDoc> {
+        return (await DocumentModel.getStatus(SYSTEM_DOMAIN, TYPE_BLOG, did, uid)) as BlogStatusDoc;
     }
 
-    static async setStatus(did: ObjectId, uid: number, $set: any): Promise<any> {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-        return await DocumentModel.setStatus(SYSTEM_DOMAIN, TYPE_BLOG, did, uid, $set);
+    static async setStatus(
+        did: ObjectId,
+        uid: number,
+        $set: Omit<BlogStatusDoc, "docType" | "docId">,
+    ): Promise<BlogStatusDoc> {
+        return (await DocumentModel.setStatus(SYSTEM_DOMAIN, TYPE_BLOG, did, uid, $set)) as BlogStatusDoc;
     }
 }
 

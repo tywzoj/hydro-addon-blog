@@ -4,10 +4,10 @@ import { DiscussionNotFoundError, Handler, OplogModel, param, PRIV, Types, UserM
 import { BlogModel } from "./model";
 import type { BlogDoc } from "./types";
 
-const ROUTE_BLOG_LIST_USER = "blog_list_user" as const;
-const ROUTE_BLOG_DETAIL = "blog_detail" as const;
-const ROUTE_BLOG_CREATE = "blog_create" as const;
-const ROUTE_BLOG_EDIT = "blog_edit" as const;
+export const ROUTE_BLOG_LIST_USER = "blog_list_user" as const;
+export const ROUTE_BLOG_DETAIL = "blog_detail" as const;
+export const ROUTE_BLOG_CREATE = "blog_create" as const;
+export const ROUTE_BLOG_EDIT = "blog_edit" as const;
 
 class BlogListUserHandler extends Handler {
     @param("uid", Types.Int)

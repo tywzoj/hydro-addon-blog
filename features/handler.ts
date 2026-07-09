@@ -26,29 +26,30 @@ class BlogListUserHandler extends Handler {
 }
 
 class BlogBaseHandler extends Handler {
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore ddoc will always be set in _prepare, so we can ignore the type error here
-    ddoc: BlogDoc;
+    ddoc!: BlogDoc; // ddoc will always be set in _prepare
 
-    @param("did", Types.ObjectId, true)
+    @param("did", Types.ObjectId)
     async _prepare(domainId: string, did: ObjectId) {
-        this.ddoc = await BlogModel.get(did);
-        if (!this.ddoc) throw new DiscussionNotFoundError(domainId, did);
+        const ddoc = await BlogModel.get(did);
+        if (!ddoc) throw new DiscussionNotFoundError(domainId, did);
+        this.ddoc = ddoc;
     }
 }
 
 class BlogDetailHandler extends BlogBaseHandler {
     @param("did", Types.ObjectId)
     async get(domainId: string, did: ObjectId) {
-        const dsdoc = this.user.hasPriv(PRIV.PRIV_USER_PROFILE) ? await BlogModel.getStatus(did, this.user._id) : null;
+        const canTrackView = this.user.hasPriv(PRIV.PRIV_USER_PROFILE) && this.user._id > 0; // Only track views for logged-in users
+        const dsdoc = canTrackView ? await BlogModel.getStatus(did, this.user._id) : null;
         const udoc = await UserModel.getById(domainId, this.ddoc.owner);
 
-        if (!dsdoc?.view) {
+        if (canTrackView && !dsdoc?.view) {
             await Promise.all([
                 BlogModel.inc(did, "views", 1),
                 BlogModel.setStatus(did, this.user._id, { view: true }),
             ]);
         }
+
         this.response.template = "blog_detail.html";
         this.response.body = {
             ddoc: this.ddoc,
@@ -115,9 +116,9 @@ class BlogEditHandler extends BlogBaseHandler {
 }
 
 export function applyHandler(ctx: Context) {
-    ctx.Route(ROUTE_BLOG_LIST_USER, "/blog/:uid", BlogListUserHandler);
+    ctx.Route(ROUTE_BLOG_LIST_USER, "/blog/:uid", BlogListUserHandler, PRIV.PRIV_USER_PROFILE);
     // The create must be placed before the detail route, otherwise it will be treated as a did parameter
     ctx.Route(ROUTE_BLOG_CREATE, "/blog/:uid/create", BlogCreateHandler, PRIV.PRIV_USER_PROFILE);
-    ctx.Route(ROUTE_BLOG_DETAIL, "/blog/:uid/:did", BlogDetailHandler);
+    ctx.Route(ROUTE_BLOG_DETAIL, "/blog/:uid/:did", BlogDetailHandler, PRIV.PRIV_USER_PROFILE);
     ctx.Route(ROUTE_BLOG_EDIT, "/blog/:uid/:did/edit", BlogEditHandler, PRIV.PRIV_USER_PROFILE);
 }

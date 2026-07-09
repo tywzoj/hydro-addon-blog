@@ -39,8 +39,8 @@ export class BlogModel {
         );
     }
 
-    static async get(did: ObjectId): Promise<BlogDoc> {
-        return (await DocumentModel.get(SYSTEM_DOMAIN, TYPE_BLOG, did)) as BlogDoc;
+    static async get(did: ObjectId): Promise<BlogDoc | null> {
+        return (await DocumentModel.get(SYSTEM_DOMAIN, TYPE_BLOG, did)) as BlogDoc | null;
     }
 
     static async edit(did: ObjectId, title: string, content: string): Promise<BlogDoc> {

@@ -13,6 +13,7 @@ export interface BlogDoc {
     updateAt: Date;
     hidden?: boolean;
     firstPublishAt?: Date;
+    pin?: boolean;
 
     // statistics
     nReply: number;

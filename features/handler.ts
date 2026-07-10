@@ -1,5 +1,6 @@
 import type { Context, Filter, ObjectId } from "hydrooj";
 import { DiscussionNotFoundError, Handler, OplogModel, param, PRIV, Types, UserModel } from "hydrooj";
+import type { SortDirection } from "mongodb";
 
 import { BlogModel } from "./model";
 import type { BlogDoc } from "./types";
@@ -14,17 +15,41 @@ export const TEMPLATE_BLOG_LIST = "blog_list" as const;
 export const TEMPLATE_BLOG_DETAIL = "blog_detail" as const;
 export const TEMPLATE_BLOG_EDIT = "blog_edit" as const;
 
+const SortKeys = {
+    Default: "default",
+    Views: "views",
+    Latest: "latest",
+    LatestUpdate: "latest_update",
+} as const;
+type SortKey = (typeof SortKeys)[keyof typeof SortKeys];
+
+const SortKeyMap: Record<SortKey, Partial<Record<keyof BlogDoc, SortDirection>>> = {
+    [SortKeys.Default]: { firstPublishAt: -1 },
+    [SortKeys.Views]: { views: -1 },
+    [SortKeys.Latest]: { firstPublishAt: -1 },
+    [SortKeys.LatestUpdate]: { updateAt: -1 },
+};
+
 class BlogListUserHandler extends Handler {
     @param("uid", Types.Int)
     @param("page", Types.PositiveInt, true)
-    async get(domainId: string, uid: number, page = 1) {
+    @param("sort", Types.Range([SortKeys.Default, SortKeys.Views, SortKeys.Latest, SortKeys.LatestUpdate]), true)
+    async get(domainId: string, uid: number, page = 1, sort: SortKey = SortKeys.Default) {
+        const isOwner = this.user._id === uid;
         const query: Filter<BlogDoc> = { owner: uid };
 
-        if (!this.user.hasPriv(PRIV.PRIV_EDIT_SYSTEM) && this.user._id !== uid) {
+        if (!this.user.hasPriv(PRIV.PRIV_EDIT_SYSTEM) && !isOwner) {
             query.hidden = false;
         }
 
-        const [ddocs, dpcount] = await this.ctx.db.paginate(BlogModel.getMulti(query), page, 10);
+        const [ddocs, dpcount] = await this.ctx.db.paginate(
+            BlogModel.getMulti(query).sort({
+                pin: -1,
+                ...SortKeyMap[sort],
+            }),
+            page,
+            10,
+        );
         const udoc = await UserModel.getById(domainId, uid);
         this.response.template = toTemplate(TEMPLATE_BLOG_LIST);
         this.response.body = {
@@ -92,9 +117,10 @@ class BlogPostCreateHandler extends Handler {
     @param("title", Types.Title)
     @param("content", Types.Content)
     @param("hidden", Types.Boolean, true)
-    async postSubmit(_, title: string, content: string, hidden?: boolean) {
+    @param("pin", Types.Boolean, true)
+    async postSubmit(_, title: string, content: string, hidden?: boolean, pin?: boolean) {
         await this.limitRate("add_blog", 3600, 60);
-        const did = await BlogModel.add(this.user._id, title, content, hidden, this.request.ip);
+        const did = await BlogModel.add(this.user._id, title, content, hidden, pin, this.request.ip);
         this.response.body = { did };
         this.response.redirect = this.url(ROUTE_BLOG_POST_DETAIL, { uid: this.user._id, did });
     }
@@ -109,10 +135,11 @@ class BlogPostEditHandler extends BlogPostBaseHandler {
     @param("title", Types.Title)
     @param("content", Types.Content)
     @param("hidden", Types.Boolean, true)
-    async postSubmit(_, title: string, content: string, hidden?: boolean) {
+    @param("pin", Types.Boolean, true)
+    async postSubmit(_, title: string, content: string, hidden?: boolean, pin?: boolean) {
         if (!this.user.own(this.ddoc)) this.checkPriv(PRIV.PRIV_EDIT_SYSTEM);
         await Promise.all([
-            BlogModel.edit(this.ddoc, title, content, hidden, this.request.ip),
+            BlogModel.edit(this.ddoc, title, content, hidden, pin, this.request.ip),
             OplogModel.log(this, "blog.edit", this.ddoc),
         ]);
         this.response.body = { did: this.ddoc.docId };

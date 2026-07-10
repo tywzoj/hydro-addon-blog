@@ -20,10 +20,18 @@ declare module "hydrooj" {
 }
 
 export class BlogModel {
-    static async add(owner: number, title: string, content: string, hidden?: boolean, ip?: string): Promise<ObjectId> {
+    static async add(
+        owner: number,
+        title: string,
+        content: string,
+        hidden?: boolean,
+        pin?: boolean,
+        ip?: string,
+    ): Promise<ObjectId> {
         const ddoc: Partial<BlogDoc> = {
             title,
             hidden,
+            pin,
             ip,
             nReply: 0,
             updateAt: new Date(),
@@ -57,11 +65,19 @@ export class BlogModel {
         return ddoc;
     }
 
-    static async edit(ddoc: BlogDoc, title: string, content: string, hidden?: boolean, ip?: string): Promise<BlogDoc> {
+    static async edit(
+        ddoc: BlogDoc,
+        title: string,
+        content: string,
+        hidden?: boolean,
+        pin?: boolean,
+        ip?: string,
+    ): Promise<BlogDoc> {
         const $set: Partial<BlogDoc> = {
             title,
             content,
             hidden,
+            pin,
             updateAt: new Date(),
             ip,
         };

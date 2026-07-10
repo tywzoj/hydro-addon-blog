@@ -37,16 +37,15 @@ class BlogBaseHandler extends Handler {
 }
 
 class BlogDetailHandler extends BlogBaseHandler {
-    @param("did", Types.ObjectId)
-    async get(domainId: string, did: ObjectId) {
+    async get(domainId: string) {
         const canTrackView = this.user.hasPriv(PRIV.PRIV_USER_PROFILE) && this.user._id > 0; // Only track views for logged-in users
-        const dsdoc = canTrackView ? await BlogModel.getStatus(did, this.user._id) : null;
+        const dsdoc = canTrackView ? await BlogModel.getStatus(this.ddoc.docId, this.user._id) : null;
         const udoc = await UserModel.getById(domainId, this.ddoc.owner);
 
         if (canTrackView && !dsdoc?.view) {
             await Promise.all([
-                BlogModel.inc(did, "views", 1),
-                BlogModel.setStatus(did, this.user._id, { view: true }),
+                BlogModel.inc(this.ddoc.docId, "views", 1),
+                BlogModel.setStatus(this.ddoc.docId, this.user._id, { view: true }),
             ]);
         }
 
@@ -62,15 +61,13 @@ class BlogDetailHandler extends BlogBaseHandler {
         this.checkPriv(PRIV.PRIV_USER_PROFILE);
     }
 
-    @param("did", Types.ObjectId)
-    async postStar(_, did: ObjectId) {
-        await BlogModel.setStar(did, this.user._id, true);
+    async postStar() {
+        await BlogModel.setStar(this.ddoc.docId, this.user._id, true);
         this.back({ star: true });
     }
 
-    @param("did", Types.ObjectId)
-    async postUnstar(_, did: ObjectId) {
-        await BlogModel.setStar(did, this.user._id, false);
+    async postUnstar() {
+        await BlogModel.setStar(this.ddoc.docId, this.user._id, false);
         this.back({ star: false });
     }
 }
@@ -83,9 +80,10 @@ class BlogCreateHandler extends Handler {
 
     @param("title", Types.Title)
     @param("content", Types.Content)
-    async postSubmit(_, title: string, content: string) {
+    @param("hidden", Types.Boolean)
+    async postSubmit(_, title: string, content: string, hidden: boolean) {
         await this.limitRate("add_blog", 3600, 60);
-        const did = await BlogModel.add(this.user._id, title, content, this.request.ip);
+        const did = await BlogModel.add(this.user._id, title, content, hidden, this.request.ip);
         this.response.body = { did };
         this.response.redirect = this.url(ROUTE_BLOG_DETAIL, { uid: this.user._id, did });
     }
@@ -97,20 +95,22 @@ class BlogEditHandler extends BlogBaseHandler {
         this.response.body = { ddoc: this.ddoc };
     }
 
-    @param("did", Types.ObjectId)
     @param("title", Types.Title)
     @param("content", Types.Content)
-    async postSubmit(_, did: ObjectId, title: string, content: string) {
+    @param("hidden", Types.Boolean)
+    async postSubmit(_, title: string, content: string, hidden: boolean) {
         if (!this.user.own(this.ddoc)) this.checkPriv(PRIV.PRIV_EDIT_SYSTEM);
-        await Promise.all([BlogModel.edit(did, title, content), OplogModel.log(this, "blog.edit", this.ddoc)]);
-        this.response.body = { did };
-        this.response.redirect = this.url(ROUTE_BLOG_DETAIL, { uid: this.user._id, did });
+        await Promise.all([
+            BlogModel.edit(this.ddoc, title, content, hidden, this.request.ip),
+            OplogModel.log(this, "blog.edit", this.ddoc),
+        ]);
+        this.response.body = { did: this.ddoc.docId };
+        this.response.redirect = this.url(ROUTE_BLOG_DETAIL, { uid: this.user._id, did: this.ddoc.docId });
     }
 
-    @param("did", Types.ObjectId)
-    async postDelete(_, did: ObjectId) {
+    async postDelete() {
         if (!this.user.own(this.ddoc)) this.checkPriv(PRIV.PRIV_EDIT_SYSTEM);
-        await Promise.all([BlogModel.del(did), OplogModel.log(this, "blog.delete", this.ddoc)]);
+        await Promise.all([BlogModel.del(this.ddoc.docId), OplogModel.log(this, "blog.delete", this.ddoc)]);
         this.response.redirect = this.url(ROUTE_BLOG_LIST_USER, { uid: this.ddoc.owner });
     }
 }

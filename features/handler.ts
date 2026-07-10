@@ -80,8 +80,8 @@ class BlogCreateHandler extends Handler {
 
     @param("title", Types.Title)
     @param("content", Types.Content)
-    @param("hidden", Types.Boolean)
-    async postSubmit(_, title: string, content: string, hidden: boolean) {
+    @param("hidden", Types.Boolean, true)
+    async postSubmit(_, title: string, content: string, hidden?: boolean) {
         await this.limitRate("add_blog", 3600, 60);
         const did = await BlogModel.add(this.user._id, title, content, hidden, this.request.ip);
         this.response.body = { did };
@@ -97,8 +97,8 @@ class BlogEditHandler extends BlogBaseHandler {
 
     @param("title", Types.Title)
     @param("content", Types.Content)
-    @param("hidden", Types.Boolean)
-    async postSubmit(_, title: string, content: string, hidden: boolean) {
+    @param("hidden", Types.Boolean, true)
+    async postSubmit(_, title: string, content: string, hidden?: boolean) {
         if (!this.user.own(this.ddoc)) this.checkPriv(PRIV.PRIV_EDIT_SYSTEM);
         await Promise.all([
             BlogModel.edit(this.ddoc, title, content, hidden, this.request.ip),

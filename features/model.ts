@@ -21,6 +21,19 @@ declare module "hydrooj" {
 
 export class BlogModel {
     static async add(owner: number, title: string, content: string, hidden?: boolean, ip?: string): Promise<ObjectId> {
+        const ddoc: Partial<BlogDoc> = {
+            title,
+            hidden,
+            ip,
+            nReply: 0,
+            updateAt: new Date(),
+            views: 0,
+        };
+
+        if (!hidden) {
+            ddoc.firstPublishAt = ddoc.updateAt;
+        }
+
         return await DocumentModel.add(
             SYSTEM_DOMAIN,
             content,
@@ -29,29 +42,22 @@ export class BlogModel {
             null /* docId */,
             null /* parentType */,
             null /* parentId */,
-            {
-                title,
-                hidden,
-                ip,
-                nReply: 0,
-                updateAt: new Date(),
-                views: 0,
-            },
+            ddoc,
         );
     }
 
     static async get(did: ObjectId): Promise<BlogDoc | null> {
-        const bdoc = (await DocumentModel.get(SYSTEM_DOMAIN, TYPE_BLOG, did)) as BlogDoc | null;
+        const ddoc = (await DocumentModel.get(SYSTEM_DOMAIN, TYPE_BLOG, did)) as BlogDoc | null;
 
         // For the backward compatibility, if the firstPublishAt is not set, we set it to updateAt.
-        if (bdoc && !bdoc.hidden && !bdoc.firstPublishAt) {
-            bdoc.firstPublishAt = bdoc.updateAt;
+        if (ddoc && !ddoc.hidden && !ddoc.firstPublishAt) {
+            ddoc.firstPublishAt = ddoc.updateAt;
         }
 
-        return bdoc;
+        return ddoc;
     }
 
-    static async edit(bdoc: BlogDoc, title: string, content: string, hidden?: boolean, ip?: string): Promise<BlogDoc> {
+    static async edit(ddoc: BlogDoc, title: string, content: string, hidden?: boolean, ip?: string): Promise<BlogDoc> {
         const $set: Partial<BlogDoc> = {
             title,
             content,
@@ -60,11 +66,11 @@ export class BlogModel {
             ip,
         };
 
-        if (!hidden && !bdoc.firstPublishAt) {
+        if (!hidden && !ddoc.firstPublishAt) {
             $set.firstPublishAt = new Date();
         }
 
-        return await DocumentModel.set(SYSTEM_DOMAIN, TYPE_BLOG, bdoc.docId, $set);
+        return await DocumentModel.set(SYSTEM_DOMAIN, TYPE_BLOG, ddoc.docId, $set);
     }
 
     static async inc(did: ObjectId, key: NumberKeys<BlogDoc>, value: number): Promise<BlogDoc> {

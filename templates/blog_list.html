@@ -11,7 +11,7 @@
       {% else %}
         <ol class="section__list discussion__list">
           {%- for ddoc in ddocs -%}
-            <li class="section__list__item discussion__item">
+            <li class="section__list__item discussion__item{% if ddoc.pin %} highlight{% endif %}">
               <div class="media">
                 <div class="media__left">
                   <div class="discussion__replies numbox">

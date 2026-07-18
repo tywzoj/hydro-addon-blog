@@ -122,7 +122,7 @@ class BlogPostCreateHandler extends Handler {
     @param("content", Types.Content)
     @param("hidden", Types.Boolean, true)
     @param("pin", Types.Boolean, true)
-    async postSubmit(_, title: string, content: string, hidden?: boolean, pin?: boolean) {
+    async postSubmit(_, title: string, content: string, hidden = false, pin = false) {
         await this.limitRate("add_blog", 3600, 60);
         const did = await BlogModel.add(this.user._id, title, content, hidden, pin, this.request.ip);
         await OplogModel.log(this, "blog.create", { did });
@@ -141,7 +141,7 @@ class BlogPostEditHandler extends BlogPostBaseHandler {
     @param("content", Types.Content)
     @param("hidden", Types.Boolean, true)
     @param("pin", Types.Boolean, true)
-    async postSubmit(_, title: string, content: string, hidden?: boolean, pin?: boolean) {
+    async postSubmit(_, title: string, content: string, hidden = false, pin = false) {
         if (!this.user.own(this.ddoc)) this.checkPriv(PRIV.PRIV_EDIT_SYSTEM);
         await Promise.all([
             BlogModel.edit(this.ddoc, {

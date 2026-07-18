@@ -24,9 +24,9 @@ export class BlogModel {
         owner: number,
         title: string,
         content: string,
-        hidden?: boolean,
-        pin?: boolean,
-        ip?: string,
+        hidden: boolean,
+        pin: boolean,
+        ip: string,
     ): Promise<ObjectId> {
         const ddoc: Partial<BlogDoc> = {
             title,

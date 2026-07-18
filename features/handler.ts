@@ -15,26 +15,24 @@ export const TEMPLATE_BLOG_LIST = "blog_main" as const;
 export const TEMPLATE_BLOG_DETAIL = "blog_detail" as const;
 export const TEMPLATE_BLOG_EDIT = "blog_edit" as const;
 
-const SortKeys = {
-    Views: "views",
-    Latest: "latest",
+export const SortKeys = {
     LatestUpdate: "latest_update",
-    Default: "default",
+    Latest: "latest",
+    Views: "views",
 } as const;
-type SortKey = (typeof SortKeys)[keyof typeof SortKeys];
+export type SortKey = (typeof SortKeys)[keyof typeof SortKeys];
 
 const SortKeyMap: Record<SortKey, Partial<Record<keyof BlogDoc, SortDirection>>> = {
     [SortKeys.Views]: { views: -1 },
     [SortKeys.Latest]: { firstPublishAt: -1 },
     [SortKeys.LatestUpdate]: { updateAt: -1 },
-    [SortKeys.Default]: { updateAt: -1 },
 };
 
 class BlogListUserHandler extends Handler {
     @param("uid", Types.Int)
     @param("page", Types.PositiveInt, true)
     @param("sort", Types.Range([SortKeys.Views, SortKeys.Latest, SortKeys.LatestUpdate]), true)
-    async get(domainId: string, uid: number, page = 1, sort: SortKey = SortKeys.Default) {
+    async get(domainId: string, uid: number, page = 1, sort: SortKey) {
         const isOwner = this.user._id === uid;
         const query: Filter<BlogDoc> = { owner: uid };
 
@@ -42,9 +40,9 @@ class BlogListUserHandler extends Handler {
         // If user is not the owner and the sort is default, sort it by the first publish time, otherwise sort it by the update time.
         if (!this.user.hasPriv(PRIV.PRIV_EDIT_SYSTEM) && !isOwner) {
             query.hidden = false;
-            if (sort === SortKeys.Default) {
-                sort = SortKeys.Latest;
-            }
+            sort ??= SortKeys.Latest;
+        } else {
+            sort ??= SortKeys.LatestUpdate;
         }
 
         const [ddocs, dpcount] = await this.ctx.db.paginate(
@@ -62,6 +60,9 @@ class BlogListUserHandler extends Handler {
             dpcount,
             udoc,
             page,
+            sort,
+            isOwner,
+            SortKeys,
         };
     }
 }

@@ -32,7 +32,7 @@ class BlogListUserHandler extends Handler {
     @param("uid", Types.Int)
     @param("page", Types.PositiveInt, true)
     @param("sort", Types.Range([SortKeys.Views, SortKeys.Latest, SortKeys.LatestUpdate]), true)
-    async get(domainId: string, uid: number, page = 1, sort: SortKey) {
+    async get(domainId: string, uid: number, page = 1, sort?: SortKey) {
         const isOwner = this.user._id === uid;
         const query: Filter<BlogDoc> = { owner: uid };
 
@@ -143,7 +143,13 @@ class BlogPostEditHandler extends BlogPostBaseHandler {
     async postSubmit(_, title: string, content: string, hidden?: boolean, pin?: boolean) {
         if (!this.user.own(this.ddoc)) this.checkPriv(PRIV.PRIV_EDIT_SYSTEM);
         await Promise.all([
-            BlogModel.edit(this.ddoc, title, content, hidden, pin, this.request.ip),
+            BlogModel.edit(this.ddoc, {
+                title,
+                content,
+                hidden,
+                pin,
+                ip: this.request.ip,
+            }),
             OplogModel.log(this, "blog.edit", this.ddoc),
         ]);
         this.response.body = { did: this.ddoc.docId };

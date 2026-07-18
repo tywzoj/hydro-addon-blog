@@ -67,23 +67,15 @@ export class BlogModel {
 
     static async edit(
         ddoc: BlogDoc,
-        title: string,
-        content: string,
-        hidden?: boolean,
-        pin?: boolean,
-        ip?: string,
+        update: Partial<Pick<BlogDoc, "title" | "content" | "hidden" | "pin" | "ip">>,
     ): Promise<BlogDoc> {
         const $set: Partial<BlogDoc> = {
-            title,
-            content,
-            hidden,
-            pin,
+            ...update,
             updateAt: new Date(),
-            ip,
         };
 
-        if (!hidden && !ddoc.firstPublishAt) {
-            $set.firstPublishAt = new Date();
+        if ($set.hidden === false && !ddoc.firstPublishAt) {
+            $set.firstPublishAt = $set.updateAt;
         }
 
         return await DocumentModel.set(SYSTEM_DOMAIN, TYPE_BLOG, ddoc.docId, $set);

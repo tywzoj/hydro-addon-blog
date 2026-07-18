@@ -64,8 +64,8 @@
     <div class="section side">
       <div class="section__body">
         <form method="get">
-            <label for="sort" class="compact label">{{ _('Sort by') }}</label>
-            <select class="compact select" name="sort" onchange="this.form.submit()">
+            <label for="blog-list-sort" class="compact label">{{ _('Sort by') }}</label>
+            <select class="compact select" id="blog-list-sort" name="sort" onchange="this.form.submit()">
               {% for key, value in SortKeys %}
                 <option value="{{ value }}" {% if value == sort %}selected{% endif %}>{{ _('blog_sort_' ~ value) }}</option>
               {% endfor %}

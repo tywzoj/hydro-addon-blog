@@ -6,7 +6,7 @@ export function applyI18n(ctx: Context) {
     ctx.i18n.load("zh", {
         "{0}'s blog": "{0} 的博客",
         Blog: "博客",
-        "Create a Post": "创建博客",
+        "Create a Post": "创建文章",
         "Updated at: {0}": "更新于: {0}",
         "First published at: {0}": "首次发布于: {0}",
         [TEMPLATE_BLOG_DETAIL]: "博客详情",

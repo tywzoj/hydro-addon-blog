@@ -6,6 +6,7 @@ export function applyI18n(ctx: Context) {
     ctx.i18n.load("zh", {
         "{0}'s blog": "{0} 的博客",
         Blog: "博客",
+        "Create a Post": "创建博客",
         "Updated at: {0}": "更新于: {0}",
         "First published at: {0}": "首次发布于: {0}",
         [TEMPLATE_BLOG_DETAIL]: "博客详情",
@@ -18,6 +19,7 @@ export function applyI18n(ctx: Context) {
     ctx.i18n.load("zh_TW", {
         "{0}'s blog": "{0} 的部落格",
         Blog: "部落格",
+        "Create a Post": "建立文章",
         "Updated at: {0}": "更新於: {0}",
         "First published at: {0}": "首次發布於: {0}",
         [TEMPLATE_BLOG_DETAIL]: "部落格詳情",
@@ -30,6 +32,7 @@ export function applyI18n(ctx: Context) {
     ctx.i18n.load("kr", {
         "{0}'s blog": "{0}의 블로그",
         Blog: "블로그",
+        "Create a Post": "게시물 작성",
         "Updated at: {0}": "업데이트: {0}",
         "First published at: {0}": "최초 게시일: {0}",
         [TEMPLATE_BLOG_LIST]: "블로그",

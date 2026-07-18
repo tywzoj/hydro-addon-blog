@@ -9,8 +9,13 @@ export interface BlogDoc {
     owner: number;
     title: string;
     content: string;
-    ip: string;
+    ip?: string;
     updateAt: Date;
+    hidden?: boolean;
+    firstPublishAt?: Date;
+    pin?: boolean;
+
+    // statistics
     nReply: number;
     views: number;
     reply: BlogReplyDoc[];
@@ -21,7 +26,7 @@ export interface BlogReplyDoc {
     _id: ObjectId;
     owner: number;
     content: string;
-    ip: string;
+    ip?: string;
 }
 
 export interface BlogStatusDoc {

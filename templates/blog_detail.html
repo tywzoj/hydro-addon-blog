@@ -12,6 +12,20 @@
             </a>
           </li>
           <li><h2>{{ ddoc.title }}</h2></li>
+          {% if ddoc.hidden %}
+            <li>
+              <span class="discussion-node-tag">
+                  {{ _('Hidden') }}
+              </span>
+            </li>
+          {% endif %}
+          {% if ddoc.pin %}
+            <li>
+              <span class="discussion-node-tag">
+                  {{ _('Pin') }}
+              </span>
+            </li>
+          {% endif %}
           <li>
             {{ user.render_inline(udoc) }}
             @
@@ -24,13 +38,13 @@
       </div>
       <ul class="section__footer supplementary dot list">
       {% if handler.user.hasPriv(PRIV.PRIV_EDIT_SYSTEM) or handler.user.own(ddoc) %}
-        <li><a href="{{ url('blog_edit', uid=udoc._id, did=ddoc.docId) }}">
+        <li><a href="{{ url('blog_post_edit', uid=udoc._id, did=ddoc.docId) }}">
           <span class="icon icon-edit"></span> {{ _('Edit') }}
         </a></li>
       {% endif %}
         <li>{{ _('{0} views').format(ddoc.views) }}</li>
       {% if handler.user.hasPriv(PRIV.PRIV_USER_PROFILE) %}
-        <li data-star="{{ dsdoc['star'] }}"></li>
+        <li data-star="{{ star }}" data-star-action="" ></li>
       {% endif %}
         <li><a href="{{ url('wiki_help', anchor='contact') }}">
           <span class="icon icon-warning"></span> {{ _('Report') }}

@@ -20,7 +20,28 @@ declare module "hydrooj" {
 }
 
 export class BlogModel {
-    static async add(owner: number, title: string, content: string, ip?: string): Promise<ObjectId> {
+    static async add(
+        owner: number,
+        title: string,
+        content: string,
+        hidden: boolean,
+        pin: boolean,
+        ip: string,
+    ): Promise<ObjectId> {
+        const ddoc: Partial<BlogDoc> = {
+            title,
+            hidden,
+            pin,
+            ip,
+            nReply: 0,
+            updateAt: new Date(),
+            views: 0,
+        };
+
+        if (!hidden) {
+            ddoc.firstPublishAt = ddoc.updateAt;
+        }
+
         return await DocumentModel.add(
             SYSTEM_DOMAIN,
             content,
@@ -29,22 +50,35 @@ export class BlogModel {
             null /* docId */,
             null /* parentType */,
             null /* parentId */,
-            {
-                title,
-                ip,
-                nReply: 0,
-                updateAt: new Date(),
-                views: 0,
-            },
+            ddoc,
         );
     }
 
     static async get(did: ObjectId): Promise<BlogDoc | null> {
-        return (await DocumentModel.get(SYSTEM_DOMAIN, TYPE_BLOG, did)) as BlogDoc | null;
+        const ddoc = (await DocumentModel.get(SYSTEM_DOMAIN, TYPE_BLOG, did)) as BlogDoc | null;
+
+        // For the backward compatibility, if the firstPublishAt is not set, we set it to updateAt.
+        if (ddoc && !ddoc.hidden && !ddoc.firstPublishAt) {
+            ddoc.firstPublishAt = ddoc.updateAt;
+        }
+
+        return ddoc;
     }
 
-    static async edit(did: ObjectId, title: string, content: string): Promise<BlogDoc> {
-        return await DocumentModel.set(SYSTEM_DOMAIN, TYPE_BLOG, did, { title, content });
+    static async edit(
+        ddoc: BlogDoc,
+        update: Partial<Pick<BlogDoc, "title" | "content" | "hidden" | "pin" | "ip">>,
+    ): Promise<BlogDoc> {
+        const $set: Partial<BlogDoc> = {
+            ...update,
+            updateAt: new Date(),
+        };
+
+        if ($set.hidden === false && !ddoc.firstPublishAt) {
+            $set.firstPublishAt = $set.updateAt;
+        }
+
+        return await DocumentModel.set(SYSTEM_DOMAIN, TYPE_BLOG, ddoc.docId, $set);
     }
 
     static async inc(did: ObjectId, key: NumberKeys<BlogDoc>, value: number): Promise<BlogDoc> {

@@ -27,11 +27,27 @@
                 required:true,
                 extra_style:'height: 500px',
                 extra_textarea_class:'auto-resize'
-              }) }}
-            <div class="row"><div class="columns">
-              <button name="operation" value="submit" data-default-submit type="submit" class="rounded primary button">
-                {{ _('Update') if ddoc else _('Create') }} (Ctrl+Enter)
-              </button>
+          }) }}
+          <div class="row">
+            {{ form.form_checkbox({
+              columns:3,
+              label:'Hidden',
+              name:'hidden',
+              value:ddoc.hidden|default(true),
+              row:false
+            }) }}
+            {{ form.form_checkbox({
+              columns:3,
+              label:'Pin',
+              name:'pin',
+              value:ddoc.pin|default(false),
+              row:false
+            }) }}
+          </div>
+          <div class="row"><div class="columns">
+            <button name="operation" value="submit" data-default-submit type="submit" class="rounded primary button">
+              {{ _('Update') if ddoc else _('Create') }} (Ctrl+Enter)
+            </button>
             {% if ddoc and (handler.user.hasPriv(PRIV.PRIV_EDIT_SYSTEM) or handler.user.own(ddoc)) %}
               <button name="operation" value="delete" type="submit" class="rounded button">
                 {{ _('Delete') }}

@@ -38,6 +38,8 @@ class BlogListUserHandler extends Handler {
         const isOwner = this.user._id === uid;
         const query: Filter<BlogDoc> = { owner: uid };
 
+        // If the user is not the owner and does not have the edit system privilege, only show non-hidden blogs.
+        // If user is not the owner and the sort is default, sort it by the first publish time, otherwise sort it by the update time.
         if (!this.user.hasPriv(PRIV.PRIV_EDIT_SYSTEM) && !isOwner) {
             query.hidden = false;
             if (sort === SortKeys.Default) {

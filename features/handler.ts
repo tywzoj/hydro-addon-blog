@@ -11,35 +11,38 @@ export const ROUTE_BLOG_POST_DETAIL = "blog_post_detail" as const;
 export const ROUTE_BLOG_POST_CREATE = "blog_post_create" as const;
 export const ROUTE_BLOG_POST_EDIT = "blog_post_edit" as const;
 
-export const TEMPLATE_BLOG_LIST = "blog_list" as const;
+export const TEMPLATE_BLOG_LIST = "blog_main" as const;
 export const TEMPLATE_BLOG_DETAIL = "blog_detail" as const;
 export const TEMPLATE_BLOG_EDIT = "blog_edit" as const;
 
 const SortKeys = {
-    Default: "default",
     Views: "views",
     Latest: "latest",
     LatestUpdate: "latest_update",
+    Default: "default",
 } as const;
 type SortKey = (typeof SortKeys)[keyof typeof SortKeys];
 
 const SortKeyMap: Record<SortKey, Partial<Record<keyof BlogDoc, SortDirection>>> = {
-    [SortKeys.Default]: { firstPublishAt: -1 },
     [SortKeys.Views]: { views: -1 },
     [SortKeys.Latest]: { firstPublishAt: -1 },
     [SortKeys.LatestUpdate]: { updateAt: -1 },
+    [SortKeys.Default]: { updateAt: -1 },
 };
 
 class BlogListUserHandler extends Handler {
     @param("uid", Types.Int)
     @param("page", Types.PositiveInt, true)
-    @param("sort", Types.Range([SortKeys.Default, SortKeys.Views, SortKeys.Latest, SortKeys.LatestUpdate]), true)
+    @param("sort", Types.Range([SortKeys.Views, SortKeys.Latest, SortKeys.LatestUpdate]), true)
     async get(domainId: string, uid: number, page = 1, sort: SortKey = SortKeys.Default) {
         const isOwner = this.user._id === uid;
         const query: Filter<BlogDoc> = { owner: uid };
 
         if (!this.user.hasPriv(PRIV.PRIV_EDIT_SYSTEM) && !isOwner) {
             query.hidden = false;
+            if (sort === SortKeys.Default) {
+                sort = SortKeys.Latest;
+            }
         }
 
         const [ddocs, dpcount] = await this.ctx.db.paginate(
@@ -73,7 +76,7 @@ class BlogPostBaseHandler extends Handler {
 }
 
 class BlogPostDetailHandler extends BlogPostBaseHandler {
-    async get(domainId: string) {
+    async get({ domainId }: { domainId: string }) {
         const canTrackView = this.user.hasPriv(PRIV.PRIV_USER_PROFILE) && this.user._id > 0; // Only track views for logged-in users
         const dsdoc = canTrackView ? await BlogModel.getStatus(this.ddoc.docId, this.user._id) : null;
         const udoc = await UserModel.getById(domainId, this.ddoc.owner);

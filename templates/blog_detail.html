@@ -12,6 +12,20 @@
             </a>
           </li>
           <li><h2>{{ ddoc.title }}</h2></li>
+          {% if ddoc.hidden %}
+            <li>
+              <span class="discussion-node-tag">
+                  {{ _('Hidden') }}
+              </span>
+            </li>
+          {% endif %}
+          {% if ddoc.pin %}
+            <li>
+              <span class="discussion-node-tag">
+                  {{ _('Pin') }}
+              </span>
+            </li>
+          {% endif %}
           <li>
             {{ user.render_inline(udoc) }}
             @

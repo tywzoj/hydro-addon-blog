@@ -35,7 +35,9 @@
                     <li>{{ _('{0} views').format(ddoc.views) }}</li>
                     <li>{{ _('Updated at: {0}').format(datetimeSpan(ddoc.updateAt))|safe }}</li>
                     {% if ddoc.firstPublishAt %}
-                      <li>{{ _('First published at: {0}').format(datetimeSpan(ddoc.firstPublishAt))|safe }}</li>
+                      <li>{{ 
+                        _('First published at: {0}' if isOwner else 'Published at: {0}').format(datetimeSpan(ddoc.firstPublishAt))|safe
+                      }}</li>
                     {% endif %}
                   </ul>
                 </div>

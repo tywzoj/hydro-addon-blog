@@ -97,6 +97,7 @@ class BlogPostDetailHandler extends BlogPostBaseHandler {
             ddoc: this.ddoc,
             dsdoc,
             udoc,
+            star: dsdoc?.star ?? false,
         };
     }
 
@@ -104,14 +105,10 @@ class BlogPostDetailHandler extends BlogPostBaseHandler {
         this.checkPriv(PRIV.PRIV_USER_PROFILE);
     }
 
-    async postStar() {
-        await BlogModel.setStar(this.ddoc.docId, this.user._id, true);
-        this.back({ star: true });
-    }
-
-    async postUnstar() {
-        await BlogModel.setStar(this.ddoc.docId, this.user._id, false);
-        this.back({ star: false });
+    @param("star", Types.Boolean)
+    async postStar(_, star: boolean) {
+        await BlogModel.setStar(this.ddoc.docId, this.user._id, star);
+        this.back({ star });
     }
 }
 

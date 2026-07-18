@@ -44,7 +44,7 @@
       {% endif %}
         <li>{{ _('{0} views').format(ddoc.views) }}</li>
       {% if handler.user.hasPriv(PRIV.PRIV_USER_PROFILE) %}
-        <li data-star="{{ dsdoc['star'] }}"></li>
+        <li data-star="{{ star }}" data-star-action="" ></li>
       {% endif %}
         <li><a href="{{ url('wiki_help', anchor='contact') }}">
           <span class="icon icon-warning"></span> {{ _('Report') }}

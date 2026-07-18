@@ -3,7 +3,15 @@
 {% import "components/paginator.html" as paginator with context %}
 {% extends "layout/basic.html" %}
 {% block content %}
-<div class="row">
+<style>
+  @media (max-width: 599px) {
+  .blog__row {
+    display: flex;
+    flex-direction: column-reverse;
+  }
+}
+</style>
+<div class="row blog__row">
   <div class="medium-9 columns">
     <div class="section">
       {% if not ddocs.length %}

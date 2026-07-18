@@ -39,7 +39,7 @@ class BlogListUserHandler extends Handler {
         // If the user is not the owner and does not have the edit system privilege, only show non-hidden blogs.
         // If user is not the owner and the sort is default, sort it by the first publish time, otherwise sort it by the update time.
         if (!this.user.hasPriv(PRIV.PRIV_EDIT_SYSTEM) && !isOwner) {
-            query.hidden = false;
+            query.hidden = { $ne: true };
             sort ??= SortKeys.Latest;
         } else {
             sort ??= SortKeys.LatestUpdate;
@@ -89,6 +89,7 @@ class BlogPostDetailHandler extends BlogPostBaseHandler {
                 BlogModel.inc(this.ddoc.docId, "views", 1),
                 BlogModel.setStatus(this.ddoc.docId, this.user._id, { view: true }),
             ]);
+            this.ddoc.views++; // Increment the view count in the ddoc to reflect the change
         }
 
         this.response.template = toTemplate(TEMPLATE_BLOG_DETAIL);

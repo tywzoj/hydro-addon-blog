@@ -125,6 +125,7 @@ class BlogPostCreateHandler extends Handler {
     async postSubmit(_, title: string, content: string, hidden?: boolean, pin?: boolean) {
         await this.limitRate("add_blog", 3600, 60);
         const did = await BlogModel.add(this.user._id, title, content, hidden, pin, this.request.ip);
+        await OplogModel.log(this, "blog.create", { did });
         this.response.body = { did };
         this.response.redirect = this.url(ROUTE_BLOG_POST_DETAIL, { uid: this.user._id, did });
     }

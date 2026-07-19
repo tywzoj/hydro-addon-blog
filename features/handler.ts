@@ -52,8 +52,7 @@ class BlogListHandler extends Handler {
             page,
             sort,
             sort_keys: Object.values(SortKeys),
-            is_owner: false, // Home page does not have a specific owner
-            udoc: null, // Home page does not have a specific user document
+            udoc: this.user,
             udict,
         };
     }
@@ -93,7 +92,6 @@ class BlogListUserHandler extends BlogUserBaseHandler {
             sort_keys: Object.values(SortKeys),
             is_owner: isOwner,
             udoc: this.udoc,
-            udict: null, // User page does not have a specific user dictionary
         };
     }
 }

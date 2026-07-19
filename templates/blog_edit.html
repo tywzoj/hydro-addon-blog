@@ -33,7 +33,7 @@
               columns:3,
               label:'Draft',
               name:'draft',
-              value:ddoc.draft|default(true),
+              value:ddoc.draft|default(false if ddoc else true),
               row:false
             }) }}
             {{ form.form_checkbox({

@@ -7,11 +7,11 @@ addPage(
             .attr("data-tooltip", i18n("Blog"))
             .attr(
                 "href",
+                /* eslint-disable @typescript-eslint/no-unsafe-member-access */
                 UiContext.domainId === "system"
-                    ? // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-                      `/blog/${UiContext.udoc._id}`
-                    : // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-                      `/d/${UiContext.domainId}/blog/${UiContext.udoc._id}`,
+                    ? `/blog/${UiContext.udoc._id}`
+                    : `/d/${UiContext.domainId}/blog/${UiContext.udoc._id}`,
+                /* eslint-enable @typescript-eslint/no-unsafe-member-access */
             )
             .addClass("profile-header__contact-item")
             .insertBefore($('a.profile-header__contact-item[href*="/home/messages"]'));

@@ -1,5 +1,5 @@
 import type { Context, Filter } from "hydrooj";
-import { OplogModel, param, PRIV, Types, UserModel } from "hydrooj";
+import { Handler, OplogModel, param, PRIV, Types, UserModel } from "hydrooj";
 import type { SortDirection } from "mongodb";
 
 import type { SortKey } from "./constants";
@@ -16,7 +16,7 @@ import {
     TEMPLATE_BLOG_EDIT,
     TEMPLATE_BLOG_LIST,
 } from "./constants";
-import { BlogBaseHandler, BlogUserBaseHandler, BlogUserPostBaseHandler } from "./handler.base";
+import { BlogUserBaseHandler, BlogUserPostBaseHandler } from "./handler.base";
 import { BlogModel } from "./model";
 import type { BlogDoc } from "./types";
 import { toTemplate } from "./utils";
@@ -27,7 +27,7 @@ export const SortKeyMap: Record<SortKey, Partial<Record<keyof BlogDoc, SortDirec
     [SortKeys.LatestUpdate]: { updateAt: -1 },
 };
 
-class BlogListHandler extends BlogBaseHandler {
+class BlogListHandler extends Handler {
     @param("page", Types.PositiveInt, true)
     @param("sort", Types.Range([SortKeys.Views, SortKeys.Latest, SortKeys.LatestUpdate]), true)
     async get(_, page = 1, sort: SortKey = SortKeys.Latest) {
@@ -133,8 +133,7 @@ class BlogUserPostDetailHandler extends BlogUserPostBaseHandler {
 }
 
 class BlogUserPostCreateHandler extends BlogUserBaseHandler {
-    async _prepare(...args: any) {
-        await super._prepare.apply(this, args);
+    prepare() {
         if (this.user._id !== this.udoc._id) this.checkPriv(PRIV.PRIV_EDIT_SYSTEM);
     }
 
@@ -157,8 +156,7 @@ class BlogUserPostCreateHandler extends BlogUserBaseHandler {
 }
 
 class BlogUserPostEditHandler extends BlogUserPostBaseHandler {
-    async _prepare(...args: any) {
-        await super._prepare.apply(this, args);
+    prepare() {
         if (!this.user.own(this.ddoc)) this.checkPriv(PRIV.PRIV_EDIT_SYSTEM);
     }
 

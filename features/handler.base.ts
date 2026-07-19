@@ -22,7 +22,7 @@ export class BlogUserPostBaseHandler extends BlogUserBaseHandler {
     @param("did", Types.ObjectId)
     async _prepare(_, did: ObjectId) {
         const ddoc = await BlogModel.get(did);
-        if (!ddoc) throw new DiscussionNotFoundError(SYSTEM_DOMAIN, did);
+        if (!ddoc || !this.udoc.own(ddoc, true)) throw new DiscussionNotFoundError(SYSTEM_DOMAIN, did);
         this.ddoc = ddoc;
     }
 }

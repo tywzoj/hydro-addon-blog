@@ -33,7 +33,7 @@ class BlogListHandler extends BlogBaseHandler {
     async get(_, page = 1, sort: SortKey = SortKeys.Latest) {
         const [ddocs, dpcount] = await this.ctx.db.paginate(
             BlogModel.getMulti({
-                hidden: { $ne: true },
+                draft: { $ne: true },
             }).sort(SortKeyMap[sort]),
             page,
             10,
@@ -66,10 +66,10 @@ class BlogListUserHandler extends BlogUserBaseHandler {
         const isOwner = this.user._id === this.udoc._id;
         const query: Filter<BlogDoc> = { owner: this.udoc._id };
 
-        // If the user is not the owner and does not have the edit system privilege, only show non-hidden blogs.
+        // If the user is not the owner and does not have the edit system privilege, only show non-draft blogs.
         // If user is not the owner and the sort is default, sort it by the first publish time, otherwise sort it by the update time.
         if (!this.user.hasPriv(PRIV.PRIV_EDIT_SYSTEM) && !isOwner) {
-            query.hidden = { $ne: true };
+            query.draft = { $ne: true };
             sort ??= SortKeys.Latest;
         } else {
             sort ??= SortKeys.LatestUpdate;
@@ -145,11 +145,11 @@ class BlogUserPostCreateHandler extends BlogUserBaseHandler {
 
     @param("title", Types.Title)
     @param("content", Types.Content)
-    @param("hidden", Types.Boolean)
+    @param("draft", Types.Boolean)
     @param("pin", Types.Boolean)
-    async postSubmit(_, title: string, content: string, hidden = false, pin = false) {
+    async postSubmit(_, title: string, content: string, draft = false, pin = false) {
         await this.limitRate("add_blog", 3600, 60);
-        const did = await BlogModel.add(this.udoc._id, title, content, hidden, pin, this.request.ip);
+        const did = await BlogModel.add(this.udoc._id, title, content, draft, pin, this.request.ip);
         await OplogModel.log(this, "blog.create", { did });
         this.response.body = { did };
         this.response.redirect = this.url(ROUTE_BLOG_POST_DETAIL, { uid: this.udoc._id, did });
@@ -169,14 +169,14 @@ class BlogUserPostEditHandler extends BlogUserPostBaseHandler {
 
     @param("title", Types.Title)
     @param("content", Types.Content)
-    @param("hidden", Types.Boolean)
+    @param("draft", Types.Boolean)
     @param("pin", Types.Boolean)
-    async postSubmit(_, title: string, content: string, hidden = false, pin = false) {
+    async postSubmit(_, title: string, content: string, draft = false, pin = false) {
         await Promise.all([
             BlogModel.edit(this.ddoc, {
                 title,
                 content,
-                hidden,
+                draft,
                 pin,
                 ip: this.request.ip,
             }),

@@ -17,6 +17,7 @@ const FIRST_PUBLISHED_AT = "First published at: {0}";
 const PUBLISHED_AT = "Published at: {0}";
 const NO_POST_YET = "No post yet...";
 const VIEWS = "Views: {0}";
+const DRAFT = "Draft";
 
 export function applyI18n(ctx: Context) {
     ctx.i18n.load("zh", {
@@ -28,6 +29,7 @@ export function applyI18n(ctx: Context) {
         [PUBLISHED_AT]: "发布于: {0}",
         [NO_POST_YET]: "尚无文章...",
         [VIEWS]: "浏览量: {0}",
+        [DRAFT]: "草稿",
         [ROUTE_BLOG_LIST_HOME]: "博客",
         [ROUTE_BLOG_LIST_USER]: "我的博客",
         [TEMPLATE_BLOG_DETAIL]: "博客详情",
@@ -46,6 +48,7 @@ export function applyI18n(ctx: Context) {
         [PUBLISHED_AT]: "發布於: {0}",
         [NO_POST_YET]: "尚無文章...",
         [VIEWS]: "瀏覽量: {0}",
+        [DRAFT]: "草稿",
         [ROUTE_BLOG_LIST_HOME]: "部落格",
         [ROUTE_BLOG_LIST_USER]: "我的部落格",
         [TEMPLATE_BLOG_DETAIL]: "部落格詳情",
@@ -64,6 +67,7 @@ export function applyI18n(ctx: Context) {
         [PUBLISHED_AT]: "게시일: {0}",
         [NO_POST_YET]: "아직 게시물이 없습니다...",
         [VIEWS]: "조회수: {0}",
+        [DRAFT]: "임시 저장",
         [ROUTE_BLOG_LIST_HOME]: "블로그",
         [ROUTE_BLOG_LIST_USER]: "내 블로그",
         [TEMPLATE_BLOG_LIST]: "블로그",

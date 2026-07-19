@@ -11,7 +11,7 @@ export interface BlogDoc {
     content: string;
     ip?: string;
     updateAt: Date;
-    hidden?: boolean;
+    draft?: boolean;
     firstPublishAt?: Date;
     pin?: boolean;
 

@@ -12,10 +12,10 @@
             </a>
           </li>
           <li><h2>{{ ddoc.title }}</h2></li>
-          {% if ddoc.hidden %}
+          {% if ddoc.draft %}
             <li>
               <span class="discussion-node-tag">
-                  {{ _('Hidden') }}
+                  {{ _('Draft') }}
               </span>
             </li>
           {% endif %}

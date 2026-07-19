@@ -31,9 +31,9 @@
           <div class="row">
             {{ form.form_checkbox({
               columns:3,
-              label:'Hidden',
-              name:'hidden',
-              value:ddoc.hidden|default(true),
+              label:'Draft',
+              name:'draft',
+              value:ddoc.draft|default(false if ddoc else true),
               row:false
             }) }}
             {{ form.form_checkbox({

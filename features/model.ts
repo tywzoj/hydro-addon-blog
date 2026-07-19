@@ -1,10 +1,10 @@
 import type { Filter, NumberKeys, ObjectId } from "hydrooj";
 import { DocumentModel } from "hydrooj";
 
+import { SYSTEM_DOMAIN } from "./constants";
 import type { BlogDoc, BlogStatusDoc } from "./types";
 
 export const TYPE_BLOG = 70 as const;
-const SYSTEM_DOMAIN = "system" as const;
 
 declare module "hydrooj" {
     interface Model {
@@ -24,13 +24,13 @@ export class BlogModel {
         owner: number,
         title: string,
         content: string,
-        hidden: boolean,
+        draft: boolean,
         pin: boolean,
         ip: string,
     ): Promise<ObjectId> {
         const ddoc: Partial<BlogDoc> = {
             title,
-            hidden,
+            draft,
             pin,
             ip,
             nReply: 0,
@@ -38,7 +38,7 @@ export class BlogModel {
             views: 0,
         };
 
-        if (!hidden) {
+        if (!draft) {
             ddoc.firstPublishAt = ddoc.updateAt;
         }
 
@@ -58,7 +58,7 @@ export class BlogModel {
         const ddoc = (await DocumentModel.get(SYSTEM_DOMAIN, TYPE_BLOG, did)) as BlogDoc | null;
 
         // For the backward compatibility, if the firstPublishAt is not set, we set it to updateAt.
-        if (ddoc && !ddoc.hidden && !ddoc.firstPublishAt) {
+        if (ddoc && !ddoc.draft && !ddoc.firstPublishAt) {
             ddoc.firstPublishAt = ddoc.updateAt;
         }
 
@@ -67,14 +67,14 @@ export class BlogModel {
 
     static async edit(
         ddoc: BlogDoc,
-        update: Partial<Pick<BlogDoc, "title" | "content" | "hidden" | "pin" | "ip">>,
+        update: Partial<Pick<BlogDoc, "title" | "content" | "draft" | "pin" | "ip">>,
     ): Promise<BlogDoc> {
         const $set: Partial<BlogDoc> = {
             ...update,
             updateAt: new Date(),
         };
 
-        if ($set.hidden === false && !ddoc.firstPublishAt) {
+        if ($set.draft === false && !ddoc.firstPublishAt) {
             $set.firstPublishAt = $set.updateAt;
         }
 

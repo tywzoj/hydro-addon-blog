@@ -3,9 +3,10 @@ import { DiscussionNotFoundError, Handler, OplogModel, param, PRIV, Types, UserM
 import type { SortDirection } from "mongodb";
 
 import { BlogModel } from "./model";
-import type { BlogDoc } from "./types";
+import type { BlogDoc, BlogDocWithUser } from "./types";
 import { toTemplate } from "./utils";
 
+export const ROUTE_BLOG_LIST_HOME = "blog_list_home" as const;
 export const ROUTE_BLOG_LIST_USER = "blog_list_user" as const;
 export const ROUTE_BLOG_POST_DETAIL = "blog_post_detail" as const;
 export const ROUTE_BLOG_POST_CREATE = "blog_post_create" as const;
@@ -27,6 +28,42 @@ const SortKeyMap: Record<SortKey, Partial<Record<keyof BlogDoc, SortDirection>>>
     [SortKeys.Latest]: { firstPublishAt: -1 },
     [SortKeys.LatestUpdate]: { updateAt: -1 },
 };
+
+class BlogListHomeHandler extends Handler {
+    @param("page", Types.PositiveInt, true)
+    @param("sort", Types.Range([SortKeys.Views, SortKeys.Latest, SortKeys.LatestUpdate]), true)
+    async get(_, page = 1, sort: SortKey = SortKeys.Latest) {
+        const [ddocs, dpcount] = await this.ctx.db.paginate(
+            BlogModel.getMulti({
+                hidden: { $ne: true },
+            }).sort(SortKeyMap[sort]),
+            page,
+            10,
+        );
+
+        const udocs = await UserModel.getMulti({
+            _id: { $in: [...new Set(ddocs.map((doc) => doc.owner))] },
+        }).toArray();
+
+        const userMap = new Map(udocs.map((user) => [user._id, user]));
+
+        for (const doc of ddocs) {
+            (doc as BlogDocWithUser).udoc = userMap.get(doc.owner);
+        }
+
+        this.response.template = toTemplate(TEMPLATE_BLOG_LIST);
+        this.response.body = {
+            scenario: "home",
+            ddocs,
+            dpcount,
+            page,
+            sort,
+            sort_keys: Object.values(SortKeys),
+            is_owner: false, // Home page does not have a specific owner
+            udoc: null, // Home page does not have a specific user document
+        };
+    }
+}
 
 class BlogListUserHandler extends Handler {
     @param("uid", Types.Int)
@@ -56,13 +93,14 @@ class BlogListUserHandler extends Handler {
         const udoc = await UserModel.getById(domainId, uid);
         this.response.template = toTemplate(TEMPLATE_BLOG_LIST);
         this.response.body = {
+            scenario: "user",
             ddocs,
             dpcount,
-            udoc,
             page,
             sort,
-            isOwner,
-            SortKeys,
+            sort_keys: Object.values(SortKeys),
+            is_owner: isOwner,
+            udoc,
         };
     }
 }
@@ -165,6 +203,7 @@ class BlogPostEditHandler extends BlogPostBaseHandler {
 }
 
 export function applyHandler(ctx: Context) {
+    ctx.Route(ROUTE_BLOG_LIST_HOME, "/blog", BlogListHomeHandler, PRIV.PRIV_USER_PROFILE);
     ctx.Route(ROUTE_BLOG_LIST_USER, "/blog/:uid", BlogListUserHandler, PRIV.PRIV_USER_PROFILE);
     // The create must be placed before the detail route, otherwise it will be treated as a did parameter
     ctx.Route(ROUTE_BLOG_POST_CREATE, "/blog/:uid/create", BlogPostCreateHandler, PRIV.PRIV_USER_PROFILE);

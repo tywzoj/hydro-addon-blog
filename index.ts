@@ -1,18 +1,11 @@
-import type { Context, Handler } from "hydrooj";
-import { PRIV } from "hydrooj";
+import type { Context } from "hydrooj";
 
-import { applyHandler, ROUTE_BLOG_LIST_USER } from "./features/handler";
+import { applyHandler } from "./features/handler";
 import { applyI18n } from "./features/i18n";
+import { injectUI } from "./features/ui";
 
 export function apply(ctx: Context) {
-    applyHandler(ctx);
-
-    ctx.injectUI(
-        "UserDropdown",
-        ROUTE_BLOG_LIST_USER,
-        (h: Handler) => ({ icon: "book", displayName: "Blog", uid: h.user._id.toString() }),
-        PRIV.PRIV_USER_PROFILE,
-    );
-
     applyI18n(ctx);
+    applyHandler(ctx);
+    injectUI(ctx);
 }

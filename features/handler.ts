@@ -2,28 +2,25 @@ import type { Context, Filter, ObjectId } from "hydrooj";
 import { DiscussionNotFoundError, Handler, OplogModel, param, PRIV, Types, UserModel } from "hydrooj";
 import type { SortDirection } from "mongodb";
 
+import type { SortKey } from "./constants";
+import {
+    ListPageScenario,
+    ROUTE_BLOG_LIST_HOME,
+    ROUTE_BLOG_LIST_USER,
+    ROUTE_BLOG_POST_CREATE,
+    ROUTE_BLOG_POST_DETAIL,
+    ROUTE_BLOG_POST_EDIT,
+    SortKeys,
+    SYSTEM_DOMAIN,
+    TEMPLATE_BLOG_DETAIL,
+    TEMPLATE_BLOG_EDIT,
+    TEMPLATE_BLOG_LIST,
+} from "./constants";
 import { BlogModel } from "./model";
-import type { BlogDoc, BlogDocWithUser } from "./types";
+import type { BlogDoc } from "./types";
 import { toTemplate } from "./utils";
 
-export const ROUTE_BLOG_LIST_HOME = "blog_list_home" as const;
-export const ROUTE_BLOG_LIST_USER = "blog_list_user" as const;
-export const ROUTE_BLOG_POST_DETAIL = "blog_post_detail" as const;
-export const ROUTE_BLOG_POST_CREATE = "blog_post_create" as const;
-export const ROUTE_BLOG_POST_EDIT = "blog_post_edit" as const;
-
-export const TEMPLATE_BLOG_LIST = "blog_main" as const;
-export const TEMPLATE_BLOG_DETAIL = "blog_detail" as const;
-export const TEMPLATE_BLOG_EDIT = "blog_edit" as const;
-
-export const SortKeys = {
-    LatestUpdate: "latest_update",
-    Latest: "latest",
-    Views: "views",
-} as const;
-export type SortKey = (typeof SortKeys)[keyof typeof SortKeys];
-
-const SortKeyMap: Record<SortKey, Partial<Record<keyof BlogDoc, SortDirection>>> = {
+export const SortKeyMap: Record<SortKey, Partial<Record<keyof BlogDoc, SortDirection>>> = {
     [SortKeys.Views]: { views: -1 },
     [SortKeys.Latest]: { firstPublishAt: -1 },
     [SortKeys.LatestUpdate]: { updateAt: -1 },
@@ -41,19 +38,14 @@ class BlogListHomeHandler extends Handler {
             10,
         );
 
-        const udocs = await UserModel.getMulti({
-            _id: { $in: [...new Set(ddocs.map((doc) => doc.owner))] },
-        }).toArray();
-
-        const userMap = new Map(udocs.map((user) => [user._id, user]));
-
-        for (const doc of ddocs) {
-            (doc as BlogDocWithUser).udoc = userMap.get(doc.owner);
-        }
+        const udict = await UserModel.getList(
+            SYSTEM_DOMAIN,
+            ddocs.map((doc) => doc.owner),
+        );
 
         this.response.template = toTemplate(TEMPLATE_BLOG_LIST);
         this.response.body = {
-            scenario: "home",
+            scenario: ListPageScenario.Home,
             ddocs,
             dpcount,
             page,
@@ -61,6 +53,7 @@ class BlogListHomeHandler extends Handler {
             sort_keys: Object.values(SortKeys),
             is_owner: false, // Home page does not have a specific owner
             udoc: null, // Home page does not have a specific user document
+            udict,
         };
     }
 }
@@ -69,7 +62,7 @@ class BlogListUserHandler extends Handler {
     @param("uid", Types.Int)
     @param("page", Types.PositiveInt, true)
     @param("sort", Types.Range([SortKeys.Views, SortKeys.Latest, SortKeys.LatestUpdate]), true)
-    async get(domainId: string, uid: number, page = 1, sort?: SortKey) {
+    async get(_, uid: number, page = 1, sort?: SortKey) {
         const isOwner = this.user._id === uid;
         const query: Filter<BlogDoc> = { owner: uid };
 
@@ -90,10 +83,10 @@ class BlogListUserHandler extends Handler {
             page,
             10,
         );
-        const udoc = await UserModel.getById(domainId, uid);
+        const udoc = await UserModel.getById(SYSTEM_DOMAIN, uid);
         this.response.template = toTemplate(TEMPLATE_BLOG_LIST);
         this.response.body = {
-            scenario: "user",
+            scenario: ListPageScenario.User,
             ddocs,
             dpcount,
             page,
@@ -101,6 +94,7 @@ class BlogListUserHandler extends Handler {
             sort_keys: Object.values(SortKeys),
             is_owner: isOwner,
             udoc,
+            uidict: null, // User page does not have a specific user dictionary
         };
     }
 }
@@ -117,10 +111,10 @@ class BlogPostBaseHandler extends Handler {
 }
 
 class BlogPostDetailHandler extends BlogPostBaseHandler {
-    async get({ domainId }: { domainId: string }) {
+    async get() {
         const canTrackView = this.user.hasPriv(PRIV.PRIV_USER_PROFILE) && this.user._id > 0; // Only track views for logged-in users
         const dsdoc = canTrackView ? await BlogModel.getStatus(this.ddoc.docId, this.user._id) : null;
-        const udoc = await UserModel.getById(domainId, this.ddoc.owner);
+        const udoc = await UserModel.getById(SYSTEM_DOMAIN, this.ddoc.owner);
 
         if (canTrackView && !dsdoc?.view) {
             await Promise.all([

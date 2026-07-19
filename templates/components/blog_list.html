@@ -16,7 +16,7 @@
               </li>
             {% endif %}
             {% if scenario == 'home' %}
-              <li>{{ blog_user.render_inline(ddoc.udoc) }}</li>
+              <li>{{ blog_user.render_inline(udict[ddoc.owner]) }}</li>
             {% endif %}
             <li>{{ _('Views: {0}').format(ddoc.views) }}</li>
             <li>{{ _('Updated at: {0}').format(datetimeSpan(ddoc.updateAt))|safe }}</li>

@@ -1,10 +1,10 @@
 import type { Filter, NumberKeys, ObjectId } from "hydrooj";
 import { DocumentModel } from "hydrooj";
 
+import { SYSTEM_DOMAIN } from "./constants";
 import type { BlogDoc, BlogStatusDoc } from "./types";
 
 export const TYPE_BLOG = 70 as const;
-const SYSTEM_DOMAIN = "system" as const;
 
 declare module "hydrooj" {
     interface Model {

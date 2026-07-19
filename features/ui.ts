@@ -1,7 +1,7 @@
 import type { Context, Handler } from "hydrooj";
 import { PRIV } from "hydrooj";
 
-import { ROUTE_BLOG_LIST_HOME, ROUTE_BLOG_LIST_USER } from "./handler";
+import { ROUTE_BLOG_LIST_HOME, ROUTE_BLOG_LIST_USER } from "./constants";
 
 export function injectUI(ctx: Context) {
     ctx.injectUI(

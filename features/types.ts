@@ -1,4 +1,4 @@
-import type { ObjectId, Udoc } from "hydrooj";
+import type { ObjectId } from "hydrooj";
 
 import type { TYPE_BLOG } from "./model";
 
@@ -20,10 +20,6 @@ export interface BlogDoc {
     views: number;
     reply: BlogReplyDoc[];
     react: Record<string, number>;
-}
-
-export interface BlogDocWithUser extends BlogDoc {
-    udoc?: Udoc;
 }
 
 export interface BlogReplyDoc {

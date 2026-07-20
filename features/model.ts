@@ -128,14 +128,31 @@ export class BlogModel {
 export async function ensureIndexes(ctx: Context) {
     await ctx.db.ensureIndexes(
         DocumentModel.coll,
+        // Home list: no owner filter, sort by a single key; draft ($ne) is a trailing range filter.
         {
-            key: { domainId: 1, docType: 1, draft: 1, docId: -1 },
-            name: "draftBlog",
-            sparse: true,
+            key: { domainId: 1, docType: 1, views: -1, draft: 1 },
+            name: "blogHomeByViews",
         },
         {
-            key: { domainId: 1, docType: 1, owner: 1, draft: 1, docId: -1 },
-            name: "ownerBlog",
+            key: { domainId: 1, docType: 1, firstPublishAt: -1, draft: 1 },
+            name: "blogHomeByFirstPublish",
+        },
+        {
+            key: { domainId: 1, docType: 1, updateAt: -1, draft: 1 },
+            name: "blogHomeByUpdateAt",
+        },
+        // User list: owner equality, pin then sort key; draft ($ne) trailing (only used for non-owner).
+        {
+            key: { domainId: 1, docType: 1, owner: 1, pin: -1, views: -1, draft: 1 },
+            name: "blogUserByViews",
+        },
+        {
+            key: { domainId: 1, docType: 1, owner: 1, pin: -1, firstPublishAt: -1, draft: 1 },
+            name: "blogUserByFirstPublish",
+        },
+        {
+            key: { domainId: 1, docType: 1, owner: 1, pin: -1, updateAt: -1, draft: 1 },
+            name: "blogUserByUpdateAt",
         },
     );
 }

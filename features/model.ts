@@ -1,4 +1,4 @@
-import type { Filter, NumberKeys, ObjectId } from "hydrooj";
+import type { Context, Filter, NumberKeys, ObjectId } from "hydrooj";
 import { DocumentModel } from "hydrooj";
 
 import { SYSTEM_DOMAIN } from "./constants";
@@ -74,7 +74,7 @@ export class BlogModel {
             updateAt: new Date(),
         };
 
-        if ($set.draft === false && !ddoc.firstPublishAt) {
+        if ("draft" in $set && !$set.draft && !ddoc.firstPublishAt) {
             $set.firstPublishAt = $set.updateAt;
         }
 
@@ -123,6 +123,21 @@ export class BlogModel {
     ): Promise<BlogStatusDoc> {
         return (await DocumentModel.setStatus(SYSTEM_DOMAIN, TYPE_BLOG, did, uid, $set)) as BlogStatusDoc;
     }
+}
+
+export async function ensureIndexes(ctx: Context) {
+    await ctx.db.ensureIndexes(
+        DocumentModel.coll,
+        {
+            key: { domainId: 1, docType: 1, draft: 1, docId: -1 },
+            name: "draftBlog",
+            sparse: true,
+        },
+        {
+            key: { domainId: 1, docType: 1, owner: 1, draft: 1, docId: -1 },
+            name: "ownerBlog",
+        },
+    );
 }
 
 global.Hydro.model.blog = BlogModel;

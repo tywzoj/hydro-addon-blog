@@ -126,6 +126,7 @@ export class BlogModel {
 }
 
 export async function ensureIndexes(ctx: Context) {
+    // The document collection is shared across all docTypes; restrict every index to blog docs only.
     const partialFilterExpression: Filter<BlogDoc> = {
         domainId: SYSTEM_DOMAIN,
         docType: TYPE_BLOG,
@@ -133,8 +134,8 @@ export async function ensureIndexes(ctx: Context) {
 
     await ctx.db.ensureIndexes(
         DocumentModel.coll,
-        // The document collection is shared across all docTypes; restrict every index to blog docs only.
-        // Home list: no owner filter, sort by a single key; draft ($ne) is a trailing range filter.
+        // Home list: no owner filter; sort by a single key.
+        // draft is queried as an inequality (e.g. {$ne: true}), so keep it trailing in the compound index.
         {
             key: { views: -1, draft: 1 },
             name: "blogHomeByViews",
@@ -150,7 +151,8 @@ export async function ensureIndexes(ctx: Context) {
             name: "blogHomeByUpdateAt",
             partialFilterExpression,
         },
-        // User list: owner equality, pin then sort key; draft ($ne) trailing (only used for non-owner).
+        // User list: owner equality, pin then sort key.
+        // draft is queried as an inequality (e.g. {$ne: true}), so keep it trailing in the compound index.
         {
             key: { owner: 1, pin: -1, views: -1, draft: 1 },
             name: "blogUserByViews",

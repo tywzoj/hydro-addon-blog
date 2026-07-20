@@ -1,4 +1,4 @@
-import type { Filter, NumberKeys, ObjectId } from "hydrooj";
+import type { Context, Filter, NumberKeys, ObjectId } from "hydrooj";
 import { DocumentModel } from "hydrooj";
 
 import { SYSTEM_DOMAIN } from "./constants";
@@ -74,7 +74,7 @@ export class BlogModel {
             updateAt: new Date(),
         };
 
-        if ($set.draft === false && !ddoc.firstPublishAt) {
+        if ("draft" in $set && !$set.draft && !ddoc.firstPublishAt) {
             $set.firstPublishAt = $set.updateAt;
         }
 
@@ -123,6 +123,52 @@ export class BlogModel {
     ): Promise<BlogStatusDoc> {
         return (await DocumentModel.setStatus(SYSTEM_DOMAIN, TYPE_BLOG, did, uid, $set)) as BlogStatusDoc;
     }
+}
+
+export async function ensureIndexes(ctx: Context) {
+    // The document collection is shared across all docTypes; restrict every index to blog docs only.
+    const partialFilterExpression: Filter<BlogDoc> = {
+        domainId: SYSTEM_DOMAIN,
+        docType: TYPE_BLOG,
+    };
+
+    await ctx.db.ensureIndexes(
+        DocumentModel.coll,
+        // Home list: no owner filter; sort by a single key.
+        // draft is queried as an inequality (e.g. {$ne: true}), so keep it trailing in the compound index.
+        {
+            key: { views: -1, draft: 1 },
+            name: "blogHomeByViews",
+            partialFilterExpression,
+        },
+        {
+            key: { firstPublishAt: -1, draft: 1 },
+            name: "blogHomeByFirstPublish",
+            partialFilterExpression,
+        },
+        {
+            key: { updateAt: -1, draft: 1 },
+            name: "blogHomeByUpdateAt",
+            partialFilterExpression,
+        },
+        // User list: owner equality, pin then sort key.
+        // draft is queried as an inequality (e.g. {$ne: true}), so keep it trailing in the compound index.
+        {
+            key: { owner: 1, pin: -1, views: -1, draft: 1 },
+            name: "blogUserByViews",
+            partialFilterExpression,
+        },
+        {
+            key: { owner: 1, pin: -1, firstPublishAt: -1, draft: 1 },
+            name: "blogUserByFirstPublish",
+            partialFilterExpression,
+        },
+        {
+            key: { owner: 1, pin: -1, updateAt: -1, draft: 1 },
+            name: "blogUserByUpdateAt",
+            partialFilterExpression,
+        },
+    );
 }
 
 global.Hydro.model.blog = BlogModel;

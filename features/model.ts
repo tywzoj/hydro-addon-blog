@@ -126,33 +126,45 @@ export class BlogModel {
 }
 
 export async function ensureIndexes(ctx: Context) {
+    const partialFilterExpression: Filter<BlogDoc> = {
+        domainId: SYSTEM_DOMAIN,
+        docType: TYPE_BLOG,
+    };
+
     await ctx.db.ensureIndexes(
         DocumentModel.coll,
+        // The document collection is shared across all docTypes; restrict every index to blog docs only.
         // Home list: no owner filter, sort by a single key; draft ($ne) is a trailing range filter.
         {
-            key: { domainId: 1, docType: 1, views: -1, draft: 1 },
+            key: { views: -1, draft: 1 },
             name: "blogHomeByViews",
+            partialFilterExpression,
         },
         {
-            key: { domainId: 1, docType: 1, firstPublishAt: -1, draft: 1 },
+            key: { firstPublishAt: -1, draft: 1 },
             name: "blogHomeByFirstPublish",
+            partialFilterExpression,
         },
         {
-            key: { domainId: 1, docType: 1, updateAt: -1, draft: 1 },
+            key: { updateAt: -1, draft: 1 },
             name: "blogHomeByUpdateAt",
+            partialFilterExpression,
         },
         // User list: owner equality, pin then sort key; draft ($ne) trailing (only used for non-owner).
         {
-            key: { domainId: 1, docType: 1, owner: 1, pin: -1, views: -1, draft: 1 },
+            key: { owner: 1, pin: -1, views: -1, draft: 1 },
             name: "blogUserByViews",
+            partialFilterExpression,
         },
         {
-            key: { domainId: 1, docType: 1, owner: 1, pin: -1, firstPublishAt: -1, draft: 1 },
+            key: { owner: 1, pin: -1, firstPublishAt: -1, draft: 1 },
             name: "blogUserByFirstPublish",
+            partialFilterExpression,
         },
         {
-            key: { domainId: 1, docType: 1, owner: 1, pin: -1, updateAt: -1, draft: 1 },
+            key: { owner: 1, pin: -1, updateAt: -1, draft: 1 },
             name: "blogUserByUpdateAt",
+            partialFilterExpression,
         },
     );
 }

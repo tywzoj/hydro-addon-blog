@@ -314,6 +314,11 @@ test("JSON false and zero publish and unpin while omitted fields remain unchange
         const content = "Omitted flags must be preserved";
         expect((await update({ operation: "submit", title: draftTitle, content })).ok()).toBe(true);
         expect(await posts.findOne({ title: draftTitle })).toMatchObject({ draft: true, pin: true });
+        for (const missing of [undefined, null, ""]) {
+            expect((await update({ operation: "publish", draft: missing })).status()).toBe(403);
+            expect((await update({ operation: "pin", pin: missing })).status()).toBe(403);
+        }
+        expect(await posts.findOne({ title: draftTitle })).toMatchObject({ draft: true, pin: true });
         expect((await update({ operation: "submit", title: draftTitle, content, draft: value, pin: value })).ok()).toBe(
             true,
         );

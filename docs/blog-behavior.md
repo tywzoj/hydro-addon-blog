@@ -52,6 +52,7 @@ Source: [list handlers and sort map](../features/handler.ts), [model queries and
 - The new-post form initially checks Draft. An omitted draft field defaults to draft on creation; the visible-checkbox marker makes an explicitly unchecked control publish instead.
 - Updates preserve omitted draft/pin fields. Visible-checkbox markers distinguish unchecking a control from not supplying it.
 - JSON `false` and numeric `0` are explicit false values, not omitted fields. Article Boolean parameters reuse Hydro conversion while preserving omission defaults.
+- Independent publish, pin and star actions require an explicit state value. Missing, null or empty states are rejected before persistence; only content submissions support omitted draft/pin fields.
 - Content edits that stay published require edit and publish permissions. Publishing, withdrawing, pinning, and deleting have independent controls and do not imply permission to edit content.
 - Checked edits compare the loaded update timestamp and draft state before writing, and advance the timestamp monotonically. Stale writes fail rather than changing content whose publication state has changed.
 

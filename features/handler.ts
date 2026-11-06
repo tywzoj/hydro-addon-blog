@@ -145,7 +145,7 @@ class BlogUserPostDetailHandler extends BlogUserPostBaseHandler {
         this.blog.requireLogin();
     }
 
-    @param("star", OptionalBoolean)
+    @param("star", Types.Boolean, false)
     async postStar(_, star: boolean) {
         this.post();
         this.blog.require(BlogPermissions.STAR);
@@ -249,14 +249,14 @@ class BlogUserPostEditHandler extends BlogUserPostBaseHandler {
         });
     }
 
-    @param("pin", OptionalBoolean)
+    @param("pin", Types.Boolean, false)
     async postPin(_, pin: boolean) {
         this.prepare();
         this.blog.requireAction(BlogActions.Pin, this.ddoc.owner);
         await this.update({ pin });
     }
 
-    @param("draft", OptionalBoolean)
+    @param("draft", Types.Boolean, false)
     async postPublish(_, draft: boolean) {
         this.prepare();
         this.blog.requireAction(draft ? BlogActions.Unpublish : BlogActions.Publish, this.ddoc.owner);

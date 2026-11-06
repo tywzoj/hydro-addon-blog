@@ -61,6 +61,16 @@ The tests exercise real MongoDB union/deduplication and page results; no
 large-directory benchmark or standalone whole-project type check is claimed.
 Current-head CI evidence is recorded in the PR checks and review replies.
 
+After those three threads were resolved, a follow-up review identified missing
+state values on independent actions. Publish, pin and star now explicitly
+disable Hydro's optional flag: missing/null/empty values fail validation before
+persistence, while JSON false/zero still convert normally. Omission remains
+supported only for content submissions. UT covers all three actions and E2E
+verifies that rejected publish/pin requests leave a private pinned draft unchanged.
+Follow-up local verification passed lint, 116 UT with coverage, and the focused
+JSON regression plus three real-login setup cases
+(`test-results/hydro-blog-51415-a62cdfc6/`). Full current-head CI is tracked on PR #9.
+
 ## Follow-up: Self-Only Creation
 
 Status: Completed locally; included in the feature branch for PR #9.

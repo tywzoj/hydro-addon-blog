@@ -303,6 +303,24 @@ describe("create, edit, and delete contracts", () => {
         );
     });
 
+    it.each([undefined, null, ""])("requires explicit state for independent actions (%s)", async (value) => {
+        for (const [method, field] of [
+            ["postPublish", "draft"],
+            ["postPin", "pin"],
+            ["postStar", "star"],
+        ] as const) {
+            const handler = createHandler(method === "postStar" ? "/blog/:uid/:did" : "/blog/:uid/:did/edit");
+            handler.ddoc.draft = true;
+            handler.ddoc.pin = true;
+            await expect(async () => handler[method]({ domainId: "system", [field]: value })).rejects.toBeInstanceOf(
+                ValidationError,
+            );
+        }
+        expect(DocumentModel.coll.findOneAndUpdate).not.toHaveBeenCalled();
+        expect(DocumentModel.setStatus).not.toHaveBeenCalled();
+        expect(OplogModel.log).not.toHaveBeenCalled();
+    });
+
     it("treats a visible unchecked draft checkbox as an explicit publication request", async () => {
         const handler = createHandler("/blog/:uid/create");
         DocumentModel.add.mockResolvedValue(handler.ddoc.docId);

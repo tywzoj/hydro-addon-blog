@@ -52,6 +52,12 @@ The project's coverage goal includes both UT and E2E; neither replaces the other
 
 ## Code Requirements
 
+### UI and Styling
+
+- Reuse Hydro's built-in UI components, styles, and interaction patterns wherever possible instead of recreating them in the addon.
+- Avoid overriding Hydro's own UI with HTML templates unless necessary. When an existing Hydro UI needs adjustment, prefer script injection through the extension mechanisms described in the official Hydro documentation, and verify the approach against the compatible upstream source.
+- If a template override or custom UI/style is unavoidable, document why the existing UI and documented script-injection mechanisms cannot meet the requirement, and keep the customization minimal.
+
 ### Types and Input Validation
 
 - Use existing domain types and type-only imports where appropriate. Avoid introducing `any`, unsafe assertions, or lint suppressions to conceal a mismatched contract.

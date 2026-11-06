@@ -2,9 +2,9 @@
 
 ## Status
 
-In progress: baseline investigation is complete; UT and E2E implementation remains planned for a dedicated PR. No implementation PR is recorded yet.
+In progress: baseline investigation and the initial Vitest UT implementation are complete locally. E2E, disposable runtime, and a supported type-check command remain planned. No implementation PR is recorded yet.
 
-The [investigation record](self-validation-investigation.md) retains experiments, a recommended approach, and limitations. The repository declares local Playwright MCP and documents its prerequisites; it does not yet deliver the runner, scripts, fixtures, dependencies, or CI jobs described here.
+The [investigation record](self-validation-investigation.md) retains experiments and limitations. The repository declares local Playwright MCP and provides Vitest scripts, isolated model/handler fixtures, and a UT workflow step. Runtime provisioning and browser E2E are not delivered.
 
 ## Goal
 
@@ -20,6 +20,8 @@ Original baseline reference: repository revision `d4be3cd`, before the agent-doc
 - Runtime verification may require a configured Hydro instance.
 - `yarn.lock` is intentionally ignored; this initiative does not change that policy.
 
+The bullets above describe the original baseline. The UT implementation now supplies `test`, `test:watch`, and `test:coverage`, with lint and coverage in PR validation. A PR-head CI run has not yet been observed.
+
 ## Scope and Requirements
 
 The implementation PR should establish:
@@ -34,7 +36,7 @@ The implementation PR should establish:
 - Local and CI execution of the same supported checks, with actionable diagnostics.
 - Documentation that distinguishes available capabilities from optional or still-planned checks.
 
-The investigation recommends `node:test` with Hydro's loader for UT and a minimal Docker stack for E2E. Exact scripts and fixtures remain implementation work. Do not describe proposed commands as available before they are added.
+The maintainer selected Vitest for UT, superseding the investigation's `node:test` recommendation. The delivered tests use Vitest module mocking and real framework decorators loaded through Hydro's register module. A minimal Docker service stack with local Playwright remains the E2E direction.
 
 ## Initial Coverage Priorities
 
@@ -67,9 +69,9 @@ Do not encode unresolved draft-detail visibility, exact tie ordering, atomic mul
 | Milestone | Deliverable | Completion evidence |
 | --- | --- | --- |
 | Inspect the baseline (completed) | Identify suitable test boundaries, Hydro compatibility constraints, and prerequisites for type checking. | [Investigation findings](self-validation-investigation.md) record baseline checks, nine passing isolated experiments, a failing mutation control, and remaining gaps. |
-| Establish checks | Add the selected scripts and minimal test tooling without weakening existing checks. | Commands run locally; representative lint, type, or assertion failures produce nonzero exits for the checks introduced. |
-| Add initial regressions | Cover selected observable blog behavior, including a relevant denial or boundary case. | Tests detect the targeted defect or behavioral mismatch and pass for the correct implementation. |
-| Integrate CI | Run supported checks in PR validation with required setup and cleanup. | The corresponding workflow passes on the PR head, with failure detection verified. |
+| Establish checks (UT delivered) | Add Vitest scripts and V8 coverage without weakening lint. | Non-watch UT and coverage pass locally; empty discovery/suites and a publication mutation exit nonzero. Dedicated type checking remains pending. |
+| Add initial regressions (UT delivered) | Cover selected model/handler behavior, including denial and failure paths. | 65 tests pass; the publication mutation is detected. Real-service and browser assertions remain pending. |
+| Integrate CI (configured) | Run supported checks in PR validation with required setup and cleanup. | The workflow runs lint and UT coverage with a step timeout; head-specific CI evidence remains pending. |
 | Document and hand off | Update agent guides with actual commands, prerequisites, coverage, and remaining gaps. | Documentation matches delivered scripts and CI; outcomes and follow-up work are retained here. |
 
 ## Acceptance Criteria
@@ -96,7 +98,7 @@ Review the workflow for the actual PR head and update the [validation guide](../
 
 ## Dependencies and Open Decisions
 
-- Implement the recommended UT runner and validate its fixture boundary; keep complete Hydro authorization in E2E.
+- Extend the delivered Vitest cases as behavior changes; keep complete Hydro authorization in E2E.
 - Resolve the demonstrated standalone type-check failures with an explicitly scoped check or separately justified dependency compatibility work.
 - Provision the minimal Hydro/database/browser environment and choose concrete compatible versions, readiness, fixture seeding, and resource lifecycle.
 - Sequence E2E delivery explicitly if it needs a follow-up PR; it remains a required project coverage layer, not an optional substitute for UT.
@@ -105,4 +107,10 @@ Review the workflow for the actual PR head and update the [validation guide](../
 
 ## Delivery Record
 
-The baseline investigation milestone is complete; see the [dated findings](self-validation-investigation.md). Development rules now require UT and E2E and a low-impact runtime boundary. The local Playwright MCP declaration passed initialization, tool discovery, blank-page navigation, and browser closure without Docker. Actual addon-flow MCP verification and automated suites are not delivered. Add implementation PRs, actual coverage, container/MCP results, and CI evidence as work progresses.
+The baseline investigation milestone is complete; see the [dated findings](self-validation-investigation.md). Documentation and the local MCP declaration were committed as `9b68128`. The MCP declaration passed initialization, tool discovery, blank-page navigation, and browser closure without Docker.
+
+On 2026-11-06, the maintainer selected Vitest and the initial UT implementation added 65 passing cases, `yarn test`, optional watch mode, V8 coverage, and a CI coverage step. Coverage of the explicitly selected model/handler files was 98.82% lines and 100% branches; this is not whole-project or E2E coverage. Failure controls rejected unmatched discovery, an empty suite, and an in-memory publication mutation.
+
+Vitest and `@vitest/coverage-v8` are pinned together at `4.0.18`, with Vite 7 and Hydro register `1.0.4`. An attempted `4.1.12` pairing reproducibly failed Yarn Classic's Vite linking; the selected combination installed and applied the existing framework patch successfully, retaining its pre-existing version warning.
+
+Remaining work: PR-head CI evidence, supported type checking, disposable Hydro/MongoDB services, real addon-flow MCP verification, and Playwright E2E. No implementation PR or full-runtime compatibility claim is recorded.

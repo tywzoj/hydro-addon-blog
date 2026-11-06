@@ -4,7 +4,7 @@
 
 Minimize changes to the host operating system while providing UT and E2E evidence. Keep Hydro services and MongoDB inside disposable containers. Run Playwright and its browser locally; browser containerization is not required. Existing local Node/Yarn can run lightweight checks; do not require a host Hydro installation.
 
-The repository declares a locally launched Playwright MCP in [`.github/mcp.json`](../.github/mcp.json). It does not yet provision Hydro, MongoDB, a UT runner, or Playwright Test E2E fixtures. The [investigation record](plans/self-validation-investigation.md) distinguishes verified experiments from proposed implementation.
+The repository declares a locally launched Playwright MCP in [`.github/mcp.json`](../.github/mcp.json) and supplies [Vitest UT](testing.md#running-and-extending-ut) that run locally without services. It does not yet provision Hydro, MongoDB, or Playwright Test E2E fixtures. The [investigation record](plans/self-validation-investigation.md) distinguishes verified experiments from proposed implementation.
 
 ## Proposed Runtime Boundary
 
@@ -12,7 +12,7 @@ Use a small Docker Compose stack for the implementation, not a full online-judge
 
 | Component | Isolation and responsibility |
 | --- | --- |
-| Checks | Node 24 and pinned Yarn in a disposable container for installation, patch application, lint, UT, and the selected project type check. Use container-owned dependencies, not host `node_modules`. |
+| Checks | Existing local Node 24/Yarn can run lint and UT. An optional disposable check container can use the same commands with container-owned dependencies, not host `node_modules`. A supported project type check remains planned. |
 | Hydro | Compatible Hydro and default UI, with this addon registered at its actual container path. Run in the foreground with a dedicated home/configuration and test file storage. |
 | MongoDB | Dedicated test database and run-owned volume or temporary storage; no host database port or shared database. |
 | E2E | Local Playwright Test with its compatible browser, targeting Hydro through a loopback-published port and writing reports to a designated artifact directory. CI may use a browser container if useful. |

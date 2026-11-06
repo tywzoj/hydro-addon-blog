@@ -2,7 +2,7 @@
 
 ## Status and Scope
 
-Investigation completed on 2026-11-06, against addon revision `dc5947c` on `users/antares/investigate-self-validation`. This records experiments and the recommended implementation sequence, not a delivered UT/E2E suite.
+Investigation completed on 2026-11-06, against addon revision `dc5947c` on `users/antares/investigate-self-validation`. This retains the original experiments, not current setup instructions. The maintainer subsequently selected Vitest; the [delivery plan](self-validation.md#delivery-record) records the implemented UT and remaining E2E work.
 
 The maintainer requires both unit-test (UT) and end-to-end (E2E) coverage, minimal host operating-system impact, and a project Playwright MCP declaration. Docker is available as an approach; a devcontainer is optional. These requirements are reflected in the [development guide](../development.md), [testing requirements](../testing.md), and [verification-environment guide](../verification-environment.md).
 
@@ -20,11 +20,9 @@ Local experiments used macOS, Node `24.22.1`, Yarn `1.22.22`, TypeScript `5.9.3`
 | Official loader followed by bare `require("hydrooj")` | Exit 1: the hashing module accesses an uninitialized `global.Hydro.module`. | Loading the full plugin API is not a lightweight unit-test bootstrap. |
 | Docker availability | CLI `29.9.2`; default daemon socket unavailable. | No container, browser, or real Hydro E2E run was executed. Do not start a system service or install another runtime implicitly. |
 
-Corepack's default Yarn archive download succeeded through a temporary loopback proxy with Node environment-proxy support enabled. No shared registry or global proxy configuration was changed. That workstation-specific workaround is not a project test prerequisite.
-
 ## UT Mechanism Experiment
 
-Recommended runner: `node:test` with `node:assert/strict` and the official `@hydrooj/register` TypeScript loader. Declare the loader directly in development dependencies when implementing the suite rather than relying on its current transitive availability.
+Original recommendation: `node:test` with `node:assert/strict` and the official `@hydrooj/register` TypeScript loader. This runner recommendation was superseded by the maintainer's explicit Vitest selection; the loader remains a direct development dependency for the real framework decorators/validators.
 
 A temporary CommonJS test file outside the repository used `createRequire` rooted at the addon, loaded the actual model and registered handler classes, and substituted only the top-level Hydro API boundary through a saved/restored module-cache entry. It supplied a temporary `global.Hydro.model` and restored it after the run. The fixture used the installed real framework `param` decorators and `Types` validators, not no-op decorators. No database or application server was started.
 
@@ -49,7 +47,7 @@ Implementation constraints:
 - Use process-isolated test files, restore module/global state, and avoid concurrent tests sharing mutable fixture state.
 - Keep the Hydro boundary fixture small, explicit, and matched to installed API signatures. An initial fixture error passed the wrong argument as the query; the test caught it and the fixture was corrected.
 - Call decorated methods with the framework-style raw argument object including `domainId`. Positional calls can bypass validation in the real decorator.
-- The standalone framework `Types.ObjectId` converter is initially a placeholder until Hydro initializes it. Do not claim real identifier validation from the minimal fixture.
+- The framework initially declares a placeholder `Types.ObjectId`, then attempts to load MongoDB and install its real converter/validator. The delivered Vitest fixture loads the installed module through Hydro's loader; malformed identifiers are explicitly rejected before persistence in its UT.
 - Do not add a custom application bootstrap or generic mocking framework merely to support isolated tests.
 
 ## Runner and Type-Check Failure Detection
@@ -73,7 +71,7 @@ Do not substitute `noCheck`, a permissive ambient Hydro shim, broad compiler rel
 | --- | --- |
 | Native Node TypeScript only | Rejected for handler tests: the decorator parse failure was reproduced. |
 | `node:test` plus Hydro's loader | Preferred for UT: proven real-source/decorator loading, failure propagation, controlled clocks, and no new general-purpose runner. Loader transformation is not type checking. |
-| Vitest | Not selected for the initial implementation. Its documented `vi.mock` limitation for `require` imports adds a mocking/transform boundary to the CommonJS Hydro path; no Vitest experiment was run. Revisit only if a concrete requirement outweighs the simpler proven route. |
+| Vitest | Not selected during the original experiment, then explicitly selected by the maintainer. The implementation preserves ES-module addon imports under Vite so `vi.mock` replaces the top-level Hydro API without intercepting CommonJS `require`; real framework primitives load through Hydro's register module. |
 | Full upstream Hydro test bootstrap | Useful reference for actual runtime integration, not the UT default. It starts the application and its CI database path can download a MongoDB binary. Do not copy the upstream test teardown's forced `process.exit(0)` into addon checks. |
 | Playwright Test against disposable Hydro | Required E2E direction: real sessions, permissions, templates, persistence, and browser behavior. Not executed during this investigation. |
 | Playwright MCP | Local initialization, discovery of 25 tools, `about:blank` navigation, and browser closure passed without Docker. This is agent-assisted verification infrastructure, not an automated E2E suite; real Hydro flows still require the service environment. |
@@ -82,7 +80,9 @@ For minimal host impact, implement only the services in the [verification-enviro
 
 Maintainer clarification on 2026-11-06: Playwright should run locally; browser containerization is unnecessary for development. Keep Docker isolation for Hydro and MongoDB, expose Hydro on loopback for local browser access, and use independent test profiles. Containerized browsers remain an optional CI choice.
 
-## Proposed Implementation Sequence
+## Original Proposed Implementation Sequence
+
+This sequence is retained as investigation history. See the [current delivery record](self-validation.md#delivery-record) for Vitest selection and delivered UT.
 
 1. Add the UT runner, direct loader dependency, discovery guards, bounded execution, and the proven publication/query cases. Retain real decorators for invalid-input tests. Prove negative controls and cleanup.
 2. Deliver an explicitly scoped type-check command with visible dependency diagnostics, or resolve upstream compatibility in a separate dependency change. Do not silently turn a failed full type check green.
@@ -104,4 +104,4 @@ Upstream Hydro source was inspected at `3c8286dd1350fcd00412e95d5b056dbfed64edda
 
 The initial Docker MCP proposal included inspected image metadata but was superseded by the maintainer's local-browser direction and the [official MCP getting-started guide](https://playwright.dev/docs/getting-started-mcp). `.github/mcp.json` now pins the locally launched `@playwright/mcp` package to `0.0.83`, an available published version, with headless Chrome and an isolated profile. No MCP Docker image or dedicated Docker network is needed for startup. A bounded local probe verified initialization, 25 tools, blank-page navigation, and browser closure with exit 0.
 
-Remaining gaps: running Docker engine for the service stack, a provisioned Hydro environment, MCP verification of an actual addon flow, real browser E2E, repeatable committed UT fixtures, a supported project type-check command, and head-specific CI evidence. No claim of complete self-validation or full patch compatibility is made.
+Remaining gaps after UT implementation: running Docker engine for the service stack, a provisioned Hydro environment, MCP verification of an actual addon flow, real browser E2E, a supported project type-check command, and head-specific CI evidence. No claim of complete self-validation or full patch compatibility is made.

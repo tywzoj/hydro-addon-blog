@@ -40,13 +40,22 @@ yarn lint
 
 Use `yarn lint:fix` only when appropriate and review its diff for unrelated edits.
 
-There is currently no automated test script or dedicated type-check command in `package.json`. Do not describe linting as a test suite or assume a standalone TypeScript check passes.
+Run the Vitest UT suite for model, handler, or testing-tool changes:
 
-Follow the [testing requirements](testing.md) for behavioral coverage. Consult the [self-validation plan](plans/self-validation.md) for delivery status. Treat commands as available only after they exist in the repository; a planned capability is not an implemented check. Keep tooling work in its explicitly scoped implementation PR.
+```sh
+yarn test
+yarn test:coverage
+```
+
+See the [UT guide](testing.md#running-and-extending-ut) for focused runs, coverage scope, isolation boundaries, and optional watch mode. The normal commands do not start Hydro, MongoDB, Docker, or a browser.
+
+There is no supported dedicated type-check command in `package.json`. Vitest transforms TypeScript but does not type-check it. Do not describe lint or UT as a passing full TypeScript compilation.
+
+Follow the [testing requirements](testing.md) for behavioral coverage. Consult the [self-validation plan](plans/self-validation.md) for delivery status. Treat E2E and environment commands as available only after they exist in the repository; a planned capability is not an implemented check.
 
 The coverage goal requires both UT and browser E2E. Use the [verification-environment guide](verification-environment.md) for low-impact Docker boundaries and the project Playwright MCP declaration. MCP-assisted checks are separate evidence, not an automated E2E suite. The [investigation](plans/self-validation-investigation.md) records a passing lint baseline and raw standalone TypeScript failures; no supported type-check command has been added.
 
-The PR validation workflow installs dependencies and runs lint. When changing the workflow, verify the affected run rather than relying on a check from an earlier commit.
+The PR validation workflow installs dependencies, runs lint, and runs `yarn test:coverage`. When changing the workflow, verify the affected run rather than relying on a check from an earlier commit. A locally passing command does not establish a head-specific CI result.
 
 ## Manual Verification
 
@@ -71,7 +80,7 @@ Documentation-only changes do not require application validation unless they als
 | --- | --- |
 | Documentation only | Review accuracy, local links, referenced paths, and consistency with implemented commands. |
 | Types or shared contracts | Lint, inspect affected callers, and run a dedicated type check once a supported command exists. Verify affected behavior separately. |
-| Model, handler, or business behavior | Lint and focused behavioral coverage, including applicable denial and failure paths. Use the manual fallback when test infrastructure is missing. |
+| Model, handler, or business behavior | Lint and focused Vitest UT, including applicable denial and failure paths. Use the runtime/manual fallback for contracts not exercised by isolated tests. |
 | Templates, frontend, or localization | Lint where applicable and verify rendered behavior, affected languages, and relevant user roles in a Hydro instance when available. |
 | Dependencies or patches | Verify installation and patch application, lint, and exercise affected integrations. |
 | CI or validation tooling | Run the changed checks and verify the corresponding workflow on the current PR head. Confirm failure detection as well as successful execution. |

@@ -2,9 +2,42 @@
 
 ## Current Capability and Scope
 
-The repository currently has linting but no automated test script. The [self-validation plan](plans/self-validation.md) tracks a separate PR for the missing capabilities.
+The repository provides Vitest UT, V8 coverage, and linting. The [self-validation plan](plans/self-validation.md) tracks remaining E2E, disposable-runtime, and type-check capabilities.
 
-This guide defines expectations for implementation work; it does not claim that a test runner, fixtures, integration environment, or additional CI checks already exist. Do not invent executable commands for planned capabilities.
+The PR workflow runs lint and UT with coverage. No real Hydro integration or automated browser E2E environment is delivered yet. Do not invent executable commands for planned capabilities.
+
+## Running and Extending UT
+
+After the standard dependency installation, run from the repository root:
+
+```sh
+yarn test
+yarn test:coverage
+# Optional interactive development:
+yarn test:watch
+# Focus a regression without changing discovery rules:
+yarn test tests/unit/model.test.ts
+```
+
+`yarn test` and `yarn test:coverage` are non-watch commands. Coverage reports are generated under ignored `coverage/`, including HTML and a JSON summary. Coverage currently targets `features/model.ts`, `features/handler.ts`, and `features/handler.base.ts`; it is not a whole-project or E2E coverage claim. No percentage threshold is imposed as a substitute for meaningful assertions.
+
+Vitest discovers `tests/unit/**/*.test.ts`, rejects empty discovery or empty suites, disallows focused `.only` tests, and applies five-second test/hook timeouts. CI additionally limits the UT step to five minutes. Ordinary tests are offline and need neither Docker nor a browser. Use the same non-watch command locally and in CI.
+
+The test boundary is intentionally explicit:
+
+- Vitest transforms actual addon TypeScript with legacy decorators enabled. The source imports remain mockable ES modules in the runner; application files are not rewritten to use `require`.
+- `tests/setup.ts` replaces the top-level `hydrooj` application API with the small fixture in `tests/helpers/hydro.ts`, avoiding full application startup.
+- The fixture loads installed real Hydro `param`, `Types`, and privilege constants through the official `@hydrooj/register` loader. Invalid-input tests invoke decorated methods with the framework-style raw object, including `domainId`; positional calls can bypass those validators.
+- Persistence, user lookup, pagination, rate limiting, routing capture, and audit services are test boundaries. Fixture users, ownership/privilege enforcement, and lookup errors are not the real Hydro authorization lifecycle.
+- Each test resets mocks; clocks return to real time after every test, the temporary Hydro global is restored after each file, and Vitest isolates files. Do not opt shared-state tests into concurrent execution.
+
+Model cases cover publication transitions, legacy reads, reply/counter updates, deletion/status cleanup, per-user star-only updates, index scoping, and propagated persistence failures. Handler cases cover route ordering/gates, target-user/post preparation, list filters/sorts/pagination, permission delegation, input rejection, write/rate-limit/audit behavior, sequential views, star conversion, and success/failure responses.
+
+Assertions about query construction are not MongoDB ordering tests. Fixture denial is not proof of real Hydro access control. A star-only update assertion does not establish database merge semantics. Sequential views do not establish concurrent exactly-once behavior. Preserve these distinctions when adding tests and use E2E for the actual runtime contracts.
+
+The initial implementation verified nonzero exits for unmatched discovery, a discovered file containing no tests, and a temporary transform that reversed the creation publication branch. Both publication regressions failed under that mutation. Temporary probes were removed; application source was not modified.
+
+Use the official [Vitest module-mocking guide](https://vitest.dev/guide/mocking/modules) and [Vitest 4 coverage reference](https://v4.vitest.dev/config/coverage) when extending the harness; keep package versions and dependency transformation behavior compatible with the installed runner.
 
 ## Required Coverage Layers
 
@@ -42,7 +75,7 @@ Examples of meaningful blog regression cases include:
 | Writes and failures | Invalid input does not mutate data; failed operations are not reported as successful. |
 | UI integration | Links, templates, and translated labels match the server-side route and response contract. |
 
-These are coverage candidates, not a claim that the current repository already tests them.
+These are coverage expectations; use the UT inventory above and actual test files to identify delivered cases. Browser and real-service coverage remains pending.
 
 Use the [behavior reference](blog-behavior.md) to distinguish source-derived behavior from unresolved policy or concurrency guarantees. Use the [prioritized coverage plan](plans/self-validation.md#initial-coverage-priorities) when selecting the first automated cases.
 

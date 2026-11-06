@@ -4,9 +4,11 @@
 
 This guide provides a repeatable manual protocol for checks that require Hydro. Its expected results come from the [source-derived behavior reference](blog-behavior.md); the protocol has not been executed as part of the documentation work.
 
-The repository does not provision a Hydro instance, database, test accounts, or a containerized test environment. No specific Hydro/database version combination is certified here. Record the environment used for each run and treat unexecuted steps as unverified, not passed.
+The repository provides [automated E2E](testing.md#running-and-extending-e2e) and an [isolated local runtime](verification-environment.md#local-runtime-boundary) through `yarn dev`: local Hydro, disposable MongoDB, and synthetic accounts. Use this environment and the [declared Playwright MCP](verification-environment.md#project-playwright-mcp) for new manual verification. The automated subset does not prove that every manual scenario below has run or certify a complete deployment matrix. Record the environment used for each run and treat unexecuted steps as unverified, not passed.
 
 ## Prerequisites
+
+For the repository-owned environment, use `yarn dev` and its printed URL/accounts; addon registration and readiness are handled by the launcher. Skip the deployment-management instructions below in that case. Accounts `blog_author`, `blog_viewer`, and `blog_editor` correspond to A, B, and C.
 
 - An explicitly designated non-production Hydro deployment and its required services, including its configured database.
 - A known deployment version, base URL, target domain, service-management method, and an operator authorized to register the addon and reload that test deployment.

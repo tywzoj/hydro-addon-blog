@@ -5,13 +5,17 @@ import simpleImportSort from "eslint-plugin-simple-import-sort";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
-const IGNORED_FILES = ["node_modules/**"];
+const IGNORED_FILES = ["node_modules/**", "coverage/**", "test-results/**", "playwright-report/**"];
 const JS_FILES = ["**/*.{js,cjs,mjs}"];
 const TS_FILES = ["**/*.{ts,cts,mts}"];
 
 export default defineConfig(
     prettierRecommended,
     js.configs.recommended,
+    {
+        files: ["scripts/**/*.{mjs,cjs}"],
+        languageOptions: { globals: globals.node },
+    },
     {
         files: TS_FILES,
         extends: tseslint.configs.recommendedTypeChecked,

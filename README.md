@@ -35,10 +35,13 @@ The commands above assume an existing Hydro deployment managed by PM2. For devel
 
 Start with [AGENTS.md](AGENTS.md) for repository-wide rules and the documentation index.
 
+Run `yarn test` for UT. With Docker and local Chrome available, use `yarn dev` for a disposable local Hydro server or `yarn test:e2e` for managed browser tests. Only MongoDB is containerized; no root access is needed. See the [runtime guide](docs/verification-environment.md) for prerequisites, writable storage, and cleanup.
+
 - [Project structure](docs/project-structure.md)
 - [Development guidelines and official Hydro references](docs/development.md)
 - [Validation commands and dependency troubleshooting](docs/validation.md)
 - [Testing requirements](docs/testing.md)
+- [Isolated verification environment and Playwright MCP](docs/verification-environment.md)
 - [Collaboration guidelines](docs/collaboration.md)
 - [Project plans and delivery status](docs/plans/README.md)
 

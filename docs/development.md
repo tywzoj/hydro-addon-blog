@@ -43,10 +43,12 @@ For version-sensitive decisions, record the upstream commit, tag, or installed p
 1. Define observable acceptance criteria before implementation. Identify affected callers, data, permissions, and failure paths.
 2. Read the relevant code and upstream references. Identify how the changed behavior can be verified using the [validation guide](validation.md) and [testing requirements](testing.md).
 3. Implement a complete, focused change, keeping dependent call sites and user-visible behavior consistent.
-4. Add or update relevant regression tests when infrastructure is available. For a bug fix, capture the failing scenario before the fix when practical.
+4. Add or update unit tests (UT) for changed logic and end-to-end tests (E2E) for affected user flows. Follow the [testing requirements](testing.md) for boundaries and missing infrastructure. For a bug fix, capture the failing scenario before the fix when practical.
 5. Run the applicable checks, inspect the final diff, and record results and limitations. Update related documentation and any active [project plan](plans/README.md).
 
 Do not treat successful compilation, linting, or a plausible-looking diff as proof that changed behavior works.
+
+The project's coverage goal includes both UT and E2E; neither replaces the other. Use the [low-impact verification environment](verification-environment.md): local Hydro and Playwright, a disposable MongoDB container, and environment-controlled user-writable configuration, storage, and temporary paths. Do not copy upstream devcontainer assumptions or require root access. A devcontainer is optional, not a prerequisite. Use the project-declared Playwright MCP for agent-assisted browser investigation and verification, and retain repeatable regressions as executable tests rather than only a conversation transcript.
 
 ## Code Requirements
 

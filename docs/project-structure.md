@@ -16,6 +16,11 @@ This repository is a fork of the official Hydro blog addon. It runs within a Hyd
 | `frontend/` | Browser-side integration with the Hydro UI. |
 | `templates/` | Page templates and reusable components. |
 | `patches/` | Dependency patches applied by `patch-package` during installation. |
+| `tests/unit/` | Vitest model and handler regression tests. |
+| `tests/helpers/` and `tests/setup.ts` | Explicit Hydro service fixtures, real framework primitives, and isolated test setup. |
+| `vitest.config.mjs` | UT discovery, legacy-decorator transformation, timeouts, and scoped coverage. |
+| `playwright.config.ts` and `tests/e2e/` | Real-browser authentication, role/permission, persistence, and frontend E2E tests. |
+| `scripts/hydro-runtime.mjs` and `scripts/hydro-entry.cjs` | Owned MongoDB/local Hydro lifecycle, writable paths, real-user seeding, and cleanup. |
 | `.github/workflows/validation.yml` | PR validation workflow. |
 
 Keep changes in the existing layer. When changing a shared contract, update its dependent handlers, types, templates, frontend code, and translations as needed.

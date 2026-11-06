@@ -83,12 +83,33 @@ Source: [write handlers](../features/handler.ts), [model deletion and reply help
 ## Global Roles and Settings
 
 - The full 18-node catalog and approved decisions are in the [permission plan](plans/blog-permissions.md). Each own/others pair is strictly scoped: an others grant does not restore a revoked own grant.
-- `PRIV_EDIT_SYSTEM` forces root; otherwise an unauthenticated identity uses guest and an unassigned eligible user uses default. Explicit root and guest assignments are supported.
+- Blog permissions apply to all users automatically. There is no blog membership, admission, join, leave, removal, or invitation state.
+- `PRIV_EDIT_SYSTEM` forces root; otherwise an unauthenticated identity uses guest and an unassigned eligible user uses default. Explicit root assignments are supported; guest cannot be assigned to a user. Legacy guest assignments resolve to default for authenticated users without modifying their account or domain data.
 - Root uses an immutable all-permissions mask. Default initially grants reading, starring and own-article operations; guest starts empty. Managers may grant any registered permissions, including to guest, but authentication/sudo remain separate requirements.
 - One `MANAGE_SETTINGS` permission governs the entire settings area. Built-in roles cannot be deleted; new roles copy the current default permissions.
 - `blog.settings` stores one versioned global configuration. `blog.user` stores explicit assignments. Revision-checked configuration updates reject stale saves; unchecked matrix columns persist zero.
+- Permission-matrix columns follow Hydro's configured-role dictionary order, then
+  append missing built-ins in guest/default/root order. Root remains last.
+  `permissionRoleOrder` records first configuration order without changing masks
+  or assignments. A newly created role follows already configured roles, not an
+  alphabetical sort. Numeric role names follow JavaScript dictionary enumeration,
+  as in Hydro. Legacy settings without this metadata preserve custom-role order
+  and append built-ins; earlier builtin-configuration history is not reconstructed.
 - Custom role IDs are immutable. Deletion retires the ID and makes affected assignments resolve to default. Recreating the same name never reactivates old assignments; stale assignment records may remain as harmless references to retired IDs.
 - The user table filters out effective guest/default users before counting/pagination, includes forced root and does not duplicate root entries. The native user selector can still assign a role to an unlisted user.
+- Role assignment adapts the native domain-user controls: header Assign User Roles dialog,
+  multi-user selection, inline role dropdowns, checkbox selection, batch assignment,
+  and resetting a role by selecting default. There is no remove-user action.
+  Guest is excluded from every assignment control and rejected by both assignment APIs,
+  while its anonymous-access permissions remain configurable in the matrix. Forced
+  root rows are read-only; single-user assignment remains API-compatible.
+- Role management uses a header creation dialog and confirmed batch deletion.
+  Both batch APIs validate all selected targets before persistence; no
+  cross-document transaction guarantee is added.
+- Blog sudo verification uses the system-domain identity endpoint and returns to
+  the original settings URL, so a restricted current domain cannot block
+  reauthentication. Settings sidebars retain native styles and show the active page
+  consistently with or without a domain prefix.
 - Draft details, editor responses, JSON and stars check readability before view/status side effects. This intentionally closes the previous draft direct-link gap.
 - No review workflow, reply endpoint, article-owner bypass, or domain-role mutation is introduced.
 

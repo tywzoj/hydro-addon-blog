@@ -4,65 +4,91 @@ import type { Context, Handler } from "hydrooj";
 import { PRIV, UserModel, ValidationError } from "hydrooj";
 import type { Collection } from "mongodb";
 
-import { SYSTEM_DOMAIN } from "./constants";
+import {
+    ANONYMOUS_USER_ID,
+    BLOG_ALL,
+    BLOG_DEFAULT,
+    BLOG_FIRST_PAGE,
+    BLOG_KNOWN,
+    BLOG_NONE,
+    BLOG_SETTINGS_ID,
+    BLOG_SETTINGS_VERSION,
+    BLOG_USERS_PER_PAGE,
+    BlogCollections,
+    BlogMessages,
+    BlogRoles,
+    BUILTIN_BLOG_ROLES,
+    SYSTEM_DOMAIN,
+} from "./constants";
 import type { BlogIdentity } from "./permission";
-import { BLOG_ALL, BLOG_DEFAULT, BLOG_KNOWN, BlogPolicy } from "./permission";
+import { BlogPolicy } from "./permission";
+import type { BlogAssignment, BlogRole, BlogSettings } from "./types";
 
-export interface BlogRole {
-    id: string;
-    name: string;
-    permissions: string;
-}
-
-export interface BlogSettings {
-    _id: "global";
-    version: 1;
-    revision: number;
-    roles: BlogRole[];
-    deletedRoles: string[];
-}
-
-export interface BlogAssignment {
-    _id: number;
-    role: string;
-}
+export { BUILTIN_BLOG_ROLES } from "./constants";
+export type { BlogAssignment, BlogRole, BlogSettings } from "./types";
 
 declare module "hydrooj" {
     interface Collections {
-        "blog.settings": BlogSettings;
-        "blog.user": BlogAssignment;
+        [BlogCollections.Settings]: BlogSettings;
+        [BlogCollections.UserRoles]: BlogAssignment;
     }
 }
 
-export const BUILTIN_BLOG_ROLES = ["guest", "default", "root"];
 const requestPolicies = new WeakMap<Handler, Promise<BlogPolicy>>();
+
+function configuredPermissionRoles(settings: BlogSettings) {
+    const order = settings.permissionRoleOrder ?? [];
+    return [
+        ...order,
+        ...settings.roles
+            .filter((role) => !BUILTIN_BLOG_ROLES.includes(role.name) && !order.includes(role.id))
+            .map((role) => role.id),
+    ];
+}
+
+export function permissionMatrixRoles(settings: BlogSettings): BlogRole[] {
+    const byId = new Map(settings.roles.map((role) => [role.id, role]));
+    const configured = configuredPermissionRoles(settings)
+        .map((id) => byId.get(id))
+        .filter((role): role is BlogRole => !!role && role.name !== BlogRoles.Root);
+    // Hydro enumerates its role dictionary before appending missing built-ins.
+    const roles = Object.values(Object.fromEntries(configured.map((role) => [role.name, role])));
+    for (const name of BUILTIN_BLOG_ROLES) {
+        if (!roles.some((role) => role.name === name)) {
+            const role = settings.roles.find((item) => item.name === name);
+            if (role) roles.push(role);
+        }
+    }
+    return roles;
+}
 
 export function initialSettings(): BlogSettings {
     return {
-        _id: "global",
-        version: 1,
+        _id: BLOG_SETTINGS_ID,
+        version: BLOG_SETTINGS_VERSION,
         revision: 0,
+        permissionRoleOrder: [],
         roles: [
-            { id: "guest", name: "guest", permissions: "0" },
-            { id: "default", name: "default", permissions: BLOG_DEFAULT.toString() },
-            { id: "root", name: "root", permissions: BLOG_ALL.toString() },
+            { id: BlogRoles.Guest, name: BlogRoles.Guest, permissions: BLOG_NONE.toString() },
+            { id: BlogRoles.Default, name: BlogRoles.Default, permissions: BLOG_DEFAULT.toString() },
+            { id: BlogRoles.Root, name: BlogRoles.Root, permissions: BLOG_ALL.toString() },
         ],
         deletedRoles: [],
     };
 }
 
 export function resolveBlogPolicy(user: BlogIdentity, settings: BlogSettings, assignment?: BlogAssignment | null) {
-    let name = "default";
-    if (user.hasPriv(PRIV.PRIV_EDIT_SYSTEM)) name = "root";
-    else if (user._id <= 0 || !user.hasPriv(PRIV.PRIV_USER_PROFILE)) name = "guest";
+    let name: string = BlogRoles.Default;
+    if (user.hasPriv(PRIV.PRIV_EDIT_SYSTEM)) name = BlogRoles.Root;
+    else if (user._id <= ANONYMOUS_USER_ID || !user.hasPriv(PRIV.PRIV_USER_PROFILE)) name = BlogRoles.Guest;
     else if (assignment) {
         const role = settings.roles.find((r) => r.id === assignment.role);
-        if (role) name = role.name;
+        if (role) name = role.name === BlogRoles.Guest ? BlogRoles.Default : role.name;
         else if (!settings.deletedRoles.includes(assignment.role)) throw new ValidationError("role");
     }
     const role = settings.roles.find((r) => r.name === name);
     if (!role) throw new ValidationError("role");
-    return new BlogPolicy(user, name, name === "root" ? BLOG_ALL : BigInt(role.permissions));
+    return new BlogPolicy(user, name, name === BlogRoles.Root ? BLOG_ALL : BigInt(role.permissions));
 }
 
 export class BlogSettingsModel {
@@ -70,22 +96,24 @@ export class BlogSettingsModel {
     static users: Collection<BlogAssignment>;
 
     static async init(ctx: Context) {
-        this.settings = ctx.db.collection("blog.settings");
-        this.users = ctx.db.collection("blog.user");
-        await this.settings.updateOne({ _id: "global" }, { $setOnInsert: initialSettings() }, { upsert: true });
+        this.settings = ctx.db.collection(BlogCollections.Settings);
+        this.users = ctx.db.collection(BlogCollections.UserRoles);
+        await this.settings.updateOne({ _id: BLOG_SETTINGS_ID }, { $setOnInsert: initialSettings() }, { upsert: true });
         await ctx.db.ensureIndexes(this.users, { key: { role: 1 }, name: "blogUserRole" });
     }
 
     static async get() {
-        const settings = await this.settings.findOne({ _id: "global" });
-        if (!settings || settings.version !== 1) throw new ValidationError("blog.settings");
+        const settings = await this.settings.findOne({ _id: BLOG_SETTINGS_ID });
+        if (!settings || settings.version !== BLOG_SETTINGS_VERSION) {
+            throw new ValidationError(BlogCollections.Settings);
+        }
         return settings;
     }
 
     static async policy(user: BlogIdentity) {
         const [settings, assignment] = await Promise.all([
             this.get(),
-            user._id > 0 ? this.users.findOne({ _id: user._id }) : null,
+            user._id > ANONYMOUS_USER_ID ? this.users.findOne({ _id: user._id }) : null,
         ]);
         return resolveBlogPolicy(user, settings, assignment);
     }
@@ -101,73 +129,124 @@ export class BlogSettingsModel {
 
     static async save(settings: BlogSettings, revision: number) {
         if (settings.revision !== revision) {
-            throw new ValidationError("revision", null, "Blog settings changed. Reload and retry.");
+            throw new ValidationError("revision", null, BlogMessages.SettingsChanged);
         }
         const result = await this.settings.updateOne(
-            { _id: "global", revision },
-            { $set: { roles: settings.roles, deletedRoles: settings.deletedRoles }, $inc: { revision: 1 } },
+            { _id: BLOG_SETTINGS_ID, revision },
+            {
+                $set: {
+                    roles: settings.roles,
+                    deletedRoles: settings.deletedRoles,
+                    permissionRoleOrder: configuredPermissionRoles(settings),
+                },
+                $inc: { revision: 1 },
+            },
         );
         if (!result.matchedCount) {
-            throw new ValidationError("revision", null, "Blog settings changed. Reload and retry.");
+            throw new ValidationError("revision", null, BlogMessages.SettingsChanged);
         }
     }
 
     static async addRole(name: string, revision: number) {
         const settings = await this.get();
         if (settings.roles.some((r) => r.name === name)) {
-            throw new ValidationError("role", null, "Role already exists.");
+            throw new ValidationError("role", null, BlogMessages.RoleExists);
         }
         const role = {
             id: randomUUID(),
             name,
-            permissions: settings.roles.find((r) => r.name === "default")!.permissions,
+            permissions: settings.roles.find((r) => r.name === BlogRoles.Default)!.permissions,
         };
+        settings.permissionRoleOrder = [...configuredPermissionRoles(settings), role.id];
         settings.roles.push(role);
         await this.save(settings, revision);
         return role;
     }
 
     static async deleteRole(name: string, revision: number) {
-        const settings = await this.get();
-        const role = settings.roles.find((r) => r.name === name);
-        if (!role || BUILTIN_BLOG_ROLES.includes(name)) throw new ValidationError("role");
-        settings.roles = settings.roles.filter((r) => r.id !== role.id);
-        // Keep a tombstone: concurrent assignments and recreated names cannot revive deleted grants.
-        settings.deletedRoles.push(role.id);
-        await this.save(settings, revision);
+        const [role] = await this.deleteRoles([name], revision);
         return role;
+    }
+
+    static async deleteRoles(names: string[], revision: number) {
+        const settings = await this.get();
+        const unique = [...new Set(names)];
+        if (!unique.length) throw new ValidationError("role");
+        const roles = unique.map((name) => {
+            const role = settings.roles.find((r) => r.name === name);
+            if (!role || BUILTIN_BLOG_ROLES.includes(name)) throw new ValidationError("role");
+            return role;
+        });
+        const ids = new Set(roles.map((role) => role.id));
+        settings.permissionRoleOrder = configuredPermissionRoles(settings).filter((id) => !ids.has(id));
+        settings.roles = settings.roles.filter((r) => !ids.has(r.id));
+        // Keep a tombstone: concurrent assignments and recreated names cannot revive deleted grants.
+        settings.deletedRoles.push(...ids);
+        await this.save(settings, revision);
+        return roles;
     }
 
     static async permissions(changes: Record<string, bigint>, revision: number) {
         const settings = await this.get();
+        const order = [...configuredPermissionRoles(settings)];
         for (const [name, permissions] of Object.entries(changes)) {
-            if (name === "root") continue;
+            if (name === BlogRoles.Root) continue;
             const role = settings.roles.find((r) => r.name === name);
-            if (!role || permissions < 0n || (permissions & BLOG_KNOWN) !== permissions) {
+            if (!role || permissions < BLOG_NONE || (permissions & BLOG_KNOWN) !== permissions) {
                 throw new ValidationError("permissions");
             }
             role.permissions = permissions.toString();
+            if (!order.includes(role.id)) order.push(role.id);
         }
+        settings.permissionRoleOrder = order;
         await this.save(settings, revision);
     }
 
     static async assign(uid: number, name: string) {
-        const [settings, user] = await Promise.all([this.get(), UserModel.getById(SYSTEM_DOMAIN, uid)]);
+        const [result] = await this.assignMany([uid], name);
+        return result;
+    }
+
+    static async assignMany(uids: number[], name: string) {
+        if (name === BlogRoles.Guest) throw new ValidationError("role");
+        const unique = [...new Set(uids)];
+        if (!unique.length || unique.some((uid) => !Number.isSafeInteger(uid) || uid <= ANONYMOUS_USER_ID)) {
+            throw new ValidationError("uids");
+        }
+        const [settings, users, previous] = await Promise.all([
+            this.get(),
+            UserModel.getList(SYSTEM_DOMAIN, unique),
+            this.users.find({ _id: { $in: unique } }).toArray(),
+        ]);
         const role = settings.roles.find((r) => r.name === name);
-        if (uid <= 0 || !user?.hasPriv(PRIV.PRIV_USER_PROFILE) || !role) throw new ValidationError("role");
-        const previous = await this.users.findOne({ _id: uid });
-        if (name === "default") await this.users.deleteOne({ _id: uid });
-        else await this.users.updateOne({ _id: uid }, { $set: { role: role.id } }, { upsert: true });
-        return { uid, previous: previous?.role ?? "default", role: role.id };
+        if (!role || unique.some((uid) => users[uid]?._id !== uid || !users[uid].hasPriv(PRIV.PRIV_USER_PROFILE))) {
+            throw new ValidationError("role");
+        }
+        await this.users.bulkWrite(
+            unique.map((uid) =>
+                name === BlogRoles.Default
+                    ? { deleteOne: { filter: { _id: uid } } }
+                    : { updateOne: { filter: { _id: uid }, update: { $set: { role: role.id } }, upsert: true } },
+            ),
+        );
+        const priorRoles = new Map(previous.map((assignment) => [assignment._id, assignment.role]));
+        return unique.map((uid) => ({ uid, previous: priorRoles.get(uid) ?? BlogRoles.Default, role: role.id }));
     }
 
     static async listUsers(page: number) {
         const settings = await this.get();
-        const visibleRoles = settings.roles.filter((r) => !["guest", "default"].includes(r.name));
+        const visibleRoles = settings.roles.filter((r) => ![BlogRoles.Guest, BlogRoles.Default].includes(r.name));
         const rows = await UserModel.coll
             .aggregate<{ entries: { _id: number; blogAssignment?: BlogAssignment }[]; count: { total: number }[] }>([
-                { $match: { _id: { $gt: 0 }, priv: { $bitsAllSet: PRIV.PRIV_USER_PROFILE } } },
-                { $lookup: { from: "blog.user", localField: "_id", foreignField: "_id", as: "blogAssignment" } },
+                { $match: { _id: { $gt: ANONYMOUS_USER_ID }, priv: { $bitsAllSet: PRIV.PRIV_USER_PROFILE } } },
+                {
+                    $lookup: {
+                        from: BlogCollections.UserRoles,
+                        localField: "_id",
+                        foreignField: "_id",
+                        as: "blogAssignment",
+                    },
+                },
                 { $unwind: { path: "$blogAssignment", preserveNullAndEmptyArrays: true } },
                 {
                     $match: {
@@ -181,8 +260,8 @@ export class BlogSettingsModel {
                 {
                     $facet: {
                         entries: [
-                            { $skip: (page - 1) * 20 },
-                            { $limit: 20 },
+                            { $skip: (page - BLOG_FIRST_PAGE) * BLOG_USERS_PER_PAGE },
+                            { $limit: BLOG_USERS_PER_PAGE },
                             { $project: { _id: 1, blogAssignment: 1 } },
                         ],
                         count: [{ $count: "total" }],

@@ -34,6 +34,16 @@ describe("effective blog roles", () => {
         expect(() => policy.require("ACCESS")).toThrow(BlogPermissionError);
     });
 
+    it("treats legacy guest assignments as default for authenticated users", () => {
+        const settings = initialSettings();
+        settings.roles[0].permissions = BLOG_ALL.toString();
+        settings.roles[1].permissions = "0";
+        const policy = resolveBlogPolicy(makeUser(2), settings, { _id: 2, role: "guest" });
+        expect(policy.role).toBe("default");
+        expect(policy.mask).toBe(0n);
+        expect(resolveBlogPolicy(makeUser(0, 0), settings).role).toBe("guest");
+    });
+
     it("keeps configurable guest reading separate from authenticated operations", () => {
         const settings = initialSettings();
         settings.roles[0].permissions = (BLOG_PERM.ACCESS | BLOG_PERM.VIEW_DRAFT_OTHERS | BLOG_PERM.STAR).toString();

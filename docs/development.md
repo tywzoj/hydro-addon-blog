@@ -53,9 +53,16 @@ The project's coverage goal includes both UT and E2E; neither replaces the other
 
 ## Code Requirements
 
+### Constants and Shared Types
+
+- Follow `features/constants.ts`: centralize shared domain/protocol strings and meaningful numeric settings, and reuse them across models, handlers, frontend code, and localization instead of repeating literals.
+- Prefer `as const` value objects for related values and derive literal unions with `typeof` and `keyof`. Reuse named types for repeated object shapes or `Pick`/union declarations; do not maintain a separate literal-type list for values already defined at runtime.
+- Keep constants at the smallest useful scope, and do not merge equal values with different meanings. Preserve persisted identifiers, permission bits, wire values, and defaults during extraction. Ordinary arithmetic, declarative template markup, and independent test expectations need not be replaced merely because the same text appears elsewhere.
+
 ### UI and Styling
 
 - Reuse Hydro's built-in UI components, styles, and interaction patterns wherever possible instead of recreating them in the addon.
+- Align UX with existing Hydro patterns, not just visual styling. Inspect the corresponding native workflow and reuse its information hierarchy, control placement, dialogs, selection and bulk actions, feedback, and navigation; document any necessary behavior-specific differences.
 - Avoid overriding Hydro's own UI with HTML templates unless necessary. When an existing Hydro UI needs adjustment, prefer script injection through the extension mechanisms described in the official Hydro documentation, and verify the approach against the compatible upstream source.
 - If a template override or custom UI/style is unavoidable, document why the existing UI and documented script-injection mechanisms cannot meet the requirement, and keep the customization minimal.
 

@@ -5,15 +5,7 @@
 {% import "components/blog_list.html" as blog_list with context %}
 {% extends "layout/basic.html" %}
 {% block content %}
-<style>
-  @media (max-width: 599px) {
-  .blog__row {
-    display: flex;
-    flex-direction: column-reverse;
-  }
-}
-</style>
-<div class="row blog__row">
+<div class="row">
   <div class="medium-9 columns">
     <div class="section">
       {% if not ddocs.length %}

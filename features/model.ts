@@ -1,8 +1,8 @@
 import type { Context, Filter, NumberKeys, ObjectId } from "hydrooj";
 import { DocumentModel, ValidationError } from "hydrooj";
 
-import { SYSTEM_DOMAIN } from "./constants";
-import type { BlogDoc, BlogStatusDoc } from "./types";
+import { BlogMessages, SYSTEM_DOMAIN } from "./constants";
+import type { BlogDoc, BlogStatusDoc, BlogUpdate } from "./types";
 
 export const TYPE_BLOG = 70 as const;
 
@@ -65,11 +65,7 @@ export class BlogModel {
         return ddoc;
     }
 
-    static async edit(
-        ddoc: BlogDoc,
-        update: Partial<Pick<BlogDoc, "title" | "content" | "draft" | "pin" | "ip">>,
-        checked = false,
-    ): Promise<BlogDoc> {
+    static async edit(ddoc: BlogDoc, update: BlogUpdate, checked = false): Promise<BlogDoc> {
         const $set: Partial<BlogDoc> = {
             ...update,
             updateAt: checked ? new Date(Math.max(Date.now(), ddoc.updateAt.getTime() + 1)) : new Date(),
@@ -91,7 +87,7 @@ export class BlogModel {
             { $set },
             { returnDocument: "after" },
         );
-        if (!result) throw new ValidationError("post", null, "The article changed. Reload and retry.");
+        if (!result) throw new ValidationError("post", null, BlogMessages.ArticleChanged);
         return result as BlogDoc;
     }
 
@@ -114,7 +110,7 @@ export class BlogModel {
             updateAt: ddoc.updateAt,
             draft: ddoc.draft ? true : { $ne: true },
         });
-        if (!result.deletedCount) throw new ValidationError("post", null, "The article changed. Reload and retry.");
+        if (!result.deletedCount) throw new ValidationError("post", null, BlogMessages.ArticleChanged);
         await DocumentModel.deleteMultiStatus(SYSTEM_DOMAIN, TYPE_BLOG, { docId: ddoc.docId });
     }
 

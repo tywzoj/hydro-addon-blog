@@ -56,7 +56,7 @@ yarn test:e2e --grep "publication"
 
 The [verification-environment guide](verification-environment.md#local-runtime-boundary) documents Node/Docker/browser prerequisites, local development, writable paths, timeouts, evidence, and cleanup. The launcher owns a local Hydro child and only containerizes MongoDB. It never accepts a production or shared database.
 
-Playwright runs three real-form authentication setup cases and twelve business tests with independent author, viewer, and system-editor sessions. The original six scenarios are:
+Playwright runs three real-form authentication setup cases and fourteen business tests with independent author, viewer, and system-editor sessions. The original six scenarios are:
 
 | Scenario | Evidence | Related smoke cases |
 | --- | --- | --- |
@@ -69,13 +69,23 @@ Playwright runs three real-form authentication setup cases and twelve business t
 
 Use the real Markdown editor and controls; do not inject session cookies, bypass decorators, stub routes, or mock persistence to make E2E green. Direct authenticated denial requests preserve the same-origin Referer expected by Hydro's CSRF handling. MongoDB access is read-only assertion evidence against the run-owned database; fixture accounts are created through Hydro's user model.
 
-`permissions.spec.ts` adds six scenarios covering real sudo and delegated role
+`permissions.spec.ts` adds eight scenarios covering real sudo and delegated role
 management, stale matrix saves, default/guest list exclusion, forced root,
 private drafts and rejected public edits, strict own/others permissions, role
 deletion/recreation, anonymous access, domain independence, independent
 publication/pinning/deletion, and visible unchecked controls. Its cleanup restores
 fixture assignments and guest permissions through authenticated management
 requests, including after failures; it does not write test outcomes into MongoDB.
+
+Native-UX regressions cover dialog cancellation, initial focus, single/multi-user
+selection, inline updates, empty selection feedback, bulk changes, protected
+root rows, and resetting assignments to default without a remove-user action.
+All assignment controls exclude guest, and single/bulk requests attempting to
+assign guest are rejected without persistence. Policy UT covers legacy guest
+assignments falling back to default for authenticated users. A fresh-session case
+verifies that restricted-domain settings route sudo through the global identity
+entry and return to the original page. Article submission waits for DOM readiness
+and then checks application state rather than waiting for external avatars.
 
 The suite uses one worker, no automatic retries, isolated browser contexts, focused-test rejection, and explicit timeouts. Empty selections and real assertion failures return nonzero exits. Keep fixtures unique within the run and promote new relevant failures into the suite. It does not establish every sorting/pagination outcome, all locales, or concurrent view deduplication. MCP checks supplement automated coverage for localized and narrow-screen settings UI.
 

@@ -1,13 +1,13 @@
 import type { Context, Handler } from "hydrooj";
 
-import { ROUTE_BLOG_LIST_HOME, ROUTE_BLOG_LIST_USER } from "./constants";
+import { BlogPermissions, ROUTE_BLOG_LIST_HOME, ROUTE_BLOG_LIST_USER } from "./constants";
 import { BlogSettingsModel } from "./settings.model";
 
 export function injectUI(ctx: Context) {
     ctx.on("handler/before", async (handler) => {
         const policy = await BlogSettingsModel.forRequest(handler);
-        handler.UiContext.blogAccess = policy.has("ACCESS");
-        handler.UiContext.blogPublished = policy.has("VIEW_PUBLISHED");
+        handler.UiContext.blogAccess = policy.has(BlogPermissions.ACCESS);
+        handler.UiContext.blogPublished = policy.has(BlogPermissions.VIEW_PUBLISHED);
         handler.UiContext.blogAuthenticated = policy.authenticated;
     });
     ctx.injectUI(

@@ -5,14 +5,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BLOG_DEFAULT, BLOG_PERM } from "../../features/permission";
 import { applySettingsHandler, parsePermissions } from "../../features/settings.handler";
 import type { BlogAssignment, BlogSettings } from "../../features/settings.model";
-import { BlogSettingsModel, initialSettings, resolveBlogPolicy } from "../../features/settings.model";
+import {
+    BlogSettingsModel,
+    initialSettings,
+    permissionMatrixRoles,
+    resolveBlogPolicy,
+} from "../../features/settings.model";
 import type { Handler } from "../helpers/hydro";
 import { makeUser, OplogModel, PRIV, UserModel, ValidationError } from "../helpers/hydro";
 
 let settings: BlogSettings;
 const findOne = vi.fn();
 const updateOne = vi.fn();
-const assignments = { findOne: vi.fn(), updateOne: vi.fn(), deleteOne: vi.fn() };
+const assignments = { findOne: vi.fn(), find: vi.fn(), bulkWrite: vi.fn() };
 
 beforeEach(() => {
     vi.resetAllMocks();
@@ -22,6 +27,8 @@ beforeEach(() => {
     BlogSettingsModel.settings = { findOne, updateOne } as unknown as Collection<BlogSettings>;
     BlogSettingsModel.users = assignments as unknown as Collection<BlogAssignment>;
     UserModel.getById.mockResolvedValue(makeUser(2));
+    UserModel.getList.mockResolvedValue({ 2: makeUser(2), 3: makeUser(3) });
+    assignments.find.mockReturnValue({ toArray: () => Promise.resolve([]) });
 });
 
 describe("blog settings persistence", () => {
@@ -41,7 +48,10 @@ describe("blog settings persistence", () => {
         await BlogSettingsModel.deleteRole("reviewer", 0);
         expect(updateOne).toHaveBeenCalledWith(
             { _id: "global", revision: 0 },
-            { $set: { roles: initialSettings().roles, deletedRoles: ["old"] }, $inc: { revision: 1 } },
+            {
+                $set: { roles: initialSettings().roles, deletedRoles: ["old"], permissionRoleOrder: [] },
+                $inc: { revision: 1 },
+            },
         );
     });
 
@@ -84,11 +94,39 @@ describe("blog settings persistence", () => {
 
     it("supports manual root and default reset without modifying Hydro users", async () => {
         await BlogSettingsModel.assign(2, "root");
-        expect(assignments.updateOne).toHaveBeenCalledWith({ _id: 2 }, { $set: { role: "root" } }, { upsert: true });
+        expect(assignments.bulkWrite).toHaveBeenCalledWith([
+            { updateOne: { filter: { _id: 2 }, update: { $set: { role: "root" } }, upsert: true } },
+        ]);
         await BlogSettingsModel.assign(2, "default");
-        expect(assignments.deleteOne).toHaveBeenCalledWith({ _id: 2 });
+        expect(assignments.bulkWrite).toHaveBeenCalledWith([{ deleteOne: { filter: { _id: 2 } } }]);
         await expect(BlogSettingsModel.assign(0, "root")).rejects.toBeInstanceOf(ValidationError);
         await expect(BlogSettingsModel.assign(2, "missing")).rejects.toBeInstanceOf(ValidationError);
+    });
+
+    it("validates every selected user before any bulk write and deduplicates valid selections", async () => {
+        await expect(BlogSettingsModel.assignMany([2, 999], "root")).rejects.toBeInstanceOf(ValidationError);
+        await expect(BlogSettingsModel.assignMany([], "root")).rejects.toBeInstanceOf(ValidationError);
+        await expect(BlogSettingsModel.assignMany([0], "root")).rejects.toBeInstanceOf(ValidationError);
+        expect(assignments.bulkWrite).not.toHaveBeenCalled();
+        await BlogSettingsModel.assignMany([2, 3, 2], "root");
+        expect(assignments.bulkWrite).toHaveBeenCalledExactlyOnceWith([
+            { updateOne: { filter: { _id: 2 }, update: { $set: { role: "root" } }, upsert: true } },
+            { updateOne: { filter: { _id: 3 }, update: { $set: { role: "root" } }, upsert: true } },
+        ]);
+    });
+
+    it("rejects assigning guest through single and bulk operations before writing", async () => {
+        await expect(BlogSettingsModel.assign(2, "guest")).rejects.toBeInstanceOf(ValidationError);
+        await expect(BlogSettingsModel.assignMany([2, 3], "guest")).rejects.toBeInstanceOf(ValidationError);
+        expect(assignments.bulkWrite).not.toHaveBeenCalled();
+    });
+
+    it("rejects a mixed built-in/custom role deletion before modifying settings", async () => {
+        settings.roles.push({ id: "custom-id", name: "custom", permissions: "1" });
+        await expect(BlogSettingsModel.deleteRoles(["custom", "default"], 0)).rejects.toBeInstanceOf(ValidationError);
+        expect(updateOne).not.toHaveBeenCalled();
+        const result = await BlogSettingsModel.deleteRoles(["custom", "custom"], 0);
+        expect(result).toHaveLength(1);
     });
 
     it("filters default and guest before pagination and includes forced-root users", async () => {
@@ -109,12 +147,70 @@ describe("blog settings persistence", () => {
     });
 });
 
+describe("permission matrix role ordering", () => {
+    it("uses Hydro dictionary enumeration and builtin fallback for legacy settings without changing masks", () => {
+        delete settings.permissionRoleOrder;
+        for (const name of ["zeta", "10", "2", "alpha"]) {
+            settings.roles.push({ id: `role-${name}`, name, permissions: "1" });
+        }
+        const before = structuredClone(settings);
+        expect(permissionMatrixRoles(settings).map((role) => role.name)).toEqual([
+            "2",
+            "10",
+            "zeta",
+            "alpha",
+            "guest",
+            "default",
+            "root",
+        ]);
+        expect(settings).toEqual(before);
+    });
+
+    it("preserves configured-role order across creation, matrix saves and deletion", async () => {
+        updateOne.mockImplementation(
+            (
+                _filter: unknown,
+                update: {
+                    $set: Pick<BlogSettings, "roles" | "deletedRoles" | "permissionRoleOrder">;
+                },
+            ) => {
+                settings = { ...settings, ...update.$set, revision: settings.revision + 1 };
+                return Promise.resolve({ matchedCount: 1 });
+            },
+        );
+        await BlogSettingsModel.addRole("zeta", 0);
+        expect(permissionMatrixRoles(await BlogSettingsModel.get()).map((role) => role.name)).toEqual([
+            "zeta",
+            "guest",
+            "default",
+            "root",
+        ]);
+        await BlogSettingsModel.permissions({ zeta: 1n, guest: 0n, default: BLOG_DEFAULT }, 1);
+        await BlogSettingsModel.addRole("alpha", 2);
+        expect(permissionMatrixRoles(await BlogSettingsModel.get()).map((role) => role.name)).toEqual([
+            "zeta",
+            "guest",
+            "default",
+            "alpha",
+            "root",
+        ]);
+        await BlogSettingsModel.deleteRole("zeta", 3);
+        expect(permissionMatrixRoles(await BlogSettingsModel.get()).map((role) => role.name)).toEqual([
+            "guest",
+            "default",
+            "alpha",
+            "root",
+        ]);
+    });
+});
+
 interface SettingsHandler extends Handler {
     blog: ReturnType<typeof resolveBlogPolicy>;
     prepare: () => void;
     get: (args?: Record<string, unknown>) => unknown;
     postAdd: (args: Record<string, unknown>) => Promise<void>;
     postDelete: (args: Record<string, unknown>) => unknown;
+    postSetUsers: (args: Record<string, unknown>) => Promise<void>;
 }
 
 describe("settings handler boundaries", () => {
@@ -155,5 +251,25 @@ describe("settings handler boundaries", () => {
         updateOne.mockClear();
         await h.postDelete({ domainId: "system", role: "reviewer", revision: "0" });
         expect(updateOne).not.toHaveBeenCalled();
+    });
+
+    it("keeps bulk assignment behind sudo and audits only validated writes", async () => {
+        const h = handler("blog_settings_users");
+        h.session.sudo = false;
+        await h.postSetUsers({ domainId: "system", uids: ["2", "3"], role: "root" });
+        expect(assignments.bulkWrite).not.toHaveBeenCalled();
+        h.session.sudo = true;
+        await expect(async () =>
+            h.postSetUsers({ domainId: "system", uids: ["2", "invalid"], role: "root" }),
+        ).rejects.toBeInstanceOf(ValidationError);
+        expect(assignments.bulkWrite).not.toHaveBeenCalled();
+        await h.postSetUsers({ domainId: "system", uids: ["2", "3"], role: "root" });
+        expect(assignments.bulkWrite).toHaveBeenCalledOnce();
+        expect(OplogModel.log).toHaveBeenCalledWith(h, "blog.role.assign", {
+            users: [
+                { uid: 2, previous: "default", role: "root" },
+                { uid: 3, previous: "default", role: "root" },
+            ],
+        });
     });
 });

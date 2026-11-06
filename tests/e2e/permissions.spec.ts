@@ -18,12 +18,11 @@ async function settingsPage(page: Page, path: string, password = accounts.editor
 
 async function createRole(page: Page, name: string) {
     await settingsPage(page, "/blog/settings/roles");
-    await page.locator('input[name="role"]:not([type="hidden"])').fill(name);
-    await Promise.all([
-        page.waitForNavigation(),
-        page.getByRole("button", { name: "Create Role", exact: true }).click(),
-    ]);
-    await expect(page.getByRole("cell", { name, exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Create Role", exact: true }).click();
+    const dialog = page.locator(".dialog:visible");
+    await dialog.locator('input[type="text"]').fill(name);
+    await Promise.all([page.waitForNavigation(), dialog.locator('[data-action="ok"]').click()]);
+    await expect(page.locator(`.domain-roles tr[data-role="${name}"]`)).toBeVisible();
 }
 
 async function setPermissions(page: Page, role: string, permissions: BlogPermission[]) {
@@ -42,17 +41,19 @@ async function setPermissions(page: Page, role: string, permissions: BlogPermiss
 
 async function assignRole(page: Page, name: string, role: string) {
     await settingsPage(page, "/blog/settings/users");
-    await page.locator(".autocomplete-wrapper input").fill(name.slice(0, -1));
-    await page.locator(".user-select__uname").filter({ hasText: name }).click();
-    await page.locator('select[name="role"]').selectOption(role);
-    await Promise.all([page.waitForNavigation(), page.getByRole("button", { name: "Set Role", exact: true }).click()]);
+    await page.getByRole("button", { name: "Assign User Roles", exact: true }).click();
+    const dialog = page.locator(".dialog:visible");
+    await dialog.locator(".autocomplete-wrapper input").fill(name.slice(0, -1));
+    await dialog.locator(".user-select__uname").filter({ hasText: name }).click();
+    await dialog.locator("select").selectOption(role);
+    await Promise.all([page.waitForNavigation(), dialog.locator('[data-action="ok"]').click()]);
     await expect(page.locator("html")).toHaveAttribute("data-page", "blog_settings_users");
 }
 
 async function resetUser(page: Page, uid: number) {
     await settingsPage(page, "/blog/settings/users");
     const row = page.locator(`tr[data-uid="${uid}"]`);
-    await Promise.all([page.waitForNavigation(), row.getByRole("button", { name: "Reset to default" }).click()]);
+    await Promise.all([page.waitForNavigation(), row.locator('select[name="role"]').selectOption("default")]);
     await expect(page.locator(`tr[data-uid="${uid}"]`)).toHaveCount(0);
 }
 
@@ -83,7 +84,19 @@ test("global settings role assignment and delegation follow Hydro management sem
     await expect(editor.locator('tr[data-uid="2"], tr[data-uid="3"]')).toHaveCount(0);
     await expect(editor.locator('tr[data-uid="4"]')).toContainText("root");
     await createRole(editor, "blogmanager");
+    await settingsPage(editor, "/blog/settings/permissions");
+    await expect(editor.locator("thead th.col--p")).toHaveText(["blogmanager", "guest", "default", "root"]);
     await setPermissions(editor, "blogmanager", ["ACCESS", "VIEW_PUBLISHED", "MANAGE_SETTINGS"]);
+    await expect(editor.locator("thead th.col--p")).toHaveText(["blogmanager", "default", "guest", "root"]);
+    await createRole(editor, "matrix_order");
+    await settingsPage(editor, "/blog/settings/permissions");
+    await expect(editor.locator("thead th.col--p")).toHaveText([
+        "blogmanager",
+        "default",
+        "guest",
+        "matrix_order",
+        "root",
+    ]);
     const staleRevision = await editor.locator('input[name="revision"]').inputValue();
     await setPermissions(editor, "blogmanager", ["ACCESS", "VIEW_PUBLISHED", "MANAGE_SETTINGS"]);
     const staleSave = await editor.request.post("/blog/settings/permissions", {
@@ -101,9 +114,28 @@ test("global settings role assignment and delegation follow Hydro management sem
     await resetUser(viewer, 2);
     await resetUser(editor, 3);
     expect((await viewer.goto("/blog/settings"))?.status()).toBe(403);
-    await assignRole(editor, accounts.viewer.name, "guest");
+    await settingsPage(editor, "/blog/settings/users");
+    const before = await db
+        .collection("blog.user")
+        .find({ _id: { $in: [3, 4] } })
+        .toArray();
+    for (const form of [
+        { operation: "assign", uid: "3", role: "guest" },
+        { operation: "set_users", uids: "3,4", role: "guest" },
+    ]) {
+        const response = await editor.request.post("/blog/settings/users", {
+            headers: { Referer: editor.url() },
+            form,
+        });
+        expect(response.status()).toBe(403);
+    }
+    expect(
+        await db
+            .collection("blog.user")
+            .find({ _id: { $in: [3, 4] } })
+            .toArray(),
+    ).toEqual(before);
     await expect(editor.locator('tr[data-uid="3"]')).toHaveCount(0);
-    await assignRole(editor, accounts.editor.name, "guest");
     await expect(editor.locator('tr[data-uid="4"]')).toContainText("root");
 });
 
@@ -181,10 +213,10 @@ test("own permissions stay revoked with others grants and role deletion does not
     });
     expect(deleted.status()).toBe(403);
     await settingsPage(editor, "/blog/settings/roles");
-    const row = editor
-        .getByRole("row")
-        .filter({ has: editor.getByRole("cell", { name: "ownrestricted", exact: true }) });
-    await Promise.all([editor.waitForNavigation(), row.getByRole("button", { name: "Delete" }).click()]);
+    const row = editor.locator('.domain-roles tr[data-role="ownrestricted"]');
+    await row.locator('input[type="checkbox"]').check();
+    await editor.getByRole("button", { name: "Delete Selected Roles" }).click();
+    await Promise.all([editor.waitForNavigation(), editor.locator('.dialog:visible [data-action="yes"]').click()]);
     await createRole(editor, "ownrestricted");
     await setPermissions(editor, "ownrestricted", []);
     expect((await page.goto(`${path}/edit`))?.status()).toBe(200);
@@ -218,6 +250,7 @@ test("guest policy and domain independence preserve authenticated mutation requi
         await expect(viewer.locator("html")).not.toHaveAttribute("data-page", "problem_main");
         await editor.goto("/d/blogrestricted/blog/settings");
         await expect(editor.locator("html")).toHaveAttribute("data-page", "blog_settings");
+        await expect(editor.locator("#menu-item-blog_settings .menu__link")).toHaveAttribute("aria-current", "page");
     } finally {
         await setPermissions(editor, "guest", []);
         await context.close();
@@ -256,4 +289,97 @@ test("visible unchecked controls submit false without changing omitted field sem
     await fillPost(page, "Published by unchecked draft", "Explicit checkbox update", false);
     await Promise.all([page.waitForURL(path), page.getByRole("button", { name: /^Update/ }).click()]);
     await expect(page.getByRole("button", { name: "Unpublish", exact: true })).toBeVisible();
+});
+
+test("native role controls exclude guest and reset assignments without a remove-user action", async ({
+    editor,
+    db,
+}) => {
+    await createRole(editor, "ux_first");
+    await createRole(editor, "ux_second");
+    await settingsPage(editor, "/blog/settings/users");
+    await expect(editor.locator("#menu-item-blog_settings_users .menu__link")).toHaveClass(/active/);
+    await expect(editor.locator('.section__tools button[name="add_user"]')).toBeVisible();
+    await expect(editor.locator('tr[data-uid="4"] input[type="checkbox"]')).toBeDisabled();
+    await expect(editor.locator('tr[data-uid="4"] select')).toBeDisabled();
+    await expect(editor.locator('button[name="remove_selected"]')).toHaveCount(0);
+    await expect(editor.locator('.main select option[value="guest"]')).toHaveCount(0);
+
+    await editor.locator('button[name="set_roles"]').click();
+    await expect(
+        editor.getByText("Please select at least one user to perform this operation.", { exact: true }),
+    ).toBeVisible();
+    await editor.locator('button[name="add_user"]').click();
+    let dialog = editor.locator(".dialog:visible");
+    await expect(dialog.locator(".autocomplete-wrapper input")).toBeFocused();
+    await expect(dialog.locator('select option[value="guest"]')).toHaveCount(0);
+    await dialog.locator('[data-action="cancel"]').click();
+    expect(await db.collection("blog.user").countDocuments({ _id: { $in: [2, 3] } })).toBe(0);
+
+    await editor.locator('button[name="add_user"]').click();
+    dialog = editor.locator(".dialog:visible");
+    for (const name of [accounts.author.name, accounts.viewer.name]) {
+        await dialog.locator(".autocomplete-wrapper input").fill(name.slice(0, -1));
+        await dialog.locator(".user-select__uname").filter({ hasText: name }).click();
+    }
+    await dialog.locator("select").selectOption("ux_first");
+    await Promise.all([editor.waitForNavigation(), dialog.locator('[data-action="ok"]').click()]);
+    await expect(editor.locator('tr[data-uid="2"] select')).toHaveValue("ux_first");
+    await expect(editor.locator('tr[data-uid="3"] select')).toHaveValue("ux_first");
+    await expect(editor.locator('.domain-users select option[value="guest"]')).toHaveCount(0);
+
+    await editor.locator('tr[data-uid="2"] select').selectOption("ux_second");
+    await expect(editor.locator('tr[data-uid="2"]')).toHaveAttribute("data-role", "ux_second");
+    await editor.reload();
+    await expect(editor.locator('tr[data-uid="2"] select')).toHaveValue("ux_second");
+    await editor.locator('input[data-checkbox-toggle="user"]').check();
+    await expect(editor.locator('tr[data-uid="4"] input[type="checkbox"]')).not.toBeChecked();
+    await editor.locator('button[name="set_roles"]').click();
+    dialog = editor.locator(".dialog:visible");
+    await expect(dialog.locator('select option[value="guest"]')).toHaveCount(0);
+    await dialog.locator("select").selectOption("ux_second");
+    await Promise.all([editor.waitForNavigation(), dialog.locator('[data-action="ok"]').click()]);
+    await expect(editor.locator('tr[data-uid="3"] select')).toHaveValue("ux_second");
+
+    await editor.locator('input[data-checkbox-toggle="user"]').check();
+    await editor.locator('button[name="set_roles"]').click();
+    await editor.locator('.dialog:visible [data-action="cancel"]').click();
+    await expect(editor.locator('tr[data-uid="2"], tr[data-uid="3"]')).toHaveCount(2);
+    await editor.locator('button[name="set_roles"]').click();
+    dialog = editor.locator(".dialog:visible");
+    await dialog.locator("select").selectOption("default");
+    await Promise.all([editor.waitForNavigation(), dialog.locator('[data-action="ok"]').click()]);
+    await expect(editor.locator('tr[data-uid="2"], tr[data-uid="3"]')).toHaveCount(0);
+    expect(await db.collection("user").countDocuments({ _id: { $in: [2, 3] } })).toBe(2);
+});
+
+test("fresh sudo from a restricted domain uses the global authentication entry and returns to settings", async ({
+    browser,
+    baseURL,
+}) => {
+    const context = await browser.newContext({ baseURL, storageState: { cookies: [], origins: [] } });
+    try {
+        const page = await context.newPage();
+        await page.goto("/login");
+        await page.locator('.immersive--content input[name="uname"]').fill(accounts.editor.name);
+        await page.locator('.immersive--content input[name="password"]').fill(accounts.editor.password);
+        await Promise.all([
+            page.waitForURL("/"),
+            page.locator('.immersive--content input[name="login_submit"]').click(),
+        ]);
+        await page.goto("/d/blogrestricted/blog/settings/users");
+        await expect(page).toHaveURL(`${baseURL}/user/sudo`);
+        await page.locator('.immersive--content input[name="password"]').fill(accounts.editor.password);
+        await Promise.all([
+            page.waitForURL("/d/blogrestricted/blog/settings/users"),
+            page.locator('input[name="confirm"]').click(),
+        ]);
+        await expect(page.locator("html")).toHaveAttribute("data-page", "blog_settings_users");
+        await expect(page.locator("#menu-item-blog_settings_users .menu__link")).toHaveAttribute(
+            "aria-current",
+            "page",
+        );
+    } finally {
+        await context.close();
+    }
 });

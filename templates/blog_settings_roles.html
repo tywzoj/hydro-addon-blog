@@ -1,30 +1,34 @@
 {% extends "blog_settings_base.html" %}
 {% block blog_settings_content %}
-<div class="section">
-  <div class="section__header"><h1 class="section__title">{{ _('Roles') }}</h1></div>
+<div class="section page--domain_role" data-blog-revision="{{ settings.revision }}">
+  <div class="section__header">
+    <h1 class="section__title">{{ _('Roles') }}</h1>
+    <div class="section__tools"><button type="button" name="create_role" class="primary rounded button">{{ _('Create Role') }}</button></div>
+  </div>
+  {{ noscript_note.render() }}
   <div class="section__body">
     <p>{{ _('New roles copy default permissions. Deleting a role returns its users to default.') }}</p>
+  </div>
+  <div class="section__body no-padding domain-roles">
     <table class="data-table">
-      <thead><tr><th>{{ _('Role') }}</th><th>{{ _('Actions') }}</th></tr></thead>
+      <colgroup><col class="col--checkbox"><col class="col--id"></colgroup>
+      <thead><tr>
+        <th class="col--checkbox"><label class="compact checkbox"><input type="checkbox" data-checkbox-toggle="role" aria-label="{{ _('Select All') }}"></label></th>
+        <th class="col--id">{{ _('Role') }}</th>
+      </tr></thead>
       <tbody>
       {% for role in settings.roles %}
-        <tr><td>{{ role.name }}</td><td>
-          {% if role.name not in ['guest', 'default', 'root'] %}
-          <form method="post">
-            <input type="hidden" name="revision" value="{{ settings.revision }}">
-            <input type="hidden" name="role" value="{{ role.name }}">
-            <button name="operation" value="delete" class="rounded button">{{ _('Delete') }}</button>
-          </form>
-          {% else %}{{ _('Built-in') }}{% endif %}
-        </td></tr>
+        {% set builtin = role.name in ['guest', 'default', 'root'] %}
+        <tr data-role="{{ role.name }}">
+          <td class="col--checkbox"><label class="compact checkbox"><input type="checkbox" data-checkbox-group="role" aria-label="{{ _('Role') }} {{ role.name }}" {% if builtin %}disabled{% else %}data-checkbox-range{% endif %}></label></td>
+          <td class="col--id">{{ _('Built-in') if builtin else _('User-defined role') }}: <span class="blog-role-name">{{ role.name }}</span></td>
+        </tr>
       {% endfor %}
       </tbody>
     </table>
-    <form method="post">
-      <input type="hidden" name="revision" value="{{ settings.revision }}">
-      {{ form.form_text({name:'role', label:'Role', required:true}) }}
-      <button name="operation" value="add" class="primary rounded button">{{ _('Create Role') }}</button>
-    </form>
+  </div>
+  <div class="section__body">
+    <button type="button" name="delete_selected" class="rounded button">{{ _('Delete Selected Roles') }}</button>
   </div>
 </div>
 {% endblock %}

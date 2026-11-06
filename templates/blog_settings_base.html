@@ -1,0 +1,22 @@
+{% extends "layout/basic.html" %}
+{% block content %}
+<div class="row">
+  <div class="medium-9 columns">
+    {% block blog_settings_content %}{% endblock %}
+  </div>
+  <div class="medium-3 columns">
+    <div class="section side">
+      <ol class="menu">
+        {% for route, label in [
+          ['blog_settings', 'Blog settings'],
+          ['blog_settings_roles', 'Roles'],
+          ['blog_settings_permissions', 'Permissions'],
+          ['blog_settings_users', 'Users']
+        ] %}
+        <li class="menu__item"><a class="menu__link" href="{{ url(route) }}">{{ _(label) }}</a></li>
+        {% endfor %}
+      </ol>
+    </div>
+  </div>
+</div>
+{% endblock %}

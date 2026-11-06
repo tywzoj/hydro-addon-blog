@@ -37,19 +37,36 @@
         </div>
       </div>
       <ul class="section__footer supplementary dot list">
-      {% if handler.user.hasPriv(PRIV.PRIV_EDIT_SYSTEM) or handler.user.own(ddoc) %}
+      {% if controls.edit %}
         <li><a href="{{ url('blog_post_edit', uid=udoc._id, did=ddoc.docId) }}">
           <span class="icon icon-edit"></span> {{ _('Edit') }}
         </a></li>
       {% endif %}
         <li>{{ _('{0} views').format(ddoc.views) }}</li>
-      {% if handler.user.hasPriv(PRIV.PRIV_USER_PROFILE) %}
+      {% if controls.star %}
         <li data-star="{{ star }}" data-star-action="" ></li>
       {% endif %}
         <li><a href="{{ url('wiki_help', anchor='contact') }}">
           <span class="icon icon-warning"></span> {{ _('Report') }}
         </a></li>
       </ul>
+      {% if controls.publish or controls.unpublish or controls.pin or controls.delete %}
+      <div class="section__body">
+        <form method="post" action="{{ url('blog_post_edit', uid=udoc._id, did=ddoc.docId) }}">
+          {% if (ddoc.draft and controls.publish) or (not ddoc.draft and controls.unpublish) %}
+          <input type="hidden" name="draft" value="{{ 'false' if ddoc.draft else 'true' }}">
+          <button class="rounded button" name="operation" value="publish">{{ _('Publish') if ddoc.draft else _('Unpublish') }}</button>
+          {% endif %}
+          {% if controls.pin %}
+          <input type="hidden" name="pin" value="{{ 'false' if ddoc.pin else 'true' }}">
+          <button class="rounded button" name="operation" value="pin">{{ _('Unpin') if ddoc.pin else _('Pin') }}</button>
+          {% endif %}
+          {% if controls.delete %}
+          <button class="rounded button" name="operation" value="delete">{{ _('Delete') }}</button>
+          {% endif %}
+        </form>
+      </div>
+      {% endif %}
     </div>
   </div>
   <div class="medium-3 columns">

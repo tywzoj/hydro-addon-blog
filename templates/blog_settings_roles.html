@@ -1,0 +1,30 @@
+{% extends "blog_settings_base.html" %}
+{% block blog_settings_content %}
+<div class="section">
+  <div class="section__header"><h1 class="section__title">{{ _('Roles') }}</h1></div>
+  <div class="section__body">
+    <p>{{ _('New roles copy default permissions. Deleting a role returns its users to default.') }}</p>
+    <table class="data-table">
+      <thead><tr><th>{{ _('Role') }}</th><th>{{ _('Actions') }}</th></tr></thead>
+      <tbody>
+      {% for role in settings.roles %}
+        <tr><td>{{ role.name }}</td><td>
+          {% if role.name not in ['guest', 'default', 'root'] %}
+          <form method="post">
+            <input type="hidden" name="revision" value="{{ settings.revision }}">
+            <input type="hidden" name="role" value="{{ role.name }}">
+            <button name="operation" value="delete" class="rounded button">{{ _('Delete') }}</button>
+          </form>
+          {% else %}{{ _('Built-in') }}{% endif %}
+        </td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <form method="post">
+      <input type="hidden" name="revision" value="{{ settings.revision }}">
+      {{ form.form_text({name:'role', label:'Role', required:true}) }}
+      <button name="operation" value="add" class="primary rounded button">{{ _('Create Role') }}</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

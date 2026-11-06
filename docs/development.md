@@ -34,6 +34,7 @@ For version-sensitive decisions, record the upstream commit, tag, or installed p
 - Make the smallest complete change for the requested behavior. Avoid unrelated refactoring or new abstractions.
 - Follow `eslint.config.mjs`, `.prettierrc`, and existing TypeScript patterns.
 - Reuse existing constants, types, helpers, and localization mechanisms.
+- Prefer tools, APIs, utilities, and reusable code exposed by Hydro. Inspect the compatible upstream implementation before adding an equivalent; implement a custom alternative only when no suitable exposed implementation exists, and document why reuse is not possible.
 - Keep shared contracts consistent across server code, templates, frontend code, and translations.
 - Preserve the dependency patching workflow. Inspect relevant patches when changing affected dependencies.
 - Add concise English comments only when they clarify non-obvious intent or constraints.

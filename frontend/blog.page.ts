@@ -2,6 +2,7 @@ import { addPage, i18n, NamedPage } from "@hydrooj/ui-default";
 
 addPage(
     new NamedPage(["user_detail"], () => {
+        if (!UiContext.blogAccess) return;
         $("<a>")
             .append($("<span>").addClass("icon icon-book"))
             .attr("data-tooltip", i18n("Blog"))

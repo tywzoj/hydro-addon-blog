@@ -1,5 +1,5 @@
 import type { Context, Filter } from "hydrooj";
-import { Handler, OplogModel, param, PRIV, Types, UserModel } from "hydrooj";
+import { OplogModel, param, Types, UserModel } from "hydrooj";
 import type { SortDirection } from "mongodb";
 
 import type { SortKey } from "./constants";
@@ -16,7 +16,7 @@ import {
     TEMPLATE_BLOG_EDIT,
     TEMPLATE_BLOG_LIST,
 } from "./constants";
-import { BlogUserBaseHandler, BlogUserPostBaseHandler } from "./handler.base";
+import { BlogBaseHandler, BlogUserBaseHandler, BlogUserPostBaseHandler } from "./handler.base";
 import { BlogModel } from "./model";
 import type { BlogDoc } from "./types";
 import { toTemplate } from "./utils";
@@ -27,10 +27,11 @@ export const SortKeyMap: Record<SortKey, Partial<Record<keyof BlogDoc, SortDirec
     [SortKeys.LatestUpdate]: { updateAt: -1 },
 };
 
-class BlogListHandler extends Handler {
+class BlogListHandler extends BlogBaseHandler {
     @param("page", Types.PositiveInt, true)
     @param("sort", Types.Range([SortKeys.Views, SortKeys.Latest, SortKeys.LatestUpdate]), true)
     async get(_, page = 1, sort: SortKey = SortKeys.Latest) {
+        this.blog.require("VIEW_PUBLISHED");
         const [ddocs, dpcount] = await this.ctx.db.paginate(
             BlogModel.getMulti({
                 draft: { $ne: true },
@@ -54,6 +55,8 @@ class BlogListHandler extends Handler {
             sort_keys: Object.values(SortKeys),
             udoc: this.user,
             udict,
+            can_create: this.blog.authenticated && this.blog.can("CREATE", this.user._id),
+            can_settings: this.blog.has("MANAGE_SETTINGS"),
         };
     }
 }
@@ -65,12 +68,13 @@ class BlogListUserHandler extends BlogUserBaseHandler {
         const isOwner = this.user._id === this.udoc._id;
         const query: Filter<BlogDoc> = { owner: this.udoc._id };
 
-        // If the user is not the owner and does not have the edit system privilege, only show non-draft blogs.
-        // If user is not the owner and the sort is default, sort it by the first publish time, otherwise sort it by the update time.
-        if (!this.user.hasPriv(PRIV.PRIV_EDIT_SYSTEM) && !isOwner) {
+        const drafts = this.blog.can("VIEW_DRAFT", this.udoc._id);
+        if (!drafts) {
+            this.blog.require("VIEW_PUBLISHED");
             query.draft = { $ne: true };
             sort ??= SortKeys.Latest;
         } else {
+            if (!this.blog.has("VIEW_PUBLISHED")) query.draft = true;
             sort ??= SortKeys.LatestUpdate;
         }
 
@@ -92,13 +96,16 @@ class BlogListUserHandler extends BlogUserBaseHandler {
             sort_keys: Object.values(SortKeys),
             is_owner: isOwner,
             udoc: this.udoc,
+            can_create: this.blog.authenticated && this.blog.can("CREATE", this.udoc._id),
+            can_settings: this.blog.has("MANAGE_SETTINGS"),
         };
     }
 }
 
 class BlogUserPostDetailHandler extends BlogUserPostBaseHandler {
     async get() {
-        const canTrackView = this.user.hasPriv(PRIV.PRIV_USER_PROFILE) && this.user._id > 0; // Only track views for logged-in users
+        this.requireRead();
+        const canTrackView = this.blog.authenticated;
         const dsdoc = canTrackView ? await BlogModel.getStatus(this.ddoc.docId, this.user._id) : null;
         const udoc = await UserModel.getById(SYSTEM_DOMAIN, this.ddoc.owner);
 
@@ -116,15 +123,19 @@ class BlogUserPostDetailHandler extends BlogUserPostBaseHandler {
             dsdoc,
             udoc,
             star: dsdoc?.star ?? false,
+            controls: this.blog.controls(this.ddoc),
         };
     }
 
     post() {
-        this.checkPriv(PRIV.PRIV_USER_PROFILE);
+        this.requireRead();
+        this.blog.requireLogin();
     }
 
     @param("star", Types.Boolean)
     async postStar(_, star: boolean) {
+        this.post();
+        this.blog.require("STAR");
         await BlogModel.setStar(this.ddoc.docId, this.user._id, star);
         this.back({ star });
     }
@@ -132,67 +143,122 @@ class BlogUserPostDetailHandler extends BlogUserPostBaseHandler {
 
 class BlogUserPostCreateHandler extends BlogUserBaseHandler {
     prepare() {
-        if (this.user._id !== this.udoc._id) this.checkPriv(PRIV.PRIV_EDIT_SYSTEM);
+        this.blog.requireLogin();
+        this.blog.requireAction("CREATE", this.udoc._id);
     }
 
     get() {
         this.response.template = toTemplate(TEMPLATE_BLOG_EDIT);
-        this.response.body = { ddoc: null };
+        this.response.body = {
+            ddoc: null,
+            controls: {
+                publish: this.blog.can("PUBLISH", this.udoc._id),
+                pin: this.blog.can("PIN", this.udoc._id),
+            },
+        };
     }
 
     @param("title", Types.Title)
     @param("content", Types.Content)
-    @param("draft", Types.Boolean)
-    @param("pin", Types.Boolean)
-    async postSubmit(_, title: string, content: string, draft = false, pin = false) {
+    @param("draft", Types.Boolean, true)
+    @param("pin", Types.Boolean, true)
+    @param("draft_present", Types.Boolean, true)
+    async postSubmit(_, title: string, content: string, draft?: boolean, pin = false, draftPresent = false) {
+        draft ??= !draftPresent;
+        this.prepare();
+        if (!draft) this.blog.requireAction("PUBLISH", this.udoc._id);
+        if (pin) this.blog.requireAction("PIN", this.udoc._id);
         await this.limitRate("add_blog", 3600, 60);
         const did = await BlogModel.add(this.udoc._id, title, content, draft, pin, this.request.ip);
         await OplogModel.log(this, "blog.create", { did });
         this.response.body = { did };
-        this.response.redirect = this.url(ROUTE_BLOG_POST_DETAIL, { uid: this.udoc._id, did });
+        this.response.redirect = this.url(
+            this.blog.readable({ owner: this.udoc._id, draft }) ? ROUTE_BLOG_POST_DETAIL : ROUTE_BLOG_LIST_USER,
+            { uid: this.udoc._id, did },
+        );
     }
 }
 
 class BlogUserPostEditHandler extends BlogUserPostBaseHandler {
     prepare() {
-        if (!this.user.own(this.ddoc)) this.checkPriv(PRIV.PRIV_EDIT_SYSTEM);
+        this.blog.requireLogin();
+        this.requireRead();
     }
 
     get() {
+        this.blog.requireAction("EDIT", this.ddoc.owner);
         this.response.template = toTemplate(TEMPLATE_BLOG_EDIT);
-        this.response.body = { ddoc: this.ddoc };
+        this.response.body = { ddoc: this.ddoc, controls: this.blog.controls(this.ddoc) };
     }
 
     @param("title", Types.Title)
     @param("content", Types.Content)
-    @param("draft", Types.Boolean)
-    @param("pin", Types.Boolean)
-    async postSubmit(_, title: string, content: string, draft = false, pin = false) {
-        await Promise.all([
-            BlogModel.edit(this.ddoc, {
-                title,
-                content,
-                draft,
-                pin,
-                ip: this.request.ip,
-            }),
-            OplogModel.log(this, "blog.edit", this.ddoc),
-        ]);
+    @param("draft", Types.Boolean, true)
+    @param("pin", Types.Boolean, true)
+    @param("draft_present", Types.Boolean, true)
+    @param("pin_present", Types.Boolean, true)
+    async postSubmit(
+        _,
+        title: string,
+        content: string,
+        draft?: boolean,
+        pin?: boolean,
+        draftPresent = false,
+        pinPresent = false,
+    ) {
+        draft ??= draftPresent ? false : !!this.ddoc.draft;
+        pin ??= pinPresent ? false : !!this.ddoc.pin;
+        this.prepare();
+        const changedContent = title !== this.ddoc.title || content !== this.ddoc.content;
+        if (changedContent) this.blog.requireAction("EDIT", this.ddoc.owner);
+        if (!draft && (changedContent || this.ddoc.draft)) this.blog.requireAction("PUBLISH", this.ddoc.owner);
+        if (draft && !this.ddoc.draft) this.blog.requireAction("UNPUBLISH", this.ddoc.owner);
+        if (pin !== !!this.ddoc.pin) this.blog.requireAction("PIN", this.ddoc.owner);
+        if (!changedContent && draft === !!this.ddoc.draft && pin === !!this.ddoc.pin) {
+            this.response.redirect = this.url(ROUTE_BLOG_POST_DETAIL, { uid: this.udoc._id, did: this.ddoc.docId });
+            return;
+        }
+        await this.update({ title, content, draft, pin });
+    }
+
+    async update(update: Partial<Pick<BlogDoc, "title" | "content" | "draft" | "pin">>) {
+        const next = await BlogModel.edit(this.ddoc, { ...update, ip: this.request.ip }, true);
+        await OplogModel.log(this, "blog.edit", this.ddoc);
         this.response.body = { did: this.ddoc.docId };
-        this.response.redirect = this.url(ROUTE_BLOG_POST_DETAIL, { uid: this.udoc._id, did: this.ddoc.docId });
+        this.response.redirect = this.url(this.blog.readable(next) ? ROUTE_BLOG_POST_DETAIL : ROUTE_BLOG_LIST_USER, {
+            uid: this.udoc._id,
+            did: this.ddoc.docId,
+        });
+    }
+
+    @param("pin", Types.Boolean)
+    async postPin(_, pin: boolean) {
+        this.prepare();
+        this.blog.requireAction("PIN", this.ddoc.owner);
+        await this.update({ pin });
+    }
+
+    @param("draft", Types.Boolean)
+    async postPublish(_, draft: boolean) {
+        this.prepare();
+        this.blog.requireAction(draft ? "UNPUBLISH" : "PUBLISH", this.ddoc.owner);
+        await this.update({ draft });
     }
 
     async postDelete() {
-        await Promise.all([BlogModel.del(this.ddoc.docId), OplogModel.log(this, "blog.delete", this.ddoc)]);
+        this.prepare();
+        this.blog.requireAction("DELETE", this.ddoc.owner);
+        await BlogModel.deleteChecked(this.ddoc);
+        await OplogModel.log(this, "blog.delete", this.ddoc);
         this.response.redirect = this.url(ROUTE_BLOG_LIST_USER, { uid: this.ddoc.owner });
     }
 }
 
 export function applyHandler(ctx: Context) {
-    ctx.Route(ROUTE_BLOG_LIST_HOME, "/blog", BlogListHandler, PRIV.PRIV_USER_PROFILE);
-    ctx.Route(ROUTE_BLOG_LIST_USER, "/blog/:uid", BlogListUserHandler, PRIV.PRIV_USER_PROFILE);
+    ctx.Route(ROUTE_BLOG_LIST_HOME, "/blog", BlogListHandler);
+    ctx.Route(ROUTE_BLOG_LIST_USER, "/blog/:uid", BlogListUserHandler);
     // The create must be placed before the detail route, otherwise it will be treated as a did parameter
-    ctx.Route(ROUTE_BLOG_POST_CREATE, "/blog/:uid/create", BlogUserPostCreateHandler, PRIV.PRIV_USER_PROFILE);
-    ctx.Route(ROUTE_BLOG_POST_DETAIL, "/blog/:uid/:did", BlogUserPostDetailHandler, PRIV.PRIV_USER_PROFILE);
-    ctx.Route(ROUTE_BLOG_POST_EDIT, "/blog/:uid/:did/edit", BlogUserPostEditHandler, PRIV.PRIV_USER_PROFILE);
+    ctx.Route(ROUTE_BLOG_POST_CREATE, "/blog/:uid/create", BlogUserPostCreateHandler);
+    ctx.Route(ROUTE_BLOG_POST_DETAIL, "/blog/:uid/:did", BlogUserPostDetailHandler);
+    ctx.Route(ROUTE_BLOG_POST_EDIT, "/blog/:uid/:did/edit", BlogUserPostEditHandler);
 }

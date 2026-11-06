@@ -54,7 +54,7 @@ These are proposed priorities, not completed tests. Select a small initial set w
 
 P0 marks the first candidates to assess, not a requirement to build every integration environment in the initial PR. Explain any deferred P0 case and the available fallback evidence.
 
-Do not encode unresolved draft-detail visibility, exact tie ordering, atomic multi-write behavior, or concurrent view deduplication as passing guarantees. Resolve the intended contract before writing tests that would establish a new policy.
+Draft-detail policy is now explicitly defined by the [global permission plan](blog-permissions.md): draft-read permission is required on direct links as well as lists. Exact tie ordering, atomic multi-write behavior, and concurrent view deduplication remain outside established guarantees.
 
 ## Non-Goals
 
@@ -102,7 +102,7 @@ Review the workflow for the actual PR head and update the [validation guide](../
 - Resolve the demonstrated standalone type-check failures with an explicitly scoped check or separately justified dependency compatibility work.
 - Extend the proven local Hydro/disposable MongoDB/browser environment as needed, retaining its checked storage boundary and lifecycle.
 - Extend E2E coverage for remaining sorting, pagination, localization, and relevant failure scenarios without claiming unsupported privacy or concurrency guarantees.
-- Confirm intended direct-link draft visibility before introducing a privacy guarantee beyond list filtering. This is a product-policy decision, not a test-runner choice.
+- Direct-link draft visibility was resolved in the [global permission plan](blog-permissions.md); its handler and real-browser regressions enforce the agreed draft-read permission.
 - Decide whether concurrent view deduplication, deterministic tie sorting, or atomic multi-write behavior need separately scoped changes; do not silently add those guarantees in the tooling PR.
 
 ## Delivery Record

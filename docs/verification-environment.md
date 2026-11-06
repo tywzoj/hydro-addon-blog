@@ -82,7 +82,14 @@ On 2026-11-06, MCP initialization and blank-page navigation were first verified.
 
 ## Automated E2E and Agent Checks
 
-`yarn test:e2e` executes three real-login setup cases and six business scenarios: draft publication/edit persistence, denied non-owner writes, system-editor access, sequential views and independent star state, deletion/status cleanup, and the frontend profile link. The suite uses normal sessions and same-origin requests, with independent browser contexts for the roles. Read-only MongoDB assertions inspect only the run-owned database.
+`yarn test:e2e` executes three real-login setup cases and twelve business scenarios:
+the original article/frontend regressions plus global role/settings management,
+fine-grained permissions, guest access, and domain independence. The launcher also
+creates a synthetic domain whose guest/default domain permissions are zero, to
+verify that blog access is independent without changing ordinary domain routes.
+The suite uses normal sessions, real sudo and same-origin requests, with independent
+browser contexts for the roles. Read-only MongoDB assertions inspect only the
+run-owned database. See the [testing inventory](testing.md#running-and-extending-e2e).
 
 CI runs the same command after lint and UT. It requires Docker and local Chrome; GitHub's Ubuntu runner image includes Chrome, but a head-specific CI run must still verify that environment. Use MCP to inspect changed pages and reproduce failures; an agent reporting success is not a deterministic CI assertion. Missing infrastructure or failed startup is a failed check, never skipped-success coverage.
 

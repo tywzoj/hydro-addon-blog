@@ -19,7 +19,7 @@ yarn test:watch
 yarn test tests/unit/model.test.ts
 ```
 
-`yarn test` and `yarn test:coverage` are non-watch commands. Coverage reports are generated under ignored `coverage/`, including HTML and a JSON summary. Coverage currently targets `features/model.ts`, `features/handler.ts`, and `features/handler.base.ts`; it is not a whole-project or E2E coverage claim. No percentage threshold is imposed as a substitute for meaningful assertions.
+`yarn test` and `yarn test:coverage` are non-watch commands. Coverage reports are generated under ignored `coverage/`, including HTML and a JSON summary. Coverage targets article models/handlers, the permission policy, and settings models/handlers; it is not a whole-project or E2E coverage claim. No percentage threshold is imposed as a substitute for meaningful assertions.
 
 Vitest discovers `tests/unit/**/*.test.ts`, rejects empty discovery or empty suites, disallows focused `.only` tests, and applies five-second test/hook timeouts. CI additionally limits the UT step to five minutes. Ordinary tests are offline and need neither Docker nor a browser. Use the same non-watch command locally and in CI.
 
@@ -32,6 +32,14 @@ The test boundary is intentionally explicit:
 - Each test resets mocks; clocks return to real time after every test, the temporary Hydro global is restored after each file, and Vitest isolates files. Do not opt shared-state tests into concurrent execution.
 
 Model cases cover publication transitions, legacy reads, reply/counter updates, deletion/status cleanup, per-user star-only updates, index scoping, and propagated persistence failures. Handler cases cover route ordering/gates, target-user/post preparation, list filters/sorts/pagination, permission delegation, input rejection, write/rate-limit/audit behavior, sequential views, star conversion, and success/failure responses.
+
+Permission/settings cases execute the actual policy: effective roles, forced/manual
+root, strict own/others selection, guest identity boundaries, empty masks,
+role creation/deletion/recreation, stale configuration saves, matrix validation,
+filtered assignment queries and the single management gate. Sudo is simulated in
+UT only to capture the handler boundary; E2E performs actual Hydro reauthentication.
+Article regressions cover draft direct-link denial, public-edit publication rights,
+omitted versus unchecked fields, independent metadata operations, and stale writes.
 
 Assertions about query construction are not MongoDB ordering tests. Fixture denial is not proof of real Hydro access control. A star-only update assertion does not establish database merge semantics. Sequential views do not establish concurrent exactly-once behavior. Preserve these distinctions when adding tests and use E2E for the actual runtime contracts.
 
@@ -48,7 +56,7 @@ yarn test:e2e --grep "publication"
 
 The [verification-environment guide](verification-environment.md#local-runtime-boundary) documents Node/Docker/browser prerequisites, local development, writable paths, timeouts, evidence, and cleanup. The launcher owns a local Hydro child and only containerizes MongoDB. It never accepts a production or shared database.
 
-Playwright runs three real-form authentication setup cases and six business tests with independent author, viewer, and system-editor sessions:
+Playwright runs three real-form authentication setup cases and twelve business tests with independent author, viewer, and system-editor sessions. The original six scenarios are:
 
 | Scenario | Evidence | Related smoke cases |
 | --- | --- | --- |
@@ -61,7 +69,15 @@ Playwright runs three real-form authentication setup cases and six business test
 
 Use the real Markdown editor and controls; do not inject session cookies, bypass decorators, stub routes, or mock persistence to make E2E green. Direct authenticated denial requests preserve the same-origin Referer expected by Hydro's CSRF handling. MongoDB access is read-only assertion evidence against the run-owned database; fixture accounts are created through Hydro's user model.
 
-The suite uses one worker, no automatic retries, isolated browser contexts, focused-test rejection, and explicit timeouts. Empty selections and real assertion failures return nonzero exits. Keep fixtures unique within the run and promote new relevant failures into the suite. Initial cases do not establish all sorting/pagination outcomes, localization, concurrent deduplication, or unresolved draft direct-link privacy.
+`permissions.spec.ts` adds six scenarios covering real sudo and delegated role
+management, stale matrix saves, default/guest list exclusion, forced root,
+private drafts and rejected public edits, strict own/others permissions, role
+deletion/recreation, anonymous access, domain independence, independent
+publication/pinning/deletion, and visible unchecked controls. Its cleanup restores
+fixture assignments and guest permissions through authenticated management
+requests, including after failures; it does not write test outcomes into MongoDB.
+
+The suite uses one worker, no automatic retries, isolated browser contexts, focused-test rejection, and explicit timeouts. Empty selections and real assertion failures return nonzero exits. Keep fixtures unique within the run and promote new relevant failures into the suite. It does not establish every sorting/pagination outcome, all locales, or concurrent view deduplication. MCP checks supplement automated coverage for localized and narrow-screen settings UI.
 
 ## Required Coverage Layers
 

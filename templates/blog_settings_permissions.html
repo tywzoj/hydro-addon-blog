@@ -1,0 +1,39 @@
+{% extends "blog_settings_base.html" %}
+{% block blog_settings_content %}
+<form method="post">
+  <input type="hidden" name="revision" value="{{ settings.revision }}">
+  <div class="section">
+    <div class="section__header"><h1 class="section__title">{{ _('Permissions') }}</h1></div>
+    <div class="section__body">
+      <p>{{ _('Own and others permissions are separate. Access and authentication requirements still apply.') }}</p>
+      <div class="table-container">
+        <table class="data-table">
+          <thead><tr><th>{{ _('Permissions') }}</th>{% for role in roles %}<th>{{ role.name }}</th>{% endfor %}</tr></thead>
+          <tbody>
+          {% for family, group in permissions|groupby('family') %}
+            <tr><th colspan="{{ roles|length + 1 }}">{{ _(family) }}</th></tr>
+          {% for permission in group %}
+            <tr data-permission="{{ permission.name }}">
+              <td>{{ _(permission.label) }}</td>
+              {% for role in roles %}
+              <td><label class="compact checkbox">
+                <input type="checkbox" name="permissions[{{ role.id }}]" value="{{ permission.index }}" data-role="{{ role.name }}"
+                  aria-label="{{ role.name }}: {{ _(permission.label) }}"
+                  {% if role.perm|bitand(permission.bit) %}checked{% endif %}
+                  {% if role.name == 'root' %}disabled{% endif %}>
+              </label></td>
+              {% endfor %}
+              {% endfor %}
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% for role in roles %}{% if role.name != 'root' %}
+      <input type="hidden" name="permissions[{{ role.id }}]" value="1000">
+      {% endif %}{% endfor %}
+      <button class="primary rounded button" type="submit">{{ _('Update Permission') }}</button>
+    </div>
+  </div>
+</form>
+{% endblock %}

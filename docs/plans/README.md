@@ -6,6 +6,7 @@ This directory retains project direction, implementation plans, and consequentia
 
 | Plan | Status | Scope |
 | --- | --- | --- |
+| [Global blog settings and permissions](blog-permissions.md) | Completed locally | Domain-independent roles, 18 article/settings permissions, native-style management, and local UT/E2E/MCP evidence. Review workflows remain deferred. |
 | [Self-validation capabilities](self-validation.md) | In progress | UT and E2E verified locally and in PR #8 CI; local MCP addon flow verified. Type-check tooling and broader coverage remain pending. |
 | [Self-validation investigation](self-validation-investigation.md) | Completed | Experiments, upstream research, container recommendation, and explicit unverified boundaries. |
 

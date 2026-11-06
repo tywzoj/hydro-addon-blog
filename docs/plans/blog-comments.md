@@ -528,6 +528,22 @@ compatibility claim. The initial local delivery did not create a commit or PR.
 Subsequent commit and PR verification are recorded on GitHub; merging is not
 part of this delivery.
 
+### Copilot Review Follow-up
+
+PR #10 identified two additional race windows: the unchecked article-delete
+helper could clean comments before removing their article, and like/unlike could
+finish after withdrawal without rechecking publication. Deterministic paused
+operation tests reproduced both defects before the fixes.
+
+Article removal now completes before comment cleanup in both deletion helpers.
+Likes/unlikes revalidate publication after writing and use a unique transition
+ID for conditional status compensation; the count is reversed only when that
+request still owns the transition. A regression verifies that a newer transition
+is not overwritten. Local type checking, all 168 UT, and all ten focused comment
+E2E cases (including authentication) passed. Browser artifacts are retained under
+`test-results/hydro-blog-51973-612e002f/`; remote results are tracked with the fix
+commit in the PR.
+
 ## Non-goals and Known Limits
 
 - No edit, history, raw editing, lock, review/approval workflow, soft-delete

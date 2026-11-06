@@ -149,6 +149,9 @@ Source: [write handlers](../features/handler.ts), [model deletion and reply help
   `drid`, optional `drrid`, and required `liked`; explicit false cancels a like.
   Initial unlike and repeated desired states do not change the count again.
   Articles retain stars, not likes.
+- Like/unlike rechecks publication after its writes. On rejection it conditionally
+  restores only the status transition tagged by that request and reverses its
+  count delta only when restoration matched; a newer transition is not overwritten.
 - Top-level deletion first allows an article owner with
   `DELETE_COMMENT_IN_OWN_POST`. Otherwise, a self-authored target requires
   `DELETE_COMMENT_OWN`, and another user's target requires `DELETE_COMMENT`.
@@ -176,6 +179,8 @@ Source: [write handlers](../features/handler.ts), [model deletion and reply help
 - Top-level deletion cleans its embedded replies and their likes; nested deletion
   cleans only that target and its likes. Count changes depend on actual removal,
   avoiding duplicate decrements. Shared-collection indexes are comment-scoped.
+  Both article deletion helpers remove the article before beginning comment
+  cleanup, so new comments cannot validate a still-present parent after cleanup.
 
 Source: [comment policy](../features/permission.ts),
 [handlers](../features/comments.handler.ts), [model](../features/comments.model.ts),

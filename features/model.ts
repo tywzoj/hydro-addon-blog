@@ -97,11 +97,12 @@ export class BlogModel {
     }
 
     static async del(did: ObjectId): Promise<never> {
-        return (await Promise.all([
-            DocumentModel.deleteOne(SYSTEM_DOMAIN, TYPE_BLOG, did),
+        const removed = await DocumentModel.deleteOne(SYSTEM_DOMAIN, TYPE_BLOG, did);
+        const cleanup = await Promise.all([
             DocumentModel.deleteMultiStatus(SYSTEM_DOMAIN, TYPE_BLOG, { docId: did }),
             BlogCommentModel.deleteForArticle(did),
-        ])) as never;
+        ]);
+        return [removed, ...cleanup] as never;
     }
 
     static async deleteChecked(ddoc: BlogDoc) {

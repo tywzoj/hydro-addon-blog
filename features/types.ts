@@ -48,6 +48,7 @@ export interface BlogCommentStatus {
     parentId: ObjectId;
     commentId: ObjectId;
     liked: boolean;
+    transitionId?: string;
 }
 
 export interface BlogStatusDoc {

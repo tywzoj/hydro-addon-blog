@@ -240,6 +240,70 @@ describe("comment persistence", () => {
         });
     });
 
+    it("does not clean comments while unchecked article removal is still pending", async () => {
+        let removeArticle!: () => void;
+        DocumentModel.deleteOne.mockImplementation(
+            () =>
+                new Promise<void>((resolve) => {
+                    removeArticle = resolve;
+                }),
+        );
+        const deletion = BlogModel.del(article.docId);
+        await Promise.resolve();
+        const cleanedBeforeRemoval = DocumentModel.coll.deleteMany.mock.calls.length;
+        removeArticle();
+        await deletion;
+        expect(cleanedBeforeRemoval).toBe(0);
+        expect(DocumentModel.coll.deleteMany).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+        [undefined, true],
+        [tailId, true],
+        [undefined, false],
+        [tailId, false],
+    ] as const)("rejects a like transition after publication changes during its count write", async (nested, liked) => {
+        let releaseCount!: () => void;
+        let countStarted!: () => void;
+        const started = new Promise<void>((resolve) => {
+            countStarted = resolve;
+        });
+        DocumentModel.collStatus.findOneAndUpdate.mockResolvedValue({ liked: true });
+        DocumentModel.collStatus.updateOne.mockResolvedValue({ matchedCount: 1 });
+        DocumentModel.coll.updateOne.mockImplementationOnce(() => {
+            countStarted();
+            return new Promise<{ matchedCount: number }>((resolve) => {
+                releaseCount = () => resolve({ matchedCount: 1 });
+            });
+        });
+        const operation = BlogCommentModel.like(article.docId, id, nested, 2, liked);
+        const rejected = expect(operation).rejects.toBeInstanceOf(ValidationError);
+        await started;
+        DocumentModel.get.mockResolvedValue({ ...article, draft: true });
+        releaseCount();
+        await rejected;
+        expect(DocumentModel.coll.updateOne).toHaveBeenLastCalledWith(expect.objectContaining({ docId: id }), {
+            $inc: nested ? { "reply.$.nLike": liked ? -1 : 1 } : { nLike: liked ? -1 : 1 },
+        });
+    });
+
+    it("does not undo a newer transition when compensating a withdrawn-article request", async () => {
+        DocumentModel.collStatus.findOneAndUpdate.mockResolvedValue({ liked: true });
+        DocumentModel.collStatus.updateOne.mockResolvedValue({ matchedCount: 0 });
+        DocumentModel.get.mockResolvedValueOnce(article).mockResolvedValueOnce({ ...article, draft: true });
+        await expect(BlogCommentModel.like(article.docId, id, undefined, 2, true)).rejects.toBeInstanceOf(
+            ValidationError,
+        );
+        const change = DocumentModel.collStatus.findOneAndUpdate.mock.calls[0][1] as {
+            $set: { transitionId: string };
+        };
+        expect(DocumentModel.collStatus.updateOne).toHaveBeenCalledWith(
+            { domainId: "system", docType: 71, docId: id, uid: 2, transitionId: change.$set.transitionId },
+            { $set: { liked: false }, $unset: { transitionId: "" } },
+        );
+        expect(DocumentModel.coll.updateOne).toHaveBeenCalledOnce();
+    });
+
     it.each([undefined, tailId])("changes like counts only after an actual user-state transition", async (nested) => {
         DocumentModel.collStatus.findOneAndUpdate.mockResolvedValueOnce({ liked: true }).mockResolvedValueOnce(null);
         DocumentModel.collStatus.findOne.mockResolvedValue({ liked: true });
@@ -251,7 +315,14 @@ describe("comment persistence", () => {
         });
         expect(DocumentModel.collStatus.findOneAndUpdate).toHaveBeenCalledWith(
             expect.objectContaining({ docId: nested || id, uid: 2 }),
-            { $set: { liked: true, parentId: article.docId, commentId: id } },
+            {
+                $set: {
+                    liked: true,
+                    parentId: article.docId,
+                    commentId: id,
+                    transitionId: expect.any(String) as unknown,
+                },
+            },
             { upsert: true, returnDocument: "after" },
         );
     });

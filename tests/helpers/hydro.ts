@@ -41,6 +41,7 @@ export const DocumentModel = {
         find: vi.fn(),
         findOne: vi.fn(),
         findOneAndUpdate: vi.fn(),
+        updateOne: vi.fn(),
         deleteMany: vi.fn(),
     },
     add: vi.fn<(...args: unknown[]) => Promise<ObjectId>>(),

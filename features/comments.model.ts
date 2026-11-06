@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import type { Context, ObjectId } from "hydrooj";
 import { DocumentModel, DocumentNotFoundError, ValidationError } from "hydrooj";
 import type { Collection, Filter } from "mongodb";
@@ -136,11 +138,14 @@ export class BlogCommentModel {
         await this.get(did, drid, drrid);
         const id = drrid || drid;
         const identity = { domainId: SYSTEM_DOMAIN, docType: TYPE_BLOG_COMMENT, docId: id, uid };
+        const transitionId = randomUUID();
+        const targetFilter = { ...this.filter(did), docId: drid, ...(drrid ? { "reply._id": drrid } : {}) };
+        const countDelta = liked ? 1 : -1;
         let changed: BlogCommentStatus | null = null;
         try {
             changed = await this.statuses.findOneAndUpdate(
                 { ...identity, liked: liked ? { $ne: true } : true },
-                { $set: { liked, parentId: did, commentId: drid } },
+                { $set: { liked, parentId: did, commentId: drid, transitionId } },
                 { upsert: liked, returnDocument: "after" },
             );
         } catch (error) {
@@ -148,14 +153,30 @@ export class BlogCommentModel {
             if (!liked || !(error instanceof Error) || !("code" in error) || error.code !== 11000) throw error;
         }
         if (changed) {
-            const result = await this.coll.updateOne(
-                { ...this.filter(did), docId: drid, ...(drrid ? { "reply._id": drrid } : {}) },
-                { $inc: drrid ? { "reply.$.nLike": liked ? 1 : -1 } : { nLike: liked ? 1 : -1 } },
-            );
+            const result = await this.coll.updateOne(targetFilter, {
+                $inc: drrid ? { "reply.$.nLike": countDelta } : { nLike: countDelta },
+            });
             if (!result.matchedCount) {
                 await this.clearStatuses(did, drid, drrid);
                 throw new DocumentNotFoundError(SYSTEM_DOMAIN, id);
             }
+        }
+        try {
+            await this.requirePublished(did);
+        } catch (error) {
+            if (changed) {
+                // Only undo our transition; a later request owns any newer state and its count.
+                const restored = await this.statuses.updateOne(
+                    { ...identity, transitionId },
+                    { $set: { liked: !liked }, $unset: { transitionId: "" } },
+                );
+                if (restored.matchedCount) {
+                    await this.coll.updateOne(targetFilter, {
+                        $inc: drrid ? { "reply.$.nLike": -countDelta } : { nLike: -countDelta },
+                    });
+                }
+            }
+            throw error;
         }
         const [{ target }, status] = await Promise.all([this.get(did, drid, drrid), this.statuses.findOne(identity)]);
         return { drid, ...(drrid ? { drrid } : {}), nLike: target.nLike || 0, liked: status?.liked || false };

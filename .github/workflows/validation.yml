@@ -33,6 +33,10 @@ jobs:
       - name: Lint
         run: yarn lint
 
+      - name: Type check
+        timeout-minutes: 5
+        run: yarn typecheck
+
       - name: Unit tests and coverage
         timeout-minutes: 5
         run: yarn test:coverage

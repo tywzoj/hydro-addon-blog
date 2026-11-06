@@ -1,7 +1,8 @@
 import type { Page } from "@playwright/test";
+import type { Udoc } from "hydrooj/src/interface";
 
 import type { BlogPermission } from "../../features/permission";
-import type { BlogDoc } from "../../features/types";
+import type { BlogAssignment, BlogDoc, BlogSettings } from "../../features/types";
 import { accounts } from "./accounts";
 import { createPost, expect, fillPost, test } from "./fixtures";
 
@@ -84,22 +85,30 @@ test("global settings role assignment and delegation follow Hydro management sem
     await settingsPage(editor, "/blog/settings/users");
     await expect(editor.locator('tr[data-uid="2"], tr[data-uid="3"]')).toHaveCount(0);
     await expect(editor.locator('tr[data-uid="4"]')).toContainText("root");
+    const initial = (await db.collection<BlogSettings>("blog.settings").findOne({ _id: "global" }))!;
+    const configured = (initial.permissionRoleOrder || [])
+        .map((id) => initial.roles.find((role) => role.id === id)!.name)
+        .filter((name) => name !== "root");
     await createRole(editor, "blogmanager");
     await settingsPage(editor, "/blog/settings/permissions");
-    await expect(editor.locator("[data-permission]")).toHaveCount(17);
+    await expect(editor.locator("[data-permission]")).toHaveCount(21);
     await expect(editor.locator('[data-permission="CREATE_OTHERS"]')).toHaveCount(0);
-    await expect(editor.locator("thead th.col--p")).toHaveText(["blogmanager", "guest", "default", "root"]);
-    await setPermissions(editor, "blogmanager", ["ACCESS", "VIEW_PUBLISHED", "MANAGE_SETTINGS"]);
-    await expect(editor.locator("thead th.col--p")).toHaveText(["blogmanager", "default", "guest", "root"]);
-    await createRole(editor, "matrix_order");
-    await settingsPage(editor, "/blog/settings/permissions");
     await expect(editor.locator("thead th.col--p")).toHaveText([
+        ...configured,
         "blogmanager",
-        "default",
-        "guest",
-        "matrix_order",
+        ...["guest", "default"].filter((name) => !configured.includes(name)),
         "root",
     ]);
+    await setPermissions(editor, "blogmanager", ["ACCESS", "VIEW_PUBLISHED", "MANAGE_SETTINGS"]);
+    const savedOrder = [
+        ...configured,
+        "blogmanager",
+        ...["default", "guest"].filter((name) => !configured.includes(name)),
+    ];
+    await expect(editor.locator("thead th.col--p")).toHaveText([...savedOrder, "root"]);
+    await createRole(editor, "matrix_order");
+    await settingsPage(editor, "/blog/settings/permissions");
+    await expect(editor.locator("thead th.col--p")).toHaveText([...savedOrder, "matrix_order", "root"]);
     const staleRevision = await editor.locator('input[name="revision"]').inputValue();
     await setPermissions(editor, "blogmanager", ["ACCESS", "VIEW_PUBLISHED", "MANAGE_SETTINGS"]);
     const staleSave = await editor.request.post("/blog/settings/permissions", {
@@ -113,19 +122,20 @@ test("global settings role assignment and delegation follow Hydro management sem
     await settingsPage(viewer, "/blog/settings/permissions", accounts.viewer.password);
     await expect(viewer.locator('input[data-role="root"]').first()).toBeDisabled();
     await assignRole(viewer, accounts.author.name, "root");
-    expect(await db.collection("blog.user").findOne({ _id: 2 })).toMatchObject({ role: "root" });
+    expect(await db.collection<BlogAssignment>("blog.user").findOne({ _id: 2 })).toMatchObject({ role: "root" });
     await resetUser(viewer, 2);
     await resetUser(editor, 3);
     expect((await viewer.goto("/blog/settings"))?.status()).toBe(403);
     await settingsPage(editor, "/blog/settings/users");
     const before = await db
-        .collection("blog.user")
+        .collection<BlogAssignment>("blog.user")
         .find({ _id: { $in: [3, 4] } })
         .toArray();
-    for (const form of [
+    const invalidAssignments: Record<string, string>[] = [
         { operation: "assign", uid: "3", role: "guest" },
         { operation: "set_users", uids: "3,4", role: "guest" },
-    ]) {
+    ];
+    for (const form of invalidAssignments) {
         const response = await editor.request.post("/blog/settings/users", {
             headers: { Referer: editor.url() },
             form,
@@ -134,7 +144,7 @@ test("global settings role assignment and delegation follow Hydro management sem
     }
     expect(
         await db
-            .collection("blog.user")
+            .collection<BlogAssignment>("blog.user")
             .find({ _id: { $in: [3, 4] } })
             .toArray(),
     ).toEqual(before);
@@ -374,7 +384,7 @@ test("delegated managers search global users from restricted domains and role li
     expect(lookups.some((lookup) => lookup.args.search === accounts.author.name)).toBe(true);
     expect(lookups.some((lookup) => lookup.args.auto?.includes(String(accounts.author.id)))).toBe(true);
     expect(lookups.every((lookup) => lookup.path === "/d/system/api/users")).toBe(true);
-    expect(await db.collection("blog.user").countDocuments({ _id: accounts.editor.id })).toBe(1);
+    expect(await db.collection<BlogAssignment>("blog.user").countDocuments({ _id: accounts.editor.id })).toBe(1);
     await viewer.goto("/d/blogrestricted/blog/settings/users?page=2");
     await expect(viewer.locator(".domain-users tbody tr[data-uid]")).toHaveCount(0);
     await resetUser(editor, accounts.author.id);
@@ -404,7 +414,7 @@ test("native role controls exclude guest and reset assignments without a remove-
     await expect(dialog.locator(".autocomplete-wrapper input")).toBeFocused();
     await expect(dialog.locator('select option[value="guest"]')).toHaveCount(0);
     await dialog.locator('[data-action="cancel"]').click();
-    expect(await db.collection("blog.user").countDocuments({ _id: { $in: [2, 3] } })).toBe(0);
+    expect(await db.collection<BlogAssignment>("blog.user").countDocuments({ _id: { $in: [2, 3] } })).toBe(0);
 
     await editor.locator('button[name="add_user"]').click();
     dialog = editor.locator(".dialog:visible");
@@ -440,7 +450,7 @@ test("native role controls exclude guest and reset assignments without a remove-
     await dialog.locator("select").selectOption("default");
     await Promise.all([editor.waitForNavigation(), dialog.locator('[data-action="ok"]').click()]);
     await expect(editor.locator('tr[data-uid="2"], tr[data-uid="3"]')).toHaveCount(0);
-    expect(await db.collection("user").countDocuments({ _id: { $in: [2, 3] } })).toBe(2);
+    expect(await db.collection<Udoc>("user").countDocuments({ _id: { $in: [2, 3] } })).toBe(2);
 });
 
 test("fresh sudo from a restricted domain uses the global authentication entry and returns to settings", async ({

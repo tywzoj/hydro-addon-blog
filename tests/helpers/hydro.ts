@@ -8,7 +8,7 @@ import type * as Validators from "@hydrooj/framework/validator";
 import type { ObjectId } from "mongodb";
 import { vi } from "vitest";
 
-import type { BlogDoc, BlogStatusDoc } from "../../features/types";
+import type { BlogCommentDoc, BlogDoc, BlogStatusDoc } from "../../features/types";
 
 const load = createRequire(resolve("package.json"));
 load("@hydrooj/register");
@@ -20,16 +20,29 @@ export const { PRIV } = load("@hydrooj/common/permission") as typeof Permissions
 
 export class UserNotFoundError extends Error {}
 export class DiscussionNotFoundError extends Error {}
+export class DocumentNotFoundError extends Error {}
 export class PrivilegeError extends Error {}
 
 export interface Cursor {
     sort: (sort: Record<string, number>) => Cursor;
+    project: (projection: Record<string, number>) => Cursor;
 }
 
 export const DocumentModel = {
     coll: {
+        findOne: vi.fn(),
+        findOneAndDelete: vi.fn(),
+        updateOne: vi.fn(),
+        deleteMany: vi.fn(),
         findOneAndUpdate: vi.fn<(...args: unknown[]) => Promise<BlogDoc | null>>(),
         deleteOne: vi.fn<(...args: unknown[]) => Promise<{ deletedCount: number }>>(),
+    },
+    collStatus: {
+        find: vi.fn(),
+        findOne: vi.fn(),
+        findOneAndUpdate: vi.fn(),
+        updateOne: vi.fn(),
+        deleteMany: vi.fn(),
     },
     add: vi.fn<(...args: unknown[]) => Promise<ObjectId>>(),
     get: vi.fn<(...args: unknown[]) => Promise<BlogDoc | null>>(),
@@ -39,8 +52,9 @@ export const DocumentModel = {
     deleteMultiStatus: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
     count: vi.fn<(...args: unknown[]) => Promise<number>>(),
     getMulti: vi.fn<(...args: unknown[]) => Cursor>(),
-    push: vi.fn<(...args: unknown[]) => Promise<[number, ObjectId]>>(),
+    push: vi.fn<(...args: unknown[]) => Promise<[BlogCommentDoc | null, ObjectId]>>(),
     incAndSet: vi.fn<(...args: unknown[]) => Promise<BlogDoc>>(),
+    deleteSub: vi.fn(),
     getStatus: vi.fn<(...args: unknown[]) => Promise<BlogStatusDoc | null>>(),
     setStatus: vi.fn<(...args: unknown[]) => Promise<BlogStatusDoc>>(),
 };
@@ -48,6 +62,7 @@ export const DocumentModel = {
 export function makeUser(id = 1, privileges = PRIV.PRIV_USER_PROFILE) {
     return {
         _id: id,
+        uname: `user${id}`,
         hasPriv: (privilege: number) => (privileges & privilege) === privilege,
         own: (doc: { owner: number }, _strict?: boolean) => doc.owner === id,
     };
@@ -63,6 +78,11 @@ export const UserModel = {
 export const OplogModel = {
     log: vi.fn<(...args: unknown[]) => Promise<void>>(),
 };
+export const MessageModel = {
+    FLAG_RICHTEXT: 4,
+    FLAG_UNREAD: 1,
+    send: vi.fn(),
+};
 
 export class Handler {
     user = makeUser();
@@ -77,6 +97,9 @@ export class Handler {
             paginate: vi.fn<(cursor: Cursor, page: number, size: number) => Promise<[BlogDoc[], number, number]>>(),
         },
     };
+    paginate(cursor: Cursor, page: number, size: number | string) {
+        return this.ctx.db.paginate(cursor, page, typeof size === "string" ? 50 : size);
+    }
     checkPriv = vi.fn((privilege: number) => {
         if (!this.user.hasPriv(privilege)) throw new PrivilegeError("Fixture privilege denial");
     });

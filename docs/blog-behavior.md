@@ -9,6 +9,9 @@ Use the [official Hydro references](development.md#official-hydro-references) to
 ## Storage and Routes
 
 - Blog documents use `SYSTEM_DOMAIN = "system"` and `TYPE_BLOG = 70`.
+- Top-level comments use `TYPE_BLOG_COMMENT = 71`, with a type-70 parent ID;
+  nested replies are embedded within their top-level comment. Both levels'
+  per-user like statuses use type 71 with article and top-level parent linkage.
 - Per-user view and star state use the existing document-status APIs.
 - Blog admission uses the independent global blog role policy. Guest starts with no access but can be configured to read; mutations require an authenticated profile.
 - Blog handlers bypass only Hydro's inherited domain-view permission check. Valid domain-prefixed blog URLs share the same data and policy; domain membership, roles and permissions are unchanged.
@@ -18,7 +21,7 @@ Use the [official Hydro references](development.md#official-hydro-references) to
 | `/blog` | Home list. | Access and published-read permissions. |
 | `/blog/:uid` | User list. | System-domain user lookup; filter readable published/draft entries before pagination. |
 | `/blog/:uid/create` | Create form and submission. | Authenticated `CREATE` permission and URL user equal to the signed-in user, including root; published/pinned creation also checks its respective permission. |
-| `/blog/:uid/:did` | Post detail and star operation. | Exact URL-author match and content-read permission; authenticated stars also need `STAR`. |
+| `/blog/:uid/:did` | Post detail, stars, paginated comments, replies, deletion, and likes. | Exact URL-author match and article readability; mutations require authentication and their explicit permission. |
 | `/blog/:uid/:did/edit` | Edit form, update, delete, pin and publication operations. | Authentication, readability, and independent action-specific permissions. |
 | `/blog/settings` | Global settings overview. | Access, authentication and `MANAGE_SETTINGS`. |
 | `/blog/settings/roles` | Role creation/deletion. | Management permission; GET and deletion require sudo, creation POST does not. |
@@ -75,9 +78,11 @@ Source: [detail and star handlers](../features/handler.ts), [status helpers](../
 - Articles can only be created under the authenticated user's identity. Other users' lists have no create entry, and both create GET and POST reject a different URL user, even for root. Existing third-party edit and management permissions are unchanged.
 - Creation invokes `limitRate("add_blog", 3600, 60)` before persistence. Verify the argument semantics in the applicable Hydro implementation rather than assuming a rate policy from these values alone.
 - Create, edit, and delete paths record `blog.create`, `blog.edit`, and `blog.delete` operation logs.
-- Deletion removes the document and its status records.
+- Deletion removes the document, its status records, all comment documents,
+  embedded replies, and both levels' like statuses.
 - Article and settings mutations log after successful persistence; a failed required log is not reported as success. There is no transaction or rollback guarantee across persistence and audit writes.
-- A model-level reply helper exists, but this addon does not register a reply route. Do not document a reply UI or endpoint as a delivered feature.
+- The legacy `BlogModel.addReply` helper delegates to independent comment storage;
+  it no longer appends top-level replies to the article or updates its timestamp.
 
 Preserve these validators, rate-limit calls, and audit calls when changing write paths. If a change intentionally alters them, state the intended behavior and add applicable verification.
 
@@ -85,10 +90,19 @@ Source: [write handlers](../features/handler.ts), [model deletion and reply help
 
 ## Global Roles and Settings
 
-- The full 17-node catalog and approved decisions are in the [permission plan](plans/blog-permissions.md). Creation has one `CREATE` grant; each remaining own/others pair is strictly scoped: an others grant does not restore a revoked own grant.
+- The original 17 article/settings grants are documented in the
+  [permission plan](plans/blog-permissions.md); the [comment plan](plans/blog-comments.md)
+  adds four grants, for 21 matrix rows. Article creation has one `CREATE` grant;
+  each article own/others pair remains strictly scoped. Comment deletion uses
+  the separate native discussion branches below.
 - Blog permissions apply to all users automatically. There is no blog membership, admission, join, leave, removal, or invitation state.
 - `PRIV_EDIT_SYSTEM` forces root; otherwise an unauthenticated identity uses guest and an unassigned eligible user uses default. Explicit root assignments are supported; guest cannot be assigned to a user. Legacy guest assignments resolve to default for authenticated users without modifying their account or domain data.
-- Root uses an immutable all-permissions mask. Default initially grants reading, starring and own-article operations; guest starts empty. Managers may grant any registered permissions, including to guest, but authentication/sudo remain separate requirements.
+- Root uses an immutable all-permissions mask. Fresh default grants reading,
+  starring, own-article operations, comment/reply posting and likes, own-comment
+  deletion, and own-article top-level moderation. Guest starts empty. Existing
+  stored masks are not augmented on upgrade: administrators must enable new
+  comment bits explicitly. Managers may configure guest masks, but mutations
+  still require authentication.
 - One `MANAGE_SETTINGS` permission governs the entire settings area. Built-in roles cannot be deleted; new roles copy the current default permissions.
 - `blog.settings` stores one versioned global configuration. `blog.user` stores explicit assignments. Revision-checked configuration updates reject stale saves; unchecked matrix columns persist zero.
 - Permission-matrix columns follow Hydro's configured-role dictionary order, then
@@ -116,7 +130,61 @@ Source: [write handlers](../features/handler.ts), [model deletion and reply help
   reauthentication. Settings sidebars retain native styles and show the active page
   consistently with or without a domain prefix.
 - Draft details, editor responses, JSON and stars check readability before view/status side effects. This intentionally closes the previous draft direct-link gap.
-- No review workflow, reply endpoint, article-owner bypass, or domain-role mutation is introduced.
+- No review workflow, implicit article-owner bypass, or domain-role mutation is introduced.
+
+## Comments, Replies, and Likes
+
+- Reading comments inherits article reading; there is no separate comment-read
+  permission. The native `pagination.reply` setting controls top-level pages
+  (Hydro's inspected default is 50), newest first. Nested replies remain in
+  insertion order and are not separately paginated.
+- `CREATE_COMMENT` permits posting and liking/unliking on both levels.
+  Drafts reject all three operations even for root. Withdrawal preserves the
+  thread; authorized draft readers can still read and perform permitted deletion.
+- Both levels are immutable after posting. There is no edit, raw/history, lock,
+  or generic emoji-reaction operation. Replying to a nested reply stays in the
+  same top-level thread using the native mention interaction. Existing replies
+  never disable subsequent replies or likes.
+- Each user has independent like state per target. The `like` operation accepts
+  `drid`, optional `drrid`, and required `liked`; explicit false cancels a like.
+  Initial unlike and repeated desired states do not change the count again.
+  Articles retain stars, not likes.
+- Like/unlike rechecks publication after its writes. On rejection it conditionally
+  restores only the status transition tagged by that request and reverses its
+  count delta only when restoration matched; a newer transition is not overwritten.
+- Top-level deletion first allows an article owner with
+  `DELETE_COMMENT_IN_OWN_POST`. Otherwise, a self-authored target requires
+  `DELETE_COMMENT_OWN`, and another user's target requires `DELETE_COMMENT`.
+- Nested deletion allows the reply author with `DELETE_COMMENT_OWN`, or anyone
+  with `DELETE_COMMENT`. Own-article moderation does not apply to nested replies.
+  Thus global deletion can substitute for own deletion on a nested reply, but
+  not on a self-authored top-level comment. This asymmetry intentionally matches
+  the inspected official handler.
+- Every target operation verifies the full article/comment/nested relationship
+  in the system domain. A valid ID from another article is not sufficient.
+- Posting invokes the separate `add_blog_comment` limiter with `3600, 60`,
+  retaining Hydro's configured limit key, overrides and unlimited-access bypass.
+  Both levels share that bucket; article creation uses its existing bucket.
+- `nReply` counts top-level comments only. Comment operations never update
+  article `updateAt`/`firstPublishAt` or add an activity timestamp.
+- Native mention syntax notifies existing, deduplicated targets before saving,
+  without a recipient-readability filter. Deletion, applicable moderation
+  notification, and `blog.reply.delete`/`blog.tailReply.delete` audit run concurrently.
+  Notices preserve the native content excerpt/title/link, adapted to blogs.
+  Self-deletion is not notified; deleting a top-level thread notifies only that
+  top-level author. Article deletion does not fan out comment notices.
+- Creation and likes have no operation-log entries. Notification/audit/data
+  writes are not a transaction: a failure can follow a message or partial write.
+  Genuine persistence failures propagate; no rollback or exactly-once claim is made.
+- Top-level deletion cleans its embedded replies and their likes; nested deletion
+  cleans only that target and its likes. Count changes depend on actual removal,
+  avoiding duplicate decrements. Shared-collection indexes are comment-scoped.
+  Both article deletion helpers remove the article before beginning comment
+  cleanup, so new comments cannot validate a still-present parent after cleanup.
+
+Source: [comment policy](../features/permission.ts),
+[handlers](../features/comments.handler.ts), [model](../features/comments.model.ts),
+and [confirmed upstream differences](plans/blog-comments.md#confirmed-difference-register).
 
 ## Verification Boundaries
 

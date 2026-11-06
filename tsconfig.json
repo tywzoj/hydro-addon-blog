@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "noEmit": true,
     "module": "commonjs",
     "target": "ES2021",
     "jsx": "react-jsx",
@@ -16,5 +17,5 @@
     "experimentalDecorators": true
   },
   "include": ["**/*.ts", "**/*.tsx"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "coverage", "test-results", "playwright-report", ".playwright-mcp"]
 }

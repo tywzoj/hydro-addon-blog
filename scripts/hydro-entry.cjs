@@ -11,6 +11,7 @@ global.app.inject(["storage"], (ctx) =>
             }
             if (!global.Hydro.model.blog) throw new Error("The blog addon did not load");
             await SystemModel.set("server.url", process.env.HYDRO_E2E_URL);
+            await SystemModel.set("pagination.reply", 3);
             await UserModel.setById(0, { viewLang: "en" });
             for (const [role, account] of Object.entries(accounts)) {
                 const privilege = PRIV.PRIV_USER_PROFILE | (role === "editor" ? PRIV.PRIV_EDIT_SYSTEM : 0);

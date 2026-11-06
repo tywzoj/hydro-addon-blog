@@ -1,6 +1,6 @@
 import type { ObjectId } from "hydrooj";
 
-import type { BLOG_SETTINGS_ID, BLOG_SETTINGS_VERSION } from "./constants";
+import type { BLOG_SETTINGS_ID, BLOG_SETTINGS_VERSION, TYPE_BLOG_COMMENT } from "./constants";
 import type { TYPE_BLOG } from "./model";
 
 export interface BlogDoc {
@@ -28,6 +28,27 @@ export interface BlogReplyDoc {
     owner: number;
     content: string;
     ip?: string;
+    nLike?: number;
+}
+
+export interface BlogCommentDoc extends BlogReplyDoc {
+    docId: ObjectId;
+    domainId: string;
+    docType: typeof TYPE_BLOG_COMMENT;
+    parentType: typeof TYPE_BLOG;
+    parentId: ObjectId;
+    reply?: BlogReplyDoc[];
+}
+
+export interface BlogCommentStatus {
+    domainId: string;
+    docType: typeof TYPE_BLOG_COMMENT;
+    docId: ObjectId;
+    uid: number;
+    parentId: ObjectId;
+    commentId: ObjectId;
+    liked: boolean;
+    transitionId?: string;
 }
 
 export interface BlogStatusDoc {

@@ -49,7 +49,14 @@ yarn test:coverage
 
 See the [UT guide](testing.md#running-and-extending-ut) for focused runs, coverage scope, isolation boundaries, and optional watch mode. The normal commands do not start Hydro, MongoDB, Docker, or a browser.
 
-There is no supported dedicated type-check command in `package.json`. Vitest transforms TypeScript but does not type-check it. Do not describe lint or UT as a passing full TypeScript compilation.
+Run the supported project-scoped type check:
+
+```sh
+yarn typecheck
+```
+
+See [Type Checking](#type-checking) for its explicit boundary. Vitest transformation
+and lint do not replace this check.
 
 Follow the [testing requirements](testing.md) for behavioral coverage. Consult the [self-validation plan](plans/self-validation.md) for delivery status. Treat E2E and environment commands as available only after they exist in the repository; a planned capability is not an implemented check.
 
@@ -61,9 +68,51 @@ yarn test:e2e
 
 This command provisions its own MongoDB container, launches local Hydro using isolated user-writable paths, runs Playwright, and tears down run-owned resources. It requires a running Docker engine and local Chrome, not root access or a Hydro container. See the [runtime guide](verification-environment.md#local-runtime-boundary) for browser alternatives and `yarn dev` for manual/MCP work. Do not run bare Playwright against an arbitrary deployment in place of this owned environment.
 
-The coverage goal requires both UT and browser E2E. Use the [verification-environment guide](verification-environment.md) for low-impact Docker boundaries and the project Playwright MCP declaration. MCP-assisted checks are separate evidence, not an automated E2E suite. The [investigation](plans/self-validation-investigation.md) records a passing lint baseline and raw standalone TypeScript failures; no supported type-check command has been added.
+The coverage goal requires both UT and browser E2E. Use the [verification-environment guide](verification-environment.md) for low-impact Docker boundaries and the project Playwright MCP declaration. MCP-assisted checks are separate evidence, not an automated E2E suite. The [investigation](plans/self-validation-investigation.md) records the original raw standalone TypeScript failures; the supported scoped check is described below.
 
-The PR validation workflow installs dependencies, runs lint, `yarn test:coverage`, and `yarn test:e2e`. When changing the workflow, verify the affected run rather than relying on a check from an earlier commit. A locally passing command does not establish a head-specific CI result.
+The PR validation workflow installs dependencies, runs lint, `yarn typecheck`,
+`yarn test:coverage`, and `yarn test:e2e`. When changing the workflow, verify the affected run rather than relying on a check from an earlier commit. A locally passing command does not establish a head-specific CI result.
+
+## Type Checking
+
+`yarn typecheck` runs `scripts/typecheck.mjs` using the installed TypeScript compiler
+and the repository's `tsconfig.json`. It checks project-owned TypeScript sources:
+the addon entry, backend features, frontend pages, tests/helpers, and TypeScript
+configuration files. Generated reports and `node_modules` are not roots.
+The command fails on configuration, compiler-option, global, syntax, and semantic
+errors in that scope, including an empty project. It never emits JavaScript.
+Existing strict-null and other compiler options remain enabled as configured.
+
+Hydro `5.0.7` exposes `src/plugin-api.ts`, and default UI `4.58.5` exposes `api.ts`
+as its type entry. Their imports pull upstream implementation sources into the
+TypeScript program. `skipLibCheck` skips declaration-file checks, not arbitrary
+dependency `.ts` implementation checks. A raw full `tsc` invocation therefore
+also reports upstream source/configuration issues unrelated to this addon.
+
+The supported command resolves these real dependency types normally, then requests
+syntax/semantic diagnostics only for project-owned files. Dependency API misuse
+reported in an addon or test file still fails. No handwritten `any` replacement
+modules, ignored local error codes, or relaxed compiler options are used.
+Dependency implementation diagnostics are intentionally not requested; the command
+prints that boundary with its checked-file count. This is not a successful build
+or compatibility certification for the entire Hydro dependency graph. Upstream
+typing limitations can still limit inference at API boundaries.
+
+For an explicitly full diagnostic investigation, run
+`node node_modules/typescript/bin/tsc --noEmit --pretty false`; do not advertise
+that broader command as green unless its upstream diagnostics have also been
+resolved. Keep `noEmit` in the configuration so accidental invocations cannot
+leave JavaScript siblings that interfere with source loading.
+
+The implementation was verified with temporary backend, frontend, and test type
+errors, including misuse of the real `ObjectId` and `NamedPage` types. All failed
+with nonzero status, emitted no JavaScript, and passed again after probe removal.
+No Docker, browser, network service, or new dependency is required for this check.
+
+Official references: TypeScript's compiler API guide at
+`https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API` and
+`skipLibCheck` reference at
+`https://www.typescriptlang.org/tsconfig/skipLibCheck.html`.
 
 ## Manual Verification
 
@@ -74,7 +123,8 @@ For behavior changes, verify the affected flow in a Hydro instance when availabl
 - Public, owner, and privileged-user access, especially draft visibility.
 - Creating, editing, publishing, and deleting posts.
 - Home and user lists, sorting, pinned posts, and pagination.
-- View tracking, star state, and other affected document-status behavior. Verify replies only when the change affects the model-level reply helper; this addon does not register a reply handler.
+- View tracking, stars, two-level comments/likes, deletion permissions, native
+  notifications, and comment/status cleanup through the loaded detail handler.
 - Template rendering, frontend integration, and affected translations.
 - Compatibility with existing documents when changing persistence.
 
@@ -87,7 +137,7 @@ Documentation-only changes do not require application validation unless they als
 | Change | Minimum applicable evidence |
 | --- | --- |
 | Documentation only | Review accuracy, local links, referenced paths, and consistency with implemented commands. |
-| Types or shared contracts | Lint, inspect affected callers, and run a dedicated type check once a supported command exists. Verify affected behavior separately. |
+| Types or shared contracts | Lint, `yarn typecheck`, and inspect affected callers. Verify affected behavior separately. |
 | Model, handler, or business behavior | Lint, focused Vitest UT, and applicable Playwright E2E denial/persistence cases. Use the runtime/manual fallback for contracts outside automated coverage. |
 | Templates, frontend, or localization | Lint where applicable and applicable Playwright E2E; verify additional rendered languages and roles through the local development runtime when outside current coverage. |
 | Dependencies or patches | Verify installation and patch application, lint, and exercise affected integrations. |

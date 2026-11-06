@@ -80,13 +80,14 @@ describe("blog settings persistence", () => {
         );
     });
 
-    it.each([null, [], { missing: "0" }, { default: "17" }, { default: "999" }, { default: "-1" }, { default: {} }])(
+    it.each([null, [], { missing: "0" }, { default: "21" }, { default: "999" }, { default: "-1" }, { default: {} }])(
         "rejects malformed or unknown permission submissions %j",
         (input) => expect(() => parsePermissions(input, settings.roles)).toThrow(ValidationError),
     );
 
     it("rejects unknown masks and roles before persistence", async () => {
-        for (const changes of [{ default: -1n }, { default: 1n << 30n }, { missing: 1n }]) {
+        const invalidChanges: Record<string, bigint>[] = [{ default: -1n }, { default: 1n << 30n }, { missing: 1n }];
+        for (const changes of invalidChanges) {
             await expect(BlogSettingsModel.permissions(changes, 0)).rejects.toBeInstanceOf(ValidationError);
         }
         expect(updateOne).not.toHaveBeenCalled();

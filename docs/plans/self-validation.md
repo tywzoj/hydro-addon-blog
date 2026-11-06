@@ -2,9 +2,9 @@
 
 ## Status
 
-In progress: initial Vitest UT, a local development runtime, and real-browser E2E are delivered and verified locally and in [PR #8](https://github.com/tywzoj/hydro-addon-blog/pull/8). A supported type-check command and broader coverage remain follow-up work.
+In progress: initial Vitest UT, a local development runtime, and real-browser E2E are delivered and verified locally and in [PR #8](https://github.com/tywzoj/hydro-addon-blog/pull/8). Project-scoped type checking is now delivered and verified locally; its new CI step, broader coverage, and cross-platform checks remain to be verified on future PR heads.
 
-The [investigation record](self-validation-investigation.md) retains experiments and limitations. The repository provides local Playwright MCP, Vitest UT, managed local Hydro with disposable MongoDB, and Playwright E2E. The workflow includes lint, UT coverage, and E2E; recheck the actual PR head after every push rather than reusing earlier evidence.
+The [investigation record](self-validation-investigation.md) retains experiments and limitations. The repository provides local Playwright MCP, project-scoped TypeScript checking, Vitest UT, managed local Hydro with disposable MongoDB, and Playwright E2E. The workflow includes lint, type checking, UT coverage, and E2E; recheck the actual PR head after every push rather than reusing earlier evidence.
 
 ## Goal
 
@@ -69,7 +69,7 @@ Draft-detail policy is now explicitly defined by the [global permission plan](bl
 | Milestone | Deliverable | Completion evidence |
 | --- | --- | --- |
 | Inspect the baseline (completed) | Identify suitable test boundaries, Hydro compatibility constraints, and prerequisites for type checking. | [Investigation findings](self-validation-investigation.md) record baseline checks, nine passing isolated experiments, a failing mutation control, and remaining gaps. |
-| Establish checks (UT delivered) | Add Vitest scripts and V8 coverage without weakening lint. | Non-watch UT and coverage pass locally; empty discovery/suites and a publication mutation exit nonzero. Dedicated type checking remains pending. |
+| Establish checks (UT/type checking delivered) | Add Vitest scripts, V8 coverage, and an explicitly scoped type check without weakening lint. | UT/coverage and `yarn typecheck` pass locally; empty UT discovery/suites, a publication mutation, and temporary backend/frontend/test type errors exit nonzero. |
 | Add initial regressions (UT/E2E delivered) | Cover selected logic and real browser/service behavior, including denial paths. | 65 UT and nine Playwright checks pass locally; the publication mutation is detected. Broader runtime coverage remains follow-up work. |
 | Integrate CI (verified) | Run supported checks in PR validation with required setup and cleanup. | The workflow passed lint, 65 UT, and nine Playwright checks on PR #8 commit `bf9ec33`; later heads must be checked independently. |
 | Document and hand off | Update agent guides with actual commands, prerequisites, coverage, and remaining gaps. | Documentation matches delivered scripts and CI; outcomes and follow-up work are retained here. |
@@ -99,7 +99,9 @@ Review the workflow for the actual PR head and update the [validation guide](../
 ## Dependencies and Open Decisions
 
 - Extend the delivered Vitest cases as behavior changes; keep complete Hydro authorization in E2E.
-- Resolve the demonstrated standalone type-check failures with an explicitly scoped check or separately justified dependency compatibility work.
+- The project-scoped type check is delivered. A clean full upstream-source build
+  remains outside this addon's check; address dependency compatibility separately
+  if that broader guarantee becomes a requirement.
 - Extend the proven local Hydro/disposable MongoDB/browser environment as needed, retaining its checked storage boundary and lifecycle.
 - Extend E2E coverage for remaining sorting, pagination, localization, and relevant failure scenarios without claiming unsupported privacy or concurrency guarantees.
 - Direct-link draft visibility was resolved in the [global permission plan](blog-permissions.md); its handler and real-browser regressions enforce the agreed draft-read permission.
@@ -121,4 +123,33 @@ Runtime integration findings: Cordis services require injection; Hydro's page ma
 
 PR #8's [validation run 42183061237](https://github.com/tywzoj/hydro-addon-blog/actions/runs/42183061237) passed on commit `bf9ec331803762ffbce95b031d57091ecaae276b` on 2026-11-06. The Ubuntu 26 runner completed dependency installation, lint, 65 UT, and nine Playwright checks, with Hydro storage under its writable temporary directory. This is evidence for that commit and runner, not every future head or deployment.
 
-Remaining work: supported type checking, broader E2E scenarios, and cross-platform/version-matrix verification. This PR is not merged, and no full-runtime compatibility claim is made.
+### Project-Scoped Type Checking
+
+On 2026-11-07, `yarn typecheck` was added using the installed TypeScript 5.9.3
+Compiler API. Hydro 5.0.7 and default UI 4.58.5 expose TypeScript source entries,
+so raw `tsc` also diagnoses upstream implementations. The supported command
+resolves real dependency types, checks all project-owned files plus compiler
+configuration/options/global diagnostics, and explicitly does not request
+dependency implementation diagnostics. Its scope is documented in
+[validation](../validation.md#type-checking), not represented as a clean full
+Hydro build.
+
+`tsconfig.json` now prevents emission and excludes generated reports. No strict
+compiler option was weakened, no package or type stub was added, and no dependency
+source was modified. Local fixes preserve runtime behavior: explicit role-name
+comparisons, numeric MongoDB collection ID types in tests, typed heterogeneous
+request/mask fixtures, and the zero-argument mocked Handler constructor boundary.
+
+Local evidence: 32 project files passed `yarn typecheck`; `yarn lint` and all
+162 UT passed. Temporary errors involving Hydro `ObjectId`, UI `NamedPage`, and
+a test Boolean each produced diagnostics and exit 1 without emitted JS; the
+probe files were removed. The affected role/comment E2E selection passed six
+cases including authentication under the changed compiler configuration:
+`yarn test:e2e --grep 'global settings role assignment|delegated managers|comments matrix'`.
+Run artifacts are under `test-results/hydro-blog-39322-fe82b4e3/`.
+
+The workflow runs the same command after lint with a five-minute timeout.
+Remote CI results for this step are tracked on the implementation PR and must
+identify the verified head commit; the local results above do not establish them.
+Broader E2E scenarios and cross-platform/version-matrix verification remain
+follow-up work; no full-runtime compatibility claim is made.

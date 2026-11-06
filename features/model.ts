@@ -1,10 +1,11 @@
 import type { Context, Filter, NumberKeys, ObjectId } from "hydrooj";
 import { DocumentModel, ValidationError } from "hydrooj";
 
-import { BlogMessages, SYSTEM_DOMAIN } from "./constants";
+import { BlogCommentModel } from "./comments.model";
+import { BlogMessages, SYSTEM_DOMAIN, TYPE_BLOG } from "./constants";
 import type { BlogDoc, BlogStatusDoc, BlogUpdate } from "./types";
 
-export const TYPE_BLOG = 70 as const;
+export { TYPE_BLOG } from "./constants";
 
 declare module "hydrooj" {
     interface Model {
@@ -96,10 +97,12 @@ export class BlogModel {
     }
 
     static async del(did: ObjectId): Promise<never> {
-        return (await Promise.all([
-            DocumentModel.deleteOne(SYSTEM_DOMAIN, TYPE_BLOG, did),
+        const removed = await DocumentModel.deleteOne(SYSTEM_DOMAIN, TYPE_BLOG, did);
+        const cleanup = await Promise.all([
             DocumentModel.deleteMultiStatus(SYSTEM_DOMAIN, TYPE_BLOG, { docId: did }),
-        ])) as never;
+            BlogCommentModel.deleteForArticle(did),
+        ]);
+        return [removed, ...cleanup] as never;
     }
 
     static async deleteChecked(ddoc: BlogDoc) {
@@ -112,6 +115,7 @@ export class BlogModel {
         });
         if (!result.deletedCount) throw new ValidationError("post", null, BlogMessages.ArticleChanged);
         await DocumentModel.deleteMultiStatus(SYSTEM_DOMAIN, TYPE_BLOG, { docId: ddoc.docId });
+        await BlogCommentModel.deleteForArticle(ddoc.docId);
     }
 
     static async count(query: Filter<BlogDoc>) {
@@ -123,11 +127,7 @@ export class BlogModel {
     }
 
     static async addReply(did: ObjectId, owner: number, content: string, ip: string): Promise<ObjectId> {
-        const [[, drid]] = await Promise.all([
-            DocumentModel.push(SYSTEM_DOMAIN, TYPE_BLOG, did, "reply", content, owner, { ip }),
-            DocumentModel.incAndSet(SYSTEM_DOMAIN, TYPE_BLOG, did, "nReply", 1, { updateAt: new Date() }),
-        ]);
-        return drid;
+        return BlogCommentModel.add(did, owner, content, ip);
     }
 
     static async setStar(did: ObjectId, uid: number, star: boolean): Promise<void> {

@@ -2,9 +2,15 @@
 
 ## Current Capability and Scope
 
-The repository provides Vitest UT, V8 coverage, Playwright E2E, a disposable local runtime, and linting. The [self-validation plan](plans/self-validation.md) tracks remaining type-check tooling, coverage extensions, and PR-head CI evidence.
+The repository provides project-scoped TypeScript checking, Vitest UT, V8 coverage,
+Playwright E2E, a disposable local runtime, and linting. The
+[self-validation plan](plans/self-validation.md) tracks delivery evidence, coverage
+extensions, and PR-head CI verification.
 
-The PR workflow runs lint, UT with coverage, and E2E. Real Hydro/browser cases are separate from isolated UT and do not establish exhaustive coverage or a complete deployment matrix.
+The PR workflow runs lint, `yarn typecheck`, UT with coverage, and E2E.
+The [type-check boundary](validation.md#type-checking) includes project tests but
+not upstream implementation diagnostics. Real Hydro/browser cases are separate
+from isolated UT and do not establish exhaustive coverage or a complete deployment matrix.
 
 ## Running and Extending UT
 
@@ -56,7 +62,7 @@ yarn test:e2e --grep "publication"
 
 The [verification-environment guide](verification-environment.md#local-runtime-boundary) documents Node/Docker/browser prerequisites, local development, writable paths, timeouts, evidence, and cleanup. The launcher owns a local Hydro child and only containerizes MongoDB. It never accepts a production or shared database.
 
-Playwright runs three real-form authentication setup cases and seventeen business tests with independent author, viewer, and system-editor sessions. The original six scenarios are:
+Playwright runs three real-form authentication setup cases and twenty-four business tests with independent author, viewer, and system-editor sessions. The original six scenarios are:
 
 | Scenario | Evidence | Related smoke cases |
 | --- | --- | --- |
@@ -80,8 +86,8 @@ requests, including after failures; it does not write test outcomes into MongoDB
 Self-only creation coverage rejects root GET/POST requests for another author,
 including through a restricted domain, verifies no create entry or persisted
 article, and confirms root can still create its own articles. Policy UT also
-covers missing creation/access grants and anonymous identities. The settings
-matrix exposes 17 permissions with a single creation grant.
+covers missing creation/access grants and anonymous identities. The settings matrix exposes 21 permissions: the original 17 article/settings
+grants plus four comment grants, with a single article-creation grant.
 
 Native-UX regressions cover dialog cancellation, initial focus, single/multi-user
 selection, inline updates, empty selection feedback, bulk changes, protected
@@ -102,6 +108,45 @@ page remains empty. UT checks candidate filtering before joins, union
 deduplication before pagination, and page-only profile hydration.
 
 The suite uses one worker, no automatic retries, isolated browser contexts, focused-test rejection, and explicit timeouts. Empty selections and real assertion failures return nonzero exits. Keep fixtures unique within the run and promote new relevant failures into the suite. It does not establish every sorting/pagination outcome, all locales, or concurrent view deduplication. MCP checks supplement automated coverage for localized and narrow-screen settings UI.
+
+## Comment Regression Inventory
+
+`tests/unit/comments.test.ts` exercises the four comment grants, native asymmetric
+deletion branches, unchanged stored masks, immutable content, validation and
+parent binding, two-level desired-state likes, timestamp/count invariants,
+parent-loss cleanup, and native notification/audit failure ordering. The existing
+model and handler tests also cover article deletion and comment detail integration.
+
+`tests/e2e/comments.spec.ts` adds seven real-Hydro scenarios:
+
+- Native Markdown comments/replies, replying to an existing reply, two-level
+  likes/unlikes after reload, native delete cancellation/confirmation, and notices.
+- Cross-article/nested target rejection, immutable content, withdrawn-article
+  creation/like denial, preserved comments, and allowed draft moderation.
+- Real sudo/matrix changes exercising native deletion asymmetry and posting/like
+  permission sharing, including browser controls and direct requests.
+- Configured top-level pagination through a restricted domain.
+- Concurrent same-state likes, repeated deletion, and article-tree/status cleanup.
+- Explicitly anonymous contexts reading admitted articles but not mutating them,
+  even when guest has comment permission bits.
+- Comment/reply/like requests racing with article deletion, checking the resulting
+  run-owned database for orphan comments and statuses.
+
+Anonymous JSON denial follows Hydro's login-handoff contract: HTTP 200 with a
+login URL, not a successful write. The regression checks that payload and unchanged
+database state rather than treating `response.ok()` as evidence of authorization.
+Anonymous contexts explicitly clear inherited storage state. Matrix-order
+regressions account for prior legitimate configuration rather than assuming an
+untouched default/guest ordering.
+
+The isolated runtime sets Hydro's existing `pagination.reply` to 3 to exercise
+page boundaries without flooding the creation limiter. Product defaults and rate
+limits are unchanged. MongoDB access remains read-only assertion evidence; normal
+authenticated requests create all business fixtures.
+
+Run the focused browser cases with `yarn test:e2e --grep comments`.
+These checks do not establish atomicity across documents/messages or crash-safe
+exactly-once delivery. MCP supplements them for translated and narrow-screen UI.
 
 ## Required Coverage Layers
 

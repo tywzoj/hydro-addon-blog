@@ -235,7 +235,7 @@ export class BlogSettingsModel {
 
     static async listUsers(page: number) {
         const settings = await this.get();
-        const visibleRoles = settings.roles.filter((r) => ![BlogRoles.Guest, BlogRoles.Default].includes(r.name));
+        const visibleRoles = settings.roles.filter((r) => r.name !== BlogRoles.Guest && r.name !== BlogRoles.Default);
         const rows = await this.users
             .aggregate<{ entries: { _id: number; blogAssignment?: BlogAssignment }[]; count: { total: number }[] }>([
                 { $match: { role: { $in: visibleRoles.map((role) => role.id) } } },

@@ -6,8 +6,9 @@ This directory retains project direction, implementation plans, and consequentia
 
 | Plan | Status | Scope |
 | --- | --- | --- |
+| [Blog comments and permission matrix](blog-comments.md) | Completed locally | Immutable two-level comments, likes/unlikes, four global permission grants, native deletion/notification behavior, and local UT/E2E/MCP evidence. |
 | [Global blog settings and permissions](blog-permissions.md) | Completed locally | Domain-independent roles, 17 permissions, self-only article creation, native UX audit/fixes, and local UT/E2E/MCP evidence. Review workflows remain deferred. |
-| [Self-validation capabilities](self-validation.md) | In progress | UT and E2E verified locally and in PR #8 CI; local MCP addon flow verified. Type-check tooling and broader coverage remain pending. |
+| [Self-validation capabilities](self-validation.md) | In progress | UT/E2E verified locally and in PR #8 CI; local MCP and project-scoped type checking verified. New type-check CI execution, broader coverage, and version-matrix checks remain pending. |
 | [Self-validation investigation](self-validation-investigation.md) | Completed | Experiments, upstream research, container recommendation, and explicit unverified boundaries. |
 
 A planned capability is not implemented or validated until the corresponding change supplies evidence. The index records delivery status; individual plans retain their baseline, decisions, and outcomes.

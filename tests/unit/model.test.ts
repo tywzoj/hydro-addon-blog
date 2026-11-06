@@ -2,6 +2,7 @@ import type { Context } from "hydrooj";
 import { ObjectId } from "mongodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { BlogCommentModel } from "../../features/comments.model";
 import { BlogModel, ensureIndexes } from "../../features/model";
 import { makeBlog } from "../helpers/fixtures";
 import { DocumentModel } from "../helpers/hydro";
@@ -126,18 +127,16 @@ describe("persistence mutations", () => {
         await expect(BlogModel.del(makeBlog().docId)).rejects.toBe(failure);
     });
 
-    it("adds a reply and updates its counter and update time", async () => {
+    it("routes the existing reply helper to independent comment storage", async () => {
         const { docId } = makeBlog();
         const replyId = new ObjectId("000000000000000000000003");
-        DocumentModel.push.mockResolvedValue([1, replyId]);
-        DocumentModel.incAndSet.mockResolvedValue(makeBlog());
+        const add = vi.spyOn(BlogCommentModel, "add").mockResolvedValue(replyId);
 
         await expect(BlogModel.addReply(docId, 7, "Reply", "192.0.2.1")).resolves.toEqual(replyId);
 
-        expect(DocumentModel.push).toHaveBeenCalledWith("system", 70, docId, "reply", "Reply", 7, { ip: "192.0.2.1" });
-        expect(DocumentModel.incAndSet).toHaveBeenCalledWith("system", 70, docId, "nReply", 1, {
-            updateAt: new Date(),
-        });
+        expect(add).toHaveBeenCalledWith(docId, 7, "Reply", "192.0.2.1");
+        expect(DocumentModel.push).not.toHaveBeenCalled();
+        expect(DocumentModel.incAndSet).not.toHaveBeenCalled();
     });
 
     it.each([true, false])("writes a per-user star-only update with star=%s", async (star) => {

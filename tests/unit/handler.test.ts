@@ -51,12 +51,14 @@ function createHandler(path: string, viewer = 1, privileges = PRIV.PRIV_USER_PRO
 }
 
 const sort = vi.fn();
-const cursor = { sort };
+const project = vi.fn();
+const cursor = { sort, project };
 const submit = { domainId: "system", title: "Test post", content: "Test content", draft: "true", pin: "false" };
 
 beforeEach(() => {
     vi.resetAllMocks();
     sort.mockReturnValue(cursor);
+    project.mockReturnValue(cursor);
     DocumentModel.getMulti.mockReturnValue(cursor);
     UserModel.getList.mockResolvedValue({});
     UserModel.getById.mockResolvedValue(makeUser());

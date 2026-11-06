@@ -25,7 +25,7 @@ The default browser is installed Chrome. To use Playwright-managed Chromium inst
 
 | Component | Isolation and responsibility |
 | --- | --- |
-| Checks | Existing local Node 24/Yarn can run lint and UT. An optional disposable check container can use the same commands with container-owned dependencies, not host `node_modules`. A supported project type check remains planned. |
+| Checks | Existing local Node 24/Yarn can run lint, `yarn typecheck`, and UT without services. Type checking uses real dependency types but excludes upstream implementation diagnostics. An optional disposable check container can use the same commands with container-owned dependencies, not host `node_modules`. |
 | Hydro | A local child process using the installed CLI, actual default UI, and this checkout registered as an addon. It has a dedicated home, configuration profile, file storage, and temporary directory. |
 | MongoDB | One uniquely named/labeled `mongo:7-jammy` container, temporary `/data/db` and `/data/configdb`, and a dynamically allocated port published only on `127.0.0.1`. No existing database is accepted. |
 | E2E | Local Playwright Test against the allocated HTTP URL, with real login sessions and a unique report directory. |
@@ -56,6 +56,10 @@ The launcher uses `--host 127.0.0.1`, an explicit port, and `--disableWorker`; n
 
 The bootstrap listens for `app/ready`, accesses storage through Cordis injection, verifies the loaded blog model and actual storage path, and creates synthetic author/viewer/system-editor users through Hydro's user model. Browser authentication then uses the real login form. Readiness also requires a rendered login page and an existing blog route, not merely an open TCP port; authentication tests then verify the rendered addon page.
 
+The disposable profile sets the existing Hydro `pagination.reply` setting to 3.
+This keeps comment pagination fixtures small without changing production defaults,
+disabling rate limits, or directly inserting business data.
+
 ## Evidence and Cleanup
 
 Each run writes `test-results/<run-id>/`, ignored by Git: HTML report, failure screenshots/traces, a bounded Hydro log, and `runtime.json` listing the owned container, temporary directory, and driver PID. Authentication-state files are removed at teardown. Reports can contain synthetic sessions; do not commit them.
@@ -82,9 +86,10 @@ On 2026-11-06, MCP initialization and blank-page navigation were first verified.
 
 ## Automated E2E and Agent Checks
 
-`yarn test:e2e` executes three real-login setup cases and seventeen business scenarios:
+`yarn test:e2e` executes three real-login setup cases and twenty-four business scenarios:
 the original article/frontend regressions plus global role/settings management,
-fine-grained permissions, self-only creation even for root, guest access, and domain independence. The launcher also
+fine-grained permissions, self-only creation even for root, guest access, domain
+independence, and seven two-level comment/like/moderation scenarios. The launcher also
 creates a synthetic domain whose guest/default domain permissions are zero, to
 verify that blog access is independent without changing ordinary domain routes.
 The suite uses normal sessions, real sudo and same-origin requests, with independent

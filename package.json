@@ -9,6 +9,7 @@
     "postinstall": "patch-package",
     "lint": "eslint",
     "lint:fix": "eslint --fix",
+    "typecheck": "node scripts/typecheck.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

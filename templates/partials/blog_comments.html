@@ -1,0 +1,93 @@
+{% import "components/user.html" as user with context %}
+{% import "components/paginator.html" as paginator with context %}
+{% import "components/nothing.html" as nothing with context %}
+{% macro action(label, op, type, form, icon) %}
+<a href="javascript:;" data-tooltip="{{ _(label) }}" aria-label="{{ _(label) }}" data-op="{{ op }}" data-type="{{ type }}" data-form="{{ form|json }}">
+  <span class="icon icon-{{ icon }}"></span>
+</a>
+{% endmacro %}
+{% macro likes(doc, drid, drrid='') %}
+{% set active = liked[doc._id.toString()] %}
+{% if canComment %}
+<button type="button" class="link" data-blog-like data-drid="{{ drid }}" data-drrid="{{ drrid }}"
+  data-liked="{{ 'true' if active else 'false' }}" aria-pressed="{{ 'true' if active else 'false' }}"
+  aria-label="{{ _('Unlike comment') if active else _('Like comment') }}">
+  <span class="icon icon-vote--up"></span> <span data-like-label>{{ _('Unlike comment') if active else _('Like comment') }}</span> <span data-like-count>{{ doc.nLike|default(0) }}</span>
+</button>
+{% else %}
+<span aria-label="{{ _('Like comment') }}"><span class="icon icon-vote--up"></span> <span data-like-count>{{ doc.nLike|default(0) }}</span></span>
+{% endif %}
+{% endmacro %}
+<div class="section" id="blog-comments">
+  <div class="section__header"><h1 class="section__title">{{ _('{0} comments').format(drcount) }}</h1></div>
+  <div class="section__body">
+    <ul class="dczcomments__list view--discussion">
+    {% if canComment %}
+      <li class="dczcomments__item">
+        <div class="media">
+          <div class="media__left top"><img src="{{ avatarUrl(handler.user.avatar, 60) }}" width="60" height="60" class="medium user-profile-avatar"></div>
+          <div class="media__body top">
+            <div class="hasjs--hide">
+              <form method="post" class="dczcomments__box" name="dczcomments__box__form" data-hotkey="ctrl+enter:submit,esc:vjCommentBoxCancel">
+                <div><textarea name="content" class="textbox" data-markdown required></textarea></div>
+                <div>
+                  <input type="submit" class="rounded primary button dczcomments__box__submit" value="{{ _('Comment') }} (Ctrl+Enter)"
+                    data-value-comment="{{ _('Comment') }} (Ctrl+Enter)" data-value-reply="{{ _('Reply') }} (Ctrl+Enter)">
+                  <input type="button" class="rounded button nojs--hide" name="dczcomments__box__cancel" value="{{ _('Cancel') }} (Esc)">
+                </div>
+                <input type="hidden" name="operation" value="reply">
+              </form>
+            </div>
+            <div class="nojs--hide"><textarea class="textbox" name="dczcomments__dummy-box" readonly data-form="{{ {operation: 'reply'}|json }}" placeholder="{{ _('Write Your Comment') }}"></textarea></div>
+            <div class="commentbox-placeholder"></div>
+            <ul style="display:none"><li class="dczcomments__reply commentbox-container"><div class="media">
+              <div class="media__left top"><img src="{{ avatarUrl(handler.user.avatar, 50) }}" width="50" height="50" class="medium user-profile-avatar"></div>
+              <div class="media__body top"><div class="commentbox-placeholder"></div></div>
+            </div></li></ul>
+          </div>
+        </div>
+      </li>
+    {% endif %}
+    {% for doc in comments %}
+      <li class="dczcomments__item" data-comment-id="{{ doc.docId }}">
+        <div class="media">
+          <div class="media__left top"><img src="{{ avatarUrl(commentUsers[doc.owner].avatar, 60) }}" width="60" height="60" class="medium user-profile-avatar"></div>
+          <div class="media__body top" id="comment-{{ doc.docId }}">
+            <div class="clearfix">
+              <div class="supplementary dczcomments__supplementary">{{ user.render_inline(commentUsers[doc.owner], avatar=false) }} @ {{ datetimeSpan(doc._id)|safe }}</div>
+              <div class="dczcomments__operations nojs--hide">
+                {{ likes(doc, doc.docId) }}
+                {% if canComment %}{{ action('Reply', 'reply', 'comment', {operation: 'tail_reply', drid: doc.docId}, 'reply') }}{% endif %}
+                {% if doc.canDelete %}{{ action('Delete', 'delete', 'comment', {operation: 'delete_reply', drid: doc.docId}, 'delete') }}{% endif %}
+              </div>
+            </div>
+            <div class="typo richmedia" data-emoji-enabled>{{ doc.content|markdown|safe }}</div>
+            <ul class="dczcomments__replies commentbox-reply-target">
+            {% for reply in doc.reply %}
+              <li class="dczcomments__reply" data-reply-id="{{ reply._id }}">
+                <div class="media">
+                  <div class="media__left top"><img src="{{ avatarUrl(commentUsers[reply.owner].avatar, 50) }}" width="50" height="50" class="medium user-profile-avatar"></div>
+                  <div class="media__body top">
+                    <div class="clearfix">
+                      <div class="supplementary dczcomments__supplementary">{{ user.render_inline(commentUsers[reply.owner], avatar=false) }} @ {{ datetimeSpan(reply._id)|safe }}</div>
+                      <div class="dczcomments__operations nojs--hide">
+                        {{ likes(reply, doc.docId, reply._id) }}
+                        {% if canComment %}{{ action('Reply', 'reply', 'reply', {}, 'reply') }}{% endif %}
+                        {% if reply.canDelete %}{{ action('Delete', 'delete', 'reply', {operation: 'delete_tail_reply', drid: doc.docId, drrid: reply._id}, 'delete') }}{% endif %}
+                      </div>
+                    </div>
+                    <div class="typo richmedia" data-emoji-enabled>{{ reply.content|markdown|safe }}</div>
+                  </div>
+                </div>
+              </li>
+            {% endfor %}
+            </ul>
+          </div>
+        </div>
+      </li>
+    {% endfor %}
+    </ul>
+    {{ paginator.render(page, pcount) }}
+    {% if drcount == 0 %}{{ nothing.render('No comments so far...') }}{% endif %}
+  </div>
+</div>

@@ -1,4 +1,6 @@
 export const SYSTEM_DOMAIN = "system" as const;
+export const TYPE_BLOG = 70 as const;
+export const TYPE_BLOG_COMMENT = 71 as const;
 
 export const ROUTE_BLOG_LIST_HOME = "blog_list_home" as const;
 export const ROUTE_BLOG_LIST_USER = "blog_list_user" as const;
@@ -49,6 +51,12 @@ export const BLOG_CREATE_RATE_LIMIT = {
     PeriodSeconds: 3600,
     MaxOperations: 60,
 } as const;
+export const BLOG_COMMENT_RATE_LIMIT = {
+    Operation: "add_blog_comment",
+    PeriodSeconds: 3600,
+    MaxOperations: 60,
+} as const;
+export const BLOG_COMMENT_NOTICE_LENGTH = 10;
 
 export const BlogActions = {
     ViewDraft: "VIEW_DRAFT",
@@ -66,6 +74,11 @@ export const BlogOperations = {
     Pin: "pin",
     Publish: "publish",
     Delete: "delete",
+    Reply: "reply",
+    TailReply: "tail_reply",
+    DeleteReply: "delete_reply",
+    DeleteTailReply: "delete_tail_reply",
+    Like: "like",
     AddRole: "add",
     DeleteRoles: "delete_roles",
     AssignRole: "assign",
@@ -81,11 +94,22 @@ export const BlogAuditEvents = {
     DeleteRole: "blog.role.delete",
     AssignRole: "blog.role.assign",
     Permissions: "blog.permissions",
+    DeleteComment: "blog.reply.delete",
+    DeleteTailReply: "blog.tailReply.delete",
 } as const;
 
 export const BlogMessages = {
     Settings: "Blog settings",
     Articles: "Blog articles",
+    Comments: "Blog comments",
+    CommentUnavailable: "The comment or article is no longer available.",
+    CommentsPublishedOnly: "Comments and likes require a published article.",
+    CommentScope:
+        "Comment deletion follows discussion rules: article-owner moderation applies only to top-level comments.",
+    LikeComment: "Like comment",
+    UnlikeComment: "Unlike comment",
+    CommentDeleted: '{0} {1} deleted your blog comment {2} in "{3}" ({4:link}).',
+    TailReplyDeleted: 'Admin {0} deleted your blog reply {1} in "{2}" ({3:link}).',
     YourRole: "Your blog role",
     GlobalScope: "Blog permissions apply across all domains.",
     PermissionScope: "Own and others permissions are separate. Access and authentication requirements still apply.",
@@ -130,6 +154,10 @@ export const BLOG_PERM = {
     DELETE_OTHERS: 1n << 14n,
     STAR: 1n << 15n,
     MANAGE_SETTINGS: 1n << 16n,
+    CREATE_COMMENT: 1n << 17n,
+    DELETE_COMMENT_OWN: 1n << 18n,
+    DELETE_COMMENT: 1n << 19n,
+    DELETE_COMMENT_IN_OWN_POST: 1n << 20n,
 } as const;
 export type BlogPermission = keyof typeof BLOG_PERM;
 export const BlogPermissions = Object.fromEntries(Object.keys(BLOG_PERM).map((name) => [name, name])) as {
@@ -152,7 +180,10 @@ export const BLOG_DEFAULT =
     BLOG_PERM.UNPUBLISH_OWN |
     BLOG_PERM.PIN_OWN |
     BLOG_PERM.DELETE_OWN |
-    BLOG_PERM.STAR;
+    BLOG_PERM.STAR |
+    BLOG_PERM.CREATE_COMMENT |
+    BLOG_PERM.DELETE_COMMENT_OWN |
+    BLOG_PERM.DELETE_COMMENT_IN_OWN_POST;
 
 export const ListPageScenario = {
     Home: "home",

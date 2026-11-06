@@ -2,6 +2,7 @@ import type { Context, Filter } from "hydrooj";
 import { OplogModel, param, Types, UserModel } from "hydrooj";
 import type { SortDirection } from "mongodb";
 
+import { BlogCommentHandler } from "./comments.handler";
 import type { SortKey } from "./constants";
 import {
     BLOG_CREATE_RATE_LIMIT,
@@ -115,9 +116,11 @@ class BlogListUserHandler extends BlogUserBaseHandler {
     }
 }
 
-class BlogUserPostDetailHandler extends BlogUserPostBaseHandler {
-    async get() {
+class BlogUserPostDetailHandler extends BlogCommentHandler {
+    @param("page", Types.PositiveInt, true)
+    async get(_, page = BLOG_FIRST_PAGE) {
         this.requireRead();
+        const comments = await this.loadComments(page);
         const canTrackView = this.blog.authenticated;
         const dsdoc = canTrackView ? await BlogModel.getStatus(this.ddoc.docId, this.user._id) : null;
         const udoc = await UserModel.getById(SYSTEM_DOMAIN, this.ddoc.owner);
@@ -137,6 +140,7 @@ class BlogUserPostDetailHandler extends BlogUserPostBaseHandler {
             udoc,
             star: dsdoc?.star ?? false,
             controls: this.blog.controls(this.ddoc),
+            ...comments,
         };
     }
 

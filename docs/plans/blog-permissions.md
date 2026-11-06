@@ -457,8 +457,10 @@ Hydro forms omit unchecked controls, so explicit presence markers now distinguis
 unchecking from an omitted update field. Checked article writes also advance their
 timestamp to prevent same-millisecond compare-and-set collisions.
 
-No CI run or standalone type-check result is claimed; the repository still has
-no supported dedicated type-check command. This evidence is not exhaustive
+No CI run or standalone type-check result is claimed for that verification;
+at that point the repository had no supported dedicated command. The subsequent
+[project-scoped check](../validation.md#type-checking) is available separately.
+This evidence is not exhaustive
 concurrency, deployment-version, large-directory performance, or all-locale
 coverage. English and Simplified Chinese received manual UI checks; Korean uses
 Hydro's actual `ko` locale identifier, and Traditional Chinese/Korean translations

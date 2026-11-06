@@ -19,6 +19,8 @@ export default defineConfig({
             provider: "v8",
             include: [
                 "features/model.ts",
+                "features/comments.model.ts",
+                "features/comments.handler.ts",
                 "features/handler.ts",
                 "features/handler.base.ts",
                 "features/permission.ts",

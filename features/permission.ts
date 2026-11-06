@@ -1,4 +1,4 @@
-import { CreateError, ForbiddenError, PRIV, PrivilegeError } from "hydrooj";
+import { CreateError, ForbiddenError, PRIV, PrivilegeError, ValidationError } from "hydrooj";
 
 import type { BlogAction, BlogPermission } from "./constants";
 import {
@@ -19,7 +19,12 @@ export const BLOG_PERMISSIONS = Object.entries(BLOG_PERM).map(([name, bit], inde
     bit,
     index,
     label: BLOG_PERMISSION_LABELS[name as BlogPermission],
-    family: name === BlogPermissions.MANAGE_SETTINGS ? BlogMessages.Settings : BlogMessages.Articles,
+    family:
+        name === BlogPermissions.MANAGE_SETTINGS
+            ? BlogMessages.Settings
+            : name.includes("COMMENT")
+              ? BlogMessages.Comments
+              : BlogMessages.Articles,
 }));
 
 export const BlogPermissionError = CreateError("BlogPermissionError", ForbiddenError, BlogMessages.PermissionDenied);
@@ -93,6 +98,39 @@ export class BlogPolicy {
     requireRead(doc: BlogVisibility) {
         this.require(BlogPermissions.ACCESS);
         this.require(doc.draft ? this.key(BlogActions.ViewDraft, doc.owner) : BlogPermissions.VIEW_PUBLISHED);
+    }
+
+    canComment(doc: BlogVisibility) {
+        return this.authenticated && this.readable(doc) && !doc.draft && this.has(BlogPermissions.CREATE_COMMENT);
+    }
+
+    requireComment(doc: BlogVisibility) {
+        this.requireLogin();
+        this.requireRead(doc);
+        this.require(BlogPermissions.CREATE_COMMENT);
+        if (doc.draft) throw new ValidationError("post", null, BlogMessages.CommentsPublishedOnly);
+    }
+
+    commentDeletePermission(doc: BlogVisibility, owner: number, nested = false): BlogPermission {
+        if (nested) {
+            return owner === this.user._id && this.has(BlogPermissions.DELETE_COMMENT_OWN)
+                ? BlogPermissions.DELETE_COMMENT_OWN
+                : BlogPermissions.DELETE_COMMENT;
+        }
+        if (doc.owner === this.user._id && this.has(BlogPermissions.DELETE_COMMENT_IN_OWN_POST)) {
+            return BlogPermissions.DELETE_COMMENT_IN_OWN_POST;
+        }
+        return owner === this.user._id ? BlogPermissions.DELETE_COMMENT_OWN : BlogPermissions.DELETE_COMMENT;
+    }
+
+    canDeleteComment(doc: BlogVisibility, owner: number, nested = false) {
+        return this.authenticated && this.readable(doc) && this.has(this.commentDeletePermission(doc, owner, nested));
+    }
+
+    requireDeleteComment(doc: BlogVisibility, owner: number, nested = false) {
+        this.requireLogin();
+        this.requireRead(doc);
+        this.require(this.commentDeletePermission(doc, owner, nested));
     }
 
     controls(doc: BlogVisibility) {

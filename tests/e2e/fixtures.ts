@@ -54,7 +54,7 @@ export async function fillPost(page: Page, title: string, content: string, draft
 
 export async function submitPost(page: Page) {
     await Promise.all([
-        page.waitForURL(/\/blog\/2\/[a-f0-9]{24}$/, { waitUntil: "domcontentloaded" }),
+        page.waitForURL(/\/blog\/\d+\/[a-f0-9]{24}$/, { waitUntil: "domcontentloaded" }),
         page.locator('button[name="operation"][value="submit"]').click(),
     ]);
     return new URL(page.url()).pathname;

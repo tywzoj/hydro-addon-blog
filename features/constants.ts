@@ -52,7 +52,6 @@ export const BLOG_CREATE_RATE_LIMIT = {
 
 export const BlogActions = {
     ViewDraft: "VIEW_DRAFT",
-    Create: "CREATE",
     Edit: "EDIT",
     Publish: "PUBLISH",
     Unpublish: "UNPUBLISH",
@@ -118,20 +117,19 @@ export const BLOG_PERM = {
     VIEW_PUBLISHED: 1n << 1n,
     VIEW_DRAFT_OWN: 1n << 2n,
     VIEW_DRAFT_OTHERS: 1n << 3n,
-    CREATE_OWN: 1n << 4n,
-    CREATE_OTHERS: 1n << 5n,
-    EDIT_OWN: 1n << 6n,
-    EDIT_OTHERS: 1n << 7n,
-    PUBLISH_OWN: 1n << 8n,
-    PUBLISH_OTHERS: 1n << 9n,
-    UNPUBLISH_OWN: 1n << 10n,
-    UNPUBLISH_OTHERS: 1n << 11n,
-    PIN_OWN: 1n << 12n,
-    PIN_OTHERS: 1n << 13n,
-    DELETE_OWN: 1n << 14n,
-    DELETE_OTHERS: 1n << 15n,
-    STAR: 1n << 16n,
-    MANAGE_SETTINGS: 1n << 17n,
+    CREATE: 1n << 4n,
+    EDIT_OWN: 1n << 5n,
+    EDIT_OTHERS: 1n << 6n,
+    PUBLISH_OWN: 1n << 7n,
+    PUBLISH_OTHERS: 1n << 8n,
+    UNPUBLISH_OWN: 1n << 9n,
+    UNPUBLISH_OTHERS: 1n << 10n,
+    PIN_OWN: 1n << 11n,
+    PIN_OTHERS: 1n << 12n,
+    DELETE_OWN: 1n << 13n,
+    DELETE_OTHERS: 1n << 14n,
+    STAR: 1n << 15n,
+    MANAGE_SETTINGS: 1n << 16n,
 } as const;
 export type BlogPermission = keyof typeof BLOG_PERM;
 export const BlogPermissions = Object.fromEntries(Object.keys(BLOG_PERM).map((name) => [name, name])) as {
@@ -148,7 +146,7 @@ export const BLOG_DEFAULT =
     BLOG_PERM.ACCESS |
     BLOG_PERM.VIEW_PUBLISHED |
     BLOG_PERM.VIEW_DRAFT_OWN |
-    BLOG_PERM.CREATE_OWN |
+    BLOG_PERM.CREATE |
     BLOG_PERM.EDIT_OWN |
     BLOG_PERM.PUBLISH_OWN |
     BLOG_PERM.UNPUBLISH_OWN |

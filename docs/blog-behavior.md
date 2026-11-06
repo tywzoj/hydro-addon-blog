@@ -17,7 +17,7 @@ Use the [official Hydro references](development.md#official-hydro-references) to
 | --- | --- | --- |
 | `/blog` | Home list. | Access and published-read permissions. |
 | `/blog/:uid` | User list. | System-domain user lookup; filter readable published/draft entries before pagination. |
-| `/blog/:uid/create` | Create form and submission. | Authenticated own/others create permission; published/pinned creation also checks its respective permission. |
+| `/blog/:uid/create` | Create form and submission. | Authenticated `CREATE` permission and URL user equal to the signed-in user, including root; published/pinned creation also checks its respective permission. |
 | `/blog/:uid/:did` | Post detail and star operation. | Exact URL-author match and content-read permission; authenticated stars also need `STAR`. |
 | `/blog/:uid/:did/edit` | Edit form, update, delete, pin and publication operations. | Authentication, readability, and independent action-specific permissions. |
 | `/blog/settings` | Global settings overview. | Access, authentication and `MANAGE_SETTINGS`. |
@@ -70,6 +70,7 @@ Source: [detail and star handlers](../features/handler.ts), [status helpers](../
 ## Write-Side Safeguards
 
 - Create and edit submissions use Hydro validators for title, content, draft, and pin inputs.
+- Articles can only be created under the authenticated user's identity. Other users' lists have no create entry, and both create GET and POST reject a different URL user, even for root. Existing third-party edit and management permissions are unchanged.
 - Creation invokes `limitRate("add_blog", 3600, 60)` before persistence. Verify the argument semantics in the applicable Hydro implementation rather than assuming a rate policy from these values alone.
 - Create, edit, and delete paths record `blog.create`, `blog.edit`, and `blog.delete` operation logs.
 - Deletion removes the document and its status records.
@@ -82,7 +83,7 @@ Source: [write handlers](../features/handler.ts), [model deletion and reply help
 
 ## Global Roles and Settings
 
-- The full 18-node catalog and approved decisions are in the [permission plan](plans/blog-permissions.md). Each own/others pair is strictly scoped: an others grant does not restore a revoked own grant.
+- The full 17-node catalog and approved decisions are in the [permission plan](plans/blog-permissions.md). Creation has one `CREATE` grant; each remaining own/others pair is strictly scoped: an others grant does not restore a revoked own grant.
 - Blog permissions apply to all users automatically. There is no blog membership, admission, join, leave, removal, or invitation state.
 - `PRIV_EDIT_SYSTEM` forces root; otherwise an unauthenticated identity uses guest and an unassigned eligible user uses default. Explicit root assignments are supported; guest cannot be assigned to a user. Legacy guest assignments resolve to default for authenticated users without modifying their account or domain data.
 - Root uses an immutable all-permissions mask. Default initially grants reading, starring and own-article operations; guest starts empty. Managers may grant any registered permissions, including to guest, but authentication/sudo remain separate requirements.

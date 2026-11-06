@@ -61,7 +61,7 @@ class BlogListHandler extends BlogBaseHandler {
             sort_keys: Object.values(SortKeys),
             udoc: this.user,
             udict,
-            can_create: this.blog.authenticated && this.blog.can(BlogActions.Create, this.user._id),
+            can_create: this.blog.canCreate(this.user._id),
             can_settings: this.blog.has(BlogPermissions.MANAGE_SETTINGS),
         };
     }
@@ -102,7 +102,7 @@ class BlogListUserHandler extends BlogUserBaseHandler {
             sort_keys: Object.values(SortKeys),
             is_owner: isOwner,
             udoc: this.udoc,
-            can_create: this.blog.authenticated && this.blog.can(BlogActions.Create, this.udoc._id),
+            can_create: this.blog.canCreate(this.udoc._id),
             can_settings: this.blog.has(BlogPermissions.MANAGE_SETTINGS),
         };
     }
@@ -149,8 +149,7 @@ class BlogUserPostDetailHandler extends BlogUserPostBaseHandler {
 
 class BlogUserPostCreateHandler extends BlogUserBaseHandler {
     prepare() {
-        this.blog.requireLogin();
-        this.blog.requireAction(BlogActions.Create, this.udoc._id);
+        this.blog.requireCreate(this.udoc._id);
     }
 
     get() {
@@ -179,7 +178,7 @@ class BlogUserPostCreateHandler extends BlogUserBaseHandler {
             BLOG_CREATE_RATE_LIMIT.PeriodSeconds,
             BLOG_CREATE_RATE_LIMIT.MaxOperations,
         );
-        const did = await BlogModel.add(this.udoc._id, title, content, draft, pin, this.request.ip);
+        const did = await BlogModel.add(this.user._id, title, content, draft, pin, this.request.ip);
         await OplogModel.log(this, BlogAuditEvents.Create, { did });
         this.response.body = { did };
         this.response.redirect = this.url(

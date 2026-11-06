@@ -85,6 +85,8 @@ test("global settings role assignment and delegation follow Hydro management sem
     await expect(editor.locator('tr[data-uid="4"]')).toContainText("root");
     await createRole(editor, "blogmanager");
     await settingsPage(editor, "/blog/settings/permissions");
+    await expect(editor.locator("[data-permission]")).toHaveCount(17);
+    await expect(editor.locator('[data-permission="CREATE_OTHERS"]')).toHaveCount(0);
     await expect(editor.locator("thead th.col--p")).toHaveText(["blogmanager", "guest", "default", "root"]);
     await setPermissions(editor, "blogmanager", ["ACCESS", "VIEW_PUBLISHED", "MANAGE_SETTINGS"]);
     await expect(editor.locator("thead th.col--p")).toHaveText(["blogmanager", "default", "guest", "root"]);

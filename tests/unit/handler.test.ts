@@ -10,6 +10,7 @@ import type { Handler } from "../helpers/hydro";
 import {
     DiscussionNotFoundError,
     DocumentModel,
+    ForbiddenError,
     makeUser,
     OplogModel,
     PRIV,
@@ -158,7 +159,11 @@ describe("list query contracts", () => {
             await handler.get({ domainId: "system" });
             expect(DocumentModel.getMulti).toHaveBeenCalledWith("system", 70, query);
             expect(sort).toHaveBeenLastCalledWith(order);
-            expect(handler.response.body).toMatchObject({ scenario: "user", is_owner: isOwner });
+            expect(handler.response.body).toMatchObject({
+                scenario: "user",
+                is_owner: isOwner,
+                can_create: isOwner,
+            });
         },
     );
 
@@ -189,31 +194,37 @@ describe("list query contracts", () => {
 });
 
 describe("write authorization contracts", () => {
-    it.each(["/blog/:uid/create", "/blog/:uid/:did/edit"])(
-        "requires the operation's others permission at %s",
-        (path) => {
-            const handler = createHandler(path, 2);
-            expect(() => (path.endsWith("/edit") ? handler.get() : handler.prepare())).toThrow(BlogPermissionError);
-            expect(DocumentModel.add).not.toHaveBeenCalled();
-            expect(DocumentModel.set).not.toHaveBeenCalled();
-            expect(DocumentModel.deleteOne).not.toHaveBeenCalled();
-        },
-    );
+    it.each(["/blog/:uid/create", "/blog/:uid/:did/edit"])("rejects ordinary non-owner writes at %s", (path) => {
+        const handler = createHandler(path, 2);
+        expect(() => (path.endsWith("/edit") ? handler.get() : handler.prepare())).toThrow(ForbiddenError);
+        expect(DocumentModel.add).not.toHaveBeenCalled();
+        expect(DocumentModel.set).not.toHaveBeenCalled();
+        expect(DocumentModel.deleteOne).not.toHaveBeenCalled();
+    });
 
     it.each(["/blog/:uid/create", "/blog/:uid/:did/edit"])(
-        "allows the owner and delegates the system-editor path at %s",
+        "allows own operations but delegates only editing to the system editor at %s",
         (path) => {
             const owner = createHandler(path);
             expect(() => owner.prepare()).not.toThrow();
             expect(owner.checkPriv).not.toHaveBeenCalled();
             const editor = createHandler(path, 2, PRIV.PRIV_USER_PROFILE | PRIV.PRIV_EDIT_SYSTEM);
-            expect(() => editor.prepare()).not.toThrow();
+            if (path.endsWith("/edit")) expect(() => editor.prepare()).not.toThrow();
+            else expect(() => editor.prepare()).toThrow(ForbiddenError);
             expect(editor.blog.role).toBe("root");
         },
     );
 });
 
 describe("create, edit, and delete contracts", () => {
+    it("rejects system-editor creation for another user before rate limiting or writes", async () => {
+        const handler = createHandler("/blog/:uid/create", 2, PRIV.PRIV_USER_PROFILE | PRIV.PRIV_EDIT_SYSTEM);
+        await expect(handler.postSubmit(submit)).rejects.toBeInstanceOf(ForbiddenError);
+        expect(handler.limitRate).not.toHaveBeenCalled();
+        expect(DocumentModel.add).not.toHaveBeenCalled();
+        expect(OplogModel.log).not.toHaveBeenCalled();
+    });
+
     it("creates with converted fields, limits before writing, and logs before redirecting", async () => {
         const handler = createHandler("/blog/:uid/create");
         DocumentModel.add.mockResolvedValue(handler.ddoc.docId);

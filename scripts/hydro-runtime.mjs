@@ -14,6 +14,7 @@ import { MongoClient } from "mongodb";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const load = createRequire(import.meta.url);
+const { TEST_PASSWORD } = load("../tests/e2e/accounts.ts");
 const execute = promisify(execFile);
 const serve = process.argv[2] === "--serve";
 const runId = `hydro-blog-${process.pid}-${randomUUID().slice(0, 8)}`;
@@ -196,7 +197,7 @@ try {
     console.log(`Hydro ready: ${url}\nIsolated storage: ${storage}\nRun artifacts: ${output}`);
     if (serve) {
         console.log(
-            "Disposable test accounts: blog_author, blog_viewer, blog_editor\nPassword: Disposable-Blog-Test-2026\nPress Ctrl+C to stop and remove the disposable environment.",
+            `Disposable test accounts: blog_author, blog_viewer, blog_editor\nPassword: ${TEST_PASSWORD}\nPress Ctrl+C to stop and remove the disposable environment.`,
         );
         await new Promise((done) => {
             if (abort.signal.aborted) done();

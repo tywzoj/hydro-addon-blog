@@ -54,6 +54,22 @@ export class BlogPolicy {
         if (!this.authenticated) throw new PrivilegeError(PRIV.PRIV_USER_PROFILE);
     }
 
+    canCreate(owner: number) {
+        return (
+            this.authenticated &&
+            owner === this.user._id &&
+            this.has(BlogPermissions.ACCESS) &&
+            this.has(BlogPermissions.CREATE)
+        );
+    }
+
+    requireCreate(owner: number) {
+        this.requireLogin();
+        this.require(BlogPermissions.ACCESS);
+        if (owner !== this.user._id) throw new ForbiddenError();
+        this.require(BlogPermissions.CREATE);
+    }
+
     key(action: BlogAction, owner: number): BlogPermission {
         return `${action}_${this.authenticated && owner === this.user._id ? "OWN" : "OTHERS"}`;
     }

@@ -43,18 +43,7 @@ export function applyI18n(ctx: Context) {
             "閱讀他人的草稿",
             "다른 사용자의 초안 읽기",
         ],
-        [BLOG_PERMISSION_LABELS.CREATE_OWN]: [
-            "Create own articles",
-            "创建自己的文章",
-            "建立自己的文章",
-            "내 게시물 작성",
-        ],
-        [BLOG_PERMISSION_LABELS.CREATE_OTHERS]: [
-            "Create articles for others",
-            "为他人创建文章",
-            "為他人建立文章",
-            "다른 사용자의 게시물 작성",
-        ],
+        [BLOG_PERMISSION_LABELS.CREATE]: ["Create articles", "创建文章", "建立文章", "게시물 작성"],
         [BLOG_PERMISSION_LABELS.EDIT_OWN]: ["Edit own articles", "编辑自己的文章", "編輯自己的文章", "내 게시물 수정"],
         [BLOG_PERMISSION_LABELS.EDIT_OTHERS]: [
             "Edit others' articles",

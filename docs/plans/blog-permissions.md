@@ -10,6 +10,46 @@ refactor. Local verification records are retained below. The pull request's
 current-head checks are authoritative for CI lint, unit coverage and real-Hydro
 E2E results; historical local results do not substitute for those checks.
 
+## Follow-up: Self-Only Creation
+
+Status: Completed locally; included in the feature branch for PR #9.
+
+The maintainer removed creation on behalf of another user. Every authenticated
+user, including forced and manually assigned root, may create only under their
+own identity. The author-list create entry and both create GET/POST enforce this
+boundary. Existing permissions to edit, publish, pin or delete other users'
+articles are unchanged.
+
+Since this feature has not been released, the catalog is simplified directly:
+one `CREATE` grant replaces `CREATE_OWN`/`CREATE_OTHERS`, and the 17 permissions
+use consecutive bits 0 through 16. There is no retired-bit compatibility layer or
+production migration. Pre-release test settings must be reset or explicitly
+converted before reuse; old masks must not be interpreted as the new catalog.
+Earlier 18-permission verification records below describe their original revision.
+
+The pinned official Hydro `packages/blog/index.ts:178-186` creates articles with
+`this.user._id`. This addon follows that identity boundary and additionally
+rejects a mismatched author in its existing URL-based create route.
+
+Acceptance covers root denial without writes on ordinary and domain-prefixed
+routes, successful self-creation, hidden other-author create links, a 17-row
+permission matrix, normal own-create grants, and unchanged third-party editing.
+
+Verification passed lint, 104 UT with coverage, and all 18 E2E cases. The final
+E2E evidence is under `test-results/hydro-blog-30452-51a8091c/`. The submission
+helper now accepts any numeric author ID instead of assuming fixture author 2.
+MCP confirmed the Chinese 17-row matrix, immutable root, hidden other-author
+creation entry, root GET/POST denials on both route forms, and an accessible
+self-create form. Read-only database inspection confirmed denied submissions
+created no articles; the browser console had no errors.
+
+The manual port-8888 instance was refreshed with existing accounts, articles,
+storage and roles retained. Its pre-release masks were converted once while the
+Hydro process was paused, dropping old bit 5 and shifting higher bits down; no
+compatibility code was added to the addon. All restored collection counts matched.
+Temporary backups and automated runtimes were removed. No current-change CI or
+standalone whole-project type-check result is claimed.
+
 ## Follow-up: Shared Constants
 
 Status: Completed locally. Consolidate repeated role names, permission/action identifiers,
@@ -216,13 +256,13 @@ consistent role deletion are addon safeguards, not upstream guarantee claims.
 
 Use stable append-only BigInt bits and decimal-string persistence, separate from
 Hydro domain permission masks. Do not modify `user.role`, `user.perm` or global
-privileges. There are 18 initial permissions:
+privileges. There are 17 initial permissions:
 
 | Group | Keys | Default |
 | --- | --- | --- |
 | Access | `ACCESS`, `VIEW_PUBLISHED` | Both |
 | Drafts | `VIEW_DRAFT_OWN`, `VIEW_DRAFT_OTHERS` | Own |
-| Creation | `CREATE_OWN`, `CREATE_OTHERS` | Own |
+| Creation | `CREATE` | Yes; authenticated author only |
 | Editing | `EDIT_OWN`, `EDIT_OTHERS` | Own |
 | Publication | `PUBLISH_OWN`, `PUBLISH_OTHERS` | Own |
 | Withdrawal | `UNPUBLISH_OWN`, `UNPUBLISH_OTHERS` | Own |
@@ -276,7 +316,8 @@ Home remains published-only. Author lists filter readable documents before
 pagination. Detail/editor/JSON checks precede counters or other side effects.
 Anonymous reads never produce shared UID-zero status.
 
-Create defaults to draft when omitted. Published creation also needs publish;
+Creation always uses the authenticated author and rejects a different URL user,
+including for root. Create defaults to draft when omitted. Published creation also needs publish;
 initial pinning needs pin. Updates preserve omitted fields, compare actual changes,
 and reject unauthorized explicit changes. Editing public content requires edit and
 publish; draft content needs edit. Publish/unpublish, pin and delete remain usable

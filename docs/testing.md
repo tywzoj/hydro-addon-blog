@@ -56,7 +56,7 @@ yarn test:e2e --grep "publication"
 
 The [verification-environment guide](verification-environment.md#local-runtime-boundary) documents Node/Docker/browser prerequisites, local development, writable paths, timeouts, evidence, and cleanup. The launcher owns a local Hydro child and only containerizes MongoDB. It never accepts a production or shared database.
 
-Playwright runs three real-form authentication setup cases and fourteen business tests with independent author, viewer, and system-editor sessions. The original six scenarios are:
+Playwright runs three real-form authentication setup cases and fifteen business tests with independent author, viewer, and system-editor sessions. The original six scenarios are:
 
 | Scenario | Evidence | Related smoke cases |
 | --- | --- | --- |
@@ -76,6 +76,12 @@ deletion/recreation, anonymous access, domain independence, independent
 publication/pinning/deletion, and visible unchecked controls. Its cleanup restores
 fixture assignments and guest permissions through authenticated management
 requests, including after failures; it does not write test outcomes into MongoDB.
+
+Self-only creation coverage rejects root GET/POST requests for another author,
+including through a restricted domain, verifies no create entry or persisted
+article, and confirms root can still create its own articles. Policy UT also
+covers missing creation/access grants and anonymous identities. The settings
+matrix exposes 17 permissions with a single creation grant.
 
 Native-UX regressions cover dialog cancellation, initial focus, single/multi-user
 selection, inline updates, empty selection feedback, bulk changes, protected

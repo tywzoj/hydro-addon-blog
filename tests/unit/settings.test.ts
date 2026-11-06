@@ -80,7 +80,7 @@ describe("blog settings persistence", () => {
         );
     });
 
-    it.each([null, [], { missing: "0" }, { default: "999" }, { default: "-1" }, { default: {} }])(
+    it.each([null, [], { missing: "0" }, { default: "17" }, { default: "999" }, { default: "-1" }, { default: {} }])(
         "rejects malformed or unknown permission submissions %j",
         (input) => expect(() => parsePermissions(input, settings.roles)).toThrow(ValidationError),
     );

@@ -3,7 +3,7 @@ require("hydrooj/bin/hydrooj");
 global.app.inject(["storage"], (ctx) =>
     ctx.on("app/ready", async () => {
         try {
-            const { PRIV, SystemModel, UserModel } = require("hydrooj");
+            const { DomainModel, PRIV, SystemModel, UserModel } = require("hydrooj");
             const { accounts } = require("../tests/e2e/accounts.ts");
             const storage = await ctx.storage.status();
             if (!storage.status || storage.dir !== process.env.DEFAULT_STORE_PATH) {
@@ -24,6 +24,8 @@ global.app.inject(["storage"], (ctx) =>
                 );
                 await UserModel.setById(account.id, { viewLang: "en", preferredEditorType: "sv" });
             }
+            await DomainModel.add("blogrestricted", 2, "Blog isolation fixture", "");
+            await DomainModel.setRoles("blogrestricted", { guest: 0n, default: 0n });
             process.send?.({ type: "hydro-e2e-ready", storage: storage.dir });
         } catch (error) {
             console.error(error);

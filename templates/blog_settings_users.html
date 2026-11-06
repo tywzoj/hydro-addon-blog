@@ -1,0 +1,57 @@
+{% extends "blog_settings_base.html" %}
+{% block blog_settings_content %}
+{% set assignableRoles = settings.roles.filter(eval("(role) => role.name !== 'guest'")) %}
+{{ set(UiContext, 'blogRoles', assignableRoles.map(eval('(role) => role.name'))) }}
+{% set roleOptions = assignableRoles.map(eval('(role) => [role.name, role.name]')) %}
+<div class="dialog__body--add-blog-user" style="display: none">
+  <div>
+    <div class="row"><div class="columns"><h1>{{ _('Assign User Roles') }}</h1></div></div>
+    {{ form.form_text({name:'uids', label:'Username / UID', columns:12}) }}
+    {{ form.form_select({name:'role', label:'Role', options:roleOptions, value:'root', columns:12}) }}
+  </div>
+</div>
+<div class="section page--domain_user">
+  <div class="section__header">
+    <h1 class="section__title">{{ _('Users') }}</h1>
+    <div class="section__tools">
+      <button type="button" name="add_user" class="primary rounded button">{{ _('Assign User Roles') }}</button>
+    </div>
+  </div>
+  {{ noscript_note.render() }}
+  <div class="section__body">
+    <p>{{ _('Blog permissions apply to all users without membership. This list only shows root and custom-role users.') }}</p>
+  </div>
+  <div class="section__body no-padding domain-users">
+    <table class="data-table">
+      <colgroup>
+        <col class="col--checkbox"><col class="col--uid"><col class="col--user"><col class="col--role">
+      </colgroup>
+      <thead><tr>
+        <th class="col--checkbox"><label class="compact checkbox"><input type="checkbox" data-checkbox-toggle="user" aria-label="{{ _('Select All') }}"></label></th>
+        <th class="col--uid">{{ _('User ID') }}</th>
+        <th class="col--user">{{ _('Username') }}</th>
+        <th class="col--role">{{ _('Role') }}</th>
+      </tr></thead>
+      <tbody>
+      {% for entry in entries %}
+      <tr data-uid="{{ entry.user._id }}" data-role="{{ entry.role }}">
+        <td class="col--checkbox"><label class="compact checkbox">
+          <input type="checkbox" data-checkbox-group="user" aria-label="{{ _('Select User') }} {{ entry.user._id }}" {% if entry.forced %}disabled{% else %}data-checkbox-range{% endif %}>
+        </label></td>
+        <td class="col--uid">{{ entry.user._id }}</td>
+        <td class="col--user">{{ user.render_inline(entry.user, badge=false) }}</td>
+        <td class="col--role">
+          {{ form.select({options:roleOptions, name:'role', value:entry.role, extra_class:'compact', disabled:entry.forced}) }}
+          {% if entry.forced %}<span class="supplementary">{{ _('Forced by system privilege') }}</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="section__body">
+    <button type="button" name="set_roles" class="rounded button">{{ _('Set Roles for Selected User') }}</button>
+    {% if dpcount %}{{ paginator.render(page, dpcount) }}{% endif %}
+  </div>
+</div>
+{% endblock %}

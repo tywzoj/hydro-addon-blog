@@ -2,12 +2,15 @@ import type { Context } from "hydrooj";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { applyHandler } from "../../features/handler";
+import { BLOG_DEFAULT, BLOG_PERM, BlogPermissionError, BlogPolicy } from "../../features/permission";
+import { BlogSettingsModel, initialSettings, resolveBlogPolicy } from "../../features/settings.model";
 import type { BlogStatusDoc } from "../../features/types";
 import { makeBlog } from "../helpers/fixtures";
 import type { Handler } from "../helpers/hydro";
 import {
     DiscussionNotFoundError,
     DocumentModel,
+    ForbiddenError,
     makeUser,
     OplogModel,
     PRIV,
@@ -20,11 +23,14 @@ import {
 type Args = Record<string, unknown>;
 
 interface UnitHandler extends Handler {
+    blog: BlogPolicy;
     get: (args?: Args) => Promise<void> | void;
     post: () => void;
     postStar: (args: Args) => Promise<void>;
     postSubmit: (args: Args) => Promise<void>;
     postDelete: () => Promise<void>;
+    postPin: (args: Args) => Promise<void>;
+    postPublish: (args: Args) => Promise<void>;
     prepare: () => void;
     __prepare: (args: Args) => Promise<void>;
     _prepare: (args: Args) => Promise<void>;
@@ -38,7 +44,8 @@ function createHandler(path: string, viewer = 1, privileges = PRIV.PRIV_USER_PRO
     const handler = new (routes.get(path)!.Class)();
     handler.user = makeUser(viewer, privileges);
     handler.udoc = makeUser();
-    handler.ddoc = makeBlog();
+    handler.ddoc = makeBlog({ draft: false });
+    handler.blog = resolveBlogPolicy(handler.user, initialSettings());
     handler.ctx.db.paginate.mockResolvedValue([[], 3, 21]);
     return handler;
 }
@@ -53,10 +60,15 @@ beforeEach(() => {
     DocumentModel.getMulti.mockReturnValue(cursor);
     UserModel.getList.mockResolvedValue({});
     UserModel.getById.mockResolvedValue(makeUser());
+    vi.spyOn(BlogSettingsModel, "forRequest").mockImplementation((handler) =>
+        Promise.resolve(resolveBlogPolicy(handler.user, initialSettings())),
+    );
+    DocumentModel.coll.findOneAndUpdate.mockResolvedValue(makeBlog({ draft: false }));
+    DocumentModel.coll.deleteOne.mockResolvedValue({ deletedCount: 1 });
 });
 
 describe("route and preparation contracts", () => {
-    it("registers the create route before the detail route and gates every route", () => {
+    it("registers create before detail and leaves read admission to blog policy", () => {
         expect([...routes.keys()]).toEqual([
             "/blog",
             "/blog/:uid",
@@ -64,7 +76,10 @@ describe("route and preparation contracts", () => {
             "/blog/:uid/:did",
             "/blog/:uid/:did/edit",
         ]);
-        for (const route of routes.values()) expect(route.privilege).toBe(PRIV.PRIV_USER_PROFILE);
+        for (const route of routes.values()) {
+            expect(route.privilege).toBeUndefined();
+            expect(new route.Class()).toHaveProperty("noCheckPermView", true);
+        }
     });
 
     it("resolves the target user in the system domain using the real uid converter", async () => {
@@ -144,7 +159,11 @@ describe("list query contracts", () => {
             await handler.get({ domainId: "system" });
             expect(DocumentModel.getMulti).toHaveBeenCalledWith("system", 70, query);
             expect(sort).toHaveBeenLastCalledWith(order);
-            expect(handler.response.body).toMatchObject({ scenario: "user", is_owner: isOwner });
+            expect(handler.response.body).toMatchObject({
+                scenario: "user",
+                is_owner: isOwner,
+                can_create: isOwner,
+            });
         },
     );
 
@@ -175,32 +194,37 @@ describe("list query contracts", () => {
 });
 
 describe("write authorization contracts", () => {
-    it.each(["/blog/:uid/create", "/blog/:uid/:did/edit"])(
-        "requires system-edit privilege for a non-owner at %s",
-        (path) => {
-            const handler = createHandler(path, 2);
-            expect(() => handler.prepare()).toThrow(PrivilegeError);
-            expect(handler.checkPriv).toHaveBeenCalledWith(PRIV.PRIV_EDIT_SYSTEM);
-            expect(DocumentModel.add).not.toHaveBeenCalled();
-            expect(DocumentModel.set).not.toHaveBeenCalled();
-            expect(DocumentModel.deleteOne).not.toHaveBeenCalled();
-        },
-    );
+    it.each(["/blog/:uid/create", "/blog/:uid/:did/edit"])("rejects ordinary non-owner writes at %s", (path) => {
+        const handler = createHandler(path, 2);
+        expect(() => (path.endsWith("/edit") ? handler.get() : handler.prepare())).toThrow(ForbiddenError);
+        expect(DocumentModel.add).not.toHaveBeenCalled();
+        expect(DocumentModel.set).not.toHaveBeenCalled();
+        expect(DocumentModel.deleteOne).not.toHaveBeenCalled();
+    });
 
     it.each(["/blog/:uid/create", "/blog/:uid/:did/edit"])(
-        "allows the owner and delegates the system-editor path at %s",
+        "allows own operations but delegates only editing to the system editor at %s",
         (path) => {
             const owner = createHandler(path);
             expect(() => owner.prepare()).not.toThrow();
             expect(owner.checkPriv).not.toHaveBeenCalled();
             const editor = createHandler(path, 2, PRIV.PRIV_USER_PROFILE | PRIV.PRIV_EDIT_SYSTEM);
-            expect(() => editor.prepare()).not.toThrow();
-            expect(editor.checkPriv).toHaveBeenCalledWith(PRIV.PRIV_EDIT_SYSTEM);
+            if (path.endsWith("/edit")) expect(() => editor.prepare()).not.toThrow();
+            else expect(() => editor.prepare()).toThrow(ForbiddenError);
+            expect(editor.blog.role).toBe("root");
         },
     );
 });
 
 describe("create, edit, and delete contracts", () => {
+    it("rejects system-editor creation for another user before rate limiting or writes", async () => {
+        const handler = createHandler("/blog/:uid/create", 2, PRIV.PRIV_USER_PROFILE | PRIV.PRIV_EDIT_SYSTEM);
+        await expect(handler.postSubmit(submit)).rejects.toBeInstanceOf(ForbiddenError);
+        expect(handler.limitRate).not.toHaveBeenCalled();
+        expect(DocumentModel.add).not.toHaveBeenCalled();
+        expect(OplogModel.log).not.toHaveBeenCalled();
+    });
+
     it("creates with converted fields, limits before writing, and logs before redirecting", async () => {
         const handler = createHandler("/blog/:uid/create");
         DocumentModel.add.mockResolvedValue(handler.ddoc.docId);
@@ -226,7 +250,7 @@ describe("create, edit, and delete contracts", () => {
         expect(handler.url).toHaveBeenCalledWith("blog_post_detail", { uid: 1, did: handler.ddoc.docId });
     });
 
-    it("preserves the handler's omitted boolean defaults rather than the UI draft default", async () => {
+    it("defaults omitted creation booleans to a draft without pinning", async () => {
         const handler = createHandler("/blog/:uid/create");
         DocumentModel.add.mockResolvedValue(handler.ddoc.docId);
         await handler.postSubmit({ domainId: "system", title: "Title", content: " Content " });
@@ -238,8 +262,84 @@ describe("create, edit, and delete contracts", () => {
             null,
             null,
             null,
-            expect.objectContaining({ draft: false, pin: false }),
+            expect.objectContaining({ draft: true, pin: false }),
         );
+    });
+
+    it.each([false, 0])("preserves explicit JSON %s when creating a published article", async (value) => {
+        const handler = createHandler("/blog/:uid/create");
+        DocumentModel.add.mockResolvedValue(handler.ddoc.docId);
+        await handler.postSubmit({ ...submit, draft: value, pin: value });
+        expect(DocumentModel.add.mock.calls[0][7]).toMatchObject({ draft: false, pin: false });
+    });
+
+    it.each([false, 0])("enforces publication permission for explicit JSON %s", async (value) => {
+        const handler = createHandler("/blog/:uid/create");
+        handler.blog = new BlogPolicy(handler.user, "restricted", BLOG_DEFAULT & ~BLOG_PERM.PUBLISH_OWN);
+        await expect(handler.postSubmit({ ...submit, draft: value })).rejects.toBeInstanceOf(BlogPermissionError);
+        expect(DocumentModel.add).not.toHaveBeenCalled();
+    });
+
+    it.each([false, 0])("publishes and unpins existing articles with explicit JSON %s", async (value) => {
+        const handler = createHandler("/blog/:uid/:did/edit");
+        handler.ddoc.draft = true;
+        handler.ddoc.pin = true;
+        await handler.postSubmit({ ...submit, draft: value, pin: value });
+        expect(DocumentModel.coll.findOneAndUpdate).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.objectContaining({ $set: expect.objectContaining({ draft: false, pin: false }) as unknown }),
+            expect.anything(),
+        );
+    });
+
+    it.each([false, 0])("unpins through the metadata action with explicit JSON %s", async (value) => {
+        const handler = createHandler("/blog/:uid/:did/edit");
+        handler.ddoc.pin = true;
+        await handler.postPin({ domainId: "system", pin: value });
+        expect(DocumentModel.coll.findOneAndUpdate).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.objectContaining({ $set: expect.objectContaining({ pin: false }) as unknown }),
+            expect.anything(),
+        );
+    });
+
+    it.each([undefined, null, ""])("requires explicit state for independent actions (%s)", async (value) => {
+        for (const [method, field] of [
+            ["postPublish", "draft"],
+            ["postPin", "pin"],
+            ["postStar", "star"],
+        ] as const) {
+            const handler = createHandler(method === "postStar" ? "/blog/:uid/:did" : "/blog/:uid/:did/edit");
+            handler.ddoc.draft = true;
+            handler.ddoc.pin = true;
+            await expect(async () => handler[method]({ domainId: "system", [field]: value })).rejects.toBeInstanceOf(
+                ValidationError,
+            );
+        }
+        expect(DocumentModel.coll.findOneAndUpdate).not.toHaveBeenCalled();
+        expect(DocumentModel.setStatus).not.toHaveBeenCalled();
+        expect(OplogModel.log).not.toHaveBeenCalled();
+    });
+
+    it("treats a visible unchecked draft checkbox as an explicit publication request", async () => {
+        const handler = createHandler("/blog/:uid/create");
+        DocumentModel.add.mockResolvedValue(handler.ddoc.docId);
+        await handler.postSubmit({
+            domainId: "system",
+            title: "Public post",
+            content: "Body",
+            draft_present: "true",
+        });
+        expect(DocumentModel.add.mock.calls[0][7]).toMatchObject({ draft: false });
+        handler.blog = new BlogPolicy(handler.user, "restricted", BLOG_DEFAULT & ~BLOG_PERM.PUBLISH_OWN);
+        await expect(
+            handler.postSubmit({
+                domainId: "system",
+                title: "Public post",
+                content: "Body",
+                draft_present: "true",
+            }),
+        ).rejects.toBeInstanceOf(BlogPermissionError);
     });
 
     it.each([{ title: " " }, { title: "x".repeat(65) }, { content: " " }, { content: "x".repeat(65536) }])(
@@ -290,19 +390,25 @@ describe("create, edit, and delete contracts", () => {
 
     it("updates the post, records the edit, and redirects to its detail page", async () => {
         const handler = createHandler("/blog/:uid/:did/edit");
-        DocumentModel.set.mockResolvedValue(handler.ddoc);
+        DocumentModel.coll.findOneAndUpdate.mockResolvedValue(handler.ddoc);
         await handler.postSubmit({ ...submit, draft: "false", pin: "true" });
-        expect(DocumentModel.set).toHaveBeenCalledWith(
-            "system",
-            70,
-            handler.ddoc.docId,
+        expect(DocumentModel.coll.findOneAndUpdate).toHaveBeenCalledWith(
             expect.objectContaining({
-                title: "Test post",
-                content: "Test content",
-                draft: false,
-                pin: true,
-                ip: "192.0.2.1",
+                domainId: "system",
+                docType: 70,
+                docId: handler.ddoc.docId,
+                updateAt: handler.ddoc.updateAt,
             }),
+            expect.objectContaining({
+                $set: expect.objectContaining({
+                    title: "Test post",
+                    content: "Test content",
+                    draft: false,
+                    pin: true,
+                    ip: "192.0.2.1",
+                }) as unknown,
+            }),
+            { returnDocument: "after" },
         );
         expect(OplogModel.log).toHaveBeenCalledWith(handler, "blog.edit", handler.ddoc);
         expect(handler.response.redirect).toBe("/blog_post_detail");
@@ -311,17 +417,19 @@ describe("create, edit, and delete contracts", () => {
     it("deletes the post and statuses, logs the operation, and redirects to the author's list", async () => {
         const handler = createHandler("/blog/:uid/:did/edit");
         await handler.postDelete();
-        expect(DocumentModel.deleteOne).toHaveBeenCalledWith("system", 70, handler.ddoc.docId);
+        expect(DocumentModel.coll.deleteOne).toHaveBeenCalledWith(
+            expect.objectContaining({ domainId: "system", docType: 70, docId: handler.ddoc.docId }),
+        );
         expect(DocumentModel.deleteMultiStatus).toHaveBeenCalledWith("system", 70, { docId: handler.ddoc.docId });
         expect(OplogModel.log).toHaveBeenCalledWith(handler, "blog.delete", handler.ddoc);
         expect(handler.url).toHaveBeenCalledWith("blog_list_user", { uid: 1 });
         expect(handler.response.redirect).toBe("/blog_list_user");
     });
 
-    it("does not redirect after an edit fails, without asserting rollback of its concurrent log", async () => {
+    it("does not log or redirect after an edit fails", async () => {
         const handler = createHandler("/blog/:uid/:did/edit");
         const failure = new Error("Write failed");
-        DocumentModel.set.mockRejectedValue(failure);
+        DocumentModel.coll.findOneAndUpdate.mockRejectedValue(failure);
         await expect(handler.postSubmit(submit)).rejects.toBe(failure);
         expect(handler.response.redirect).toBeUndefined();
         expect(handler.response.body).toBeUndefined();
@@ -340,8 +448,8 @@ describe("create, edit, and delete contracts", () => {
         const edit = createHandler("/blog/:uid/:did/edit");
         await create.get();
         await edit.get();
-        expect(create.response).toEqual({ template: "blog_edit.html", body: { ddoc: null } });
-        expect(edit.response).toEqual({ template: "blog_edit.html", body: { ddoc: edit.ddoc } });
+        expect(create.response).toMatchObject({ template: "blog_edit.html", body: { ddoc: null } });
+        expect(edit.response).toMatchObject({ template: "blog_edit.html", body: { ddoc: edit.ddoc } });
     });
 });
 
@@ -370,6 +478,7 @@ describe("views and star state", () => {
         [2, 0],
     ])("does not track a view for id=%s with privileges=%s", async (viewer, privileges) => {
         const handler = createHandler("/blog/:uid/:did", viewer, privileges);
+        handler.blog = new BlogPolicy(handler.user, "guest", BLOG_PERM.ACCESS | BLOG_PERM.VIEW_PUBLISHED);
         await handler.get();
         expect(DocumentModel.getStatus).not.toHaveBeenCalled();
         expect(DocumentModel.inc).not.toHaveBeenCalled();
@@ -396,9 +505,76 @@ describe("views and star state", () => {
         const handler = createHandler("/blog/:uid/:did", 2);
         handler.post();
         await handler.postStar({ domainId: "system", star: value });
-        expect(handler.checkPriv).toHaveBeenCalledWith(PRIV.PRIV_USER_PROFILE);
         expect(DocumentModel.setStatus).toHaveBeenCalledWith("system", 70, handler.ddoc.docId, 2, { star: expected });
         expect(handler.back).toHaveBeenCalledWith({ star: expected });
+    });
+
+    describe("fine-grained blog authorization", () => {
+        it("denies direct draft reads before tracking views or looking up status", async () => {
+            const handler = createHandler("/blog/:uid/:did", 2);
+            handler.ddoc.draft = true;
+            await expect(handler.get()).rejects.toBeInstanceOf(BlogPermissionError);
+            expect(DocumentModel.getStatus).not.toHaveBeenCalled();
+            expect(DocumentModel.inc).not.toHaveBeenCalled();
+        });
+
+        it("does not let others-edit permission restore revoked own-edit permission", async () => {
+            const handler = createHandler("/blog/:uid/:did/edit");
+            handler.blog = new BlogPolicy(
+                handler.user,
+                "custom",
+                (BLOG_DEFAULT & ~BLOG_PERM.EDIT_OWN) | BLOG_PERM.EDIT_OTHERS,
+            );
+            await expect(handler.postSubmit({ ...submit, title: "Changed", draft: "false" })).rejects.toBeInstanceOf(
+                BlogPermissionError,
+            );
+            expect(DocumentModel.coll.findOneAndUpdate).not.toHaveBeenCalled();
+        });
+
+        it("requires publication rights for edits that remain public", async () => {
+            const handler = createHandler("/blog/:uid/:did/edit");
+            handler.blog = new BlogPolicy(handler.user, "custom", BLOG_DEFAULT & ~BLOG_PERM.PUBLISH_OWN);
+            await expect(handler.postSubmit({ ...submit, title: "Changed", draft: "false" })).rejects.toBeInstanceOf(
+                BlogPermissionError,
+            );
+            expect(DocumentModel.coll.findOneAndUpdate).not.toHaveBeenCalled();
+        });
+
+        it("preserves omitted pin and draft fields on update", async () => {
+            const handler = createHandler("/blog/:uid/:did/edit");
+            handler.ddoc.pin = true;
+            await handler.postSubmit({ domainId: "system", title: "Changed", content: "Body" });
+            expect(DocumentModel.coll.findOneAndUpdate).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({
+                    $set: expect.objectContaining({ draft: false, pin: true }) as unknown,
+                }),
+                expect.anything(),
+            );
+        });
+
+        it("allows independent pinning and deletion without edit permission", async () => {
+            const handler = createHandler("/blog/:uid/:did/edit");
+            handler.blog = new BlogPolicy(handler.user, "custom", BLOG_DEFAULT & ~BLOG_PERM.EDIT_OWN);
+            await handler.postPin({ domainId: "system", pin: "true" });
+            await handler.postDelete();
+            expect(DocumentModel.coll.findOneAndUpdate).toHaveBeenCalledOnce();
+            expect(DocumentModel.coll.deleteOne).toHaveBeenCalledOnce();
+        });
+
+        it("does not hide an unauthorized pin change inside an otherwise allowed content edit", async () => {
+            const handler = createHandler("/blog/:uid/:did/edit");
+            handler.blog = new BlogPolicy(handler.user, "custom", BLOG_DEFAULT & ~BLOG_PERM.PIN_OWN);
+            await expect(handler.postSubmit({ ...submit, pin: "true" })).rejects.toBeInstanceOf(BlogPermissionError);
+            expect(DocumentModel.coll.findOneAndUpdate).not.toHaveBeenCalled();
+        });
+
+        it("rejects stale publication-sensitive updates without logging success", async () => {
+            const handler = createHandler("/blog/:uid/:did/edit");
+            DocumentModel.coll.findOneAndUpdate.mockResolvedValue(null);
+            await expect(handler.postSubmit(submit)).rejects.toBeInstanceOf(ValidationError);
+            expect(OplogModel.log).not.toHaveBeenCalled();
+        });
     });
 
     it("requires profile privilege in the detail write hook", () => {

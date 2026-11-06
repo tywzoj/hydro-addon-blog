@@ -75,6 +75,29 @@ test("a real system editor sees drafts in the author's list and can edit them", 
     await expect(viewer.getByRole("link", { name: "E2E editor published", exact: true })).toBeVisible();
 });
 
+test("even root can only create articles under its own account", async ({ editor, db }) => {
+    await editor.goto("/blog/2");
+    await expect(editor.locator('a[href="/blog/2/create"]')).toHaveCount(0);
+    const posts = db.collection<BlogDoc>("document");
+    const title = "E2E root creation ownership";
+    for (const path of ["/blog/2/create", "/d/blogrestricted/blog/2/create"]) {
+        expect((await editor.goto(path))?.status()).toBe(403);
+        const response = await editor.request.post(path, {
+            headers: { Referer: editor.url() },
+            form: { operation: "submit", title, content: "Must not be attributed to another user" },
+        });
+        expect(response.status()).toBe(403);
+    }
+    expect(await posts.countDocuments({ title })).toBe(0);
+
+    await editor.goto("/blog/4");
+    await expect(editor.locator('a[href="/blog/4/create"]')).toBeVisible();
+    await editor.locator('a[href="/blog/4/create"]').click();
+    await fillPost(editor, title, "Written by the signed-in system editor", true);
+    await submitPost(editor);
+    expect(await posts.findOne({ title })).toMatchObject({ owner: 4, draft: true });
+});
+
 test("sequential views and star state persist independently for each user", async ({ page, viewer, db }) => {
     const path = await createPost(page, "E2E views and star");
     const docId = new ObjectId(path.split("/").pop()!);

@@ -46,7 +46,7 @@ These are proposed priorities, not completed tests. Select a small initial set w
 | --- | --- | --- | --- |
 | P0 | Publication timestamps | Draft creation has no first-publication time; first publication sets it; later edits and republishing preserve an existing value. A legacy single-post read supplies its fallback without claiming a database migration. | Model tests with controlled time and a persistence boundary. |
 | P0 | Draft list filtering | Home queries exclude drafts for all viewers. Another user's list excludes drafts for an ordinary viewer, while the owner and a user with `PRIV_EDIT_SYSTEM` retain their list access. | Handler query and permission tests; confirm framework behavior separately. |
-| P0 | Write authorization | An ordinary non-owner cannot create for another user or edit or delete their post; the intended owner and system-privileged paths remain available. | Handler preparation with real permission behavior or a suitable Hydro integration test. |
+| P0 | Write authorization | All users, including system editors, create only under their own identity. Editing or deleting another user's post requires the corresponding permission; authorized system-editor management paths remain available. | Handler preparation with real permission behavior or a suitable Hydro integration test. |
 | P1 | Sorting and pagination | Supported keys map to descending values; defaults vary by list and viewer; user-list pinning precedes the selected sort; home has no pin precedence; page size is ten. Avoid relying on unspecified tie ordering. | Query construction, plus persistence-backed ordering where available. |
 | P1 | Sequential views and star state | The first eligible read records a view; a later sequential read with recorded status does not increment it. Setting star state updates the current user's status without changing another user's state. | Handler and status persistence boundaries. |
 | P1 | Invalid writes and side effects | Invalid input is rejected before mutation; the create rate limiter and create, edit, and delete log calls are preserved. | Validation and write-path tests; no live rate-limit flooding. |
@@ -54,7 +54,7 @@ These are proposed priorities, not completed tests. Select a small initial set w
 
 P0 marks the first candidates to assess, not a requirement to build every integration environment in the initial PR. Explain any deferred P0 case and the available fallback evidence.
 
-Do not encode unresolved draft-detail visibility, exact tie ordering, atomic multi-write behavior, or concurrent view deduplication as passing guarantees. Resolve the intended contract before writing tests that would establish a new policy.
+Draft-detail policy is now explicitly defined by the [global permission plan](blog-permissions.md): draft-read permission is required on direct links as well as lists. Exact tie ordering, atomic multi-write behavior, and concurrent view deduplication remain outside established guarantees.
 
 ## Non-Goals
 
@@ -102,7 +102,7 @@ Review the workflow for the actual PR head and update the [validation guide](../
 - Resolve the demonstrated standalone type-check failures with an explicitly scoped check or separately justified dependency compatibility work.
 - Extend the proven local Hydro/disposable MongoDB/browser environment as needed, retaining its checked storage boundary and lifecycle.
 - Extend E2E coverage for remaining sorting, pagination, localization, and relevant failure scenarios without claiming unsupported privacy or concurrency guarantees.
-- Confirm intended direct-link draft visibility before introducing a privacy guarantee beyond list filtering. This is a product-policy decision, not a test-runner choice.
+- Direct-link draft visibility was resolved in the [global permission plan](blog-permissions.md); its handler and real-browser regressions enforce the agreed draft-read permission.
 - Decide whether concurrent view deduplication, deterministic tie sorting, or atomic multi-write behavior need separately scoped changes; do not silently add those guarantees in the tooling PR.
 
 ## Delivery Record

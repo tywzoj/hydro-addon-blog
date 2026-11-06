@@ -1,0 +1,12 @@
+{% extends "blog_settings_base.html" %}
+{% block blog_settings_content %}
+<div class="section">
+  <div class="section__header"><h1 class="section__title">{{ _('Blog settings') }}</h1></div>
+  <div class="section__body typo">
+    <p>{{ _('Blog permissions apply across all domains.') }}</p>
+    <p>{{ _('Your blog role') }}: <strong>{{ blog_role }}</strong></p>
+    <p>{{ _('Own and others permissions are separate. Access and authentication requirements still apply.') }}</p>
+    <p>{{ _('Unassigned users use default. Anonymous users use guest. System editors always use root.') }}</p>
+  </div>
+</div>
+{% endblock %}

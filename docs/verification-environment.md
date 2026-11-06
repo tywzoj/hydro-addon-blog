@@ -60,7 +60,7 @@ The bootstrap listens for `app/ready`, accesses storage through Cordis injection
 
 Each run writes `test-results/<run-id>/`, ignored by Git: HTML report, failure screenshots/traces, a bounded Hydro log, and `runtime.json` listing the owned container, temporary directory, and driver PID. Authentication-state files are removed at teardown. Reports can contain synthetic sessions; do not commit them.
 
-MongoDB readiness is bounded to 30 seconds, Hydro startup to 90 seconds, browser tests to 150 seconds globally, and the parent test process to 180 seconds. Shutdown escalates from SIGTERM to SIGKILL for owned child processes. Ordinary success, test failure, invalid configuration, empty test selection, and SIGINT/SIGTERM trigger cleanup of the owned services and temporary files.
+MongoDB readiness is bounded to 30 seconds, Hydro startup to 90 seconds, browser tests to 300 seconds globally, and the parent test process to 330 seconds. CI bounds the complete E2E step to eight minutes, including startup and cleanup. Single-test, action and navigation timeouts remain unchanged, with no retries. Shutdown escalates from SIGTERM to SIGKILL for owned child processes. Ordinary success, test failure, invalid configuration, empty test selection, and SIGINT/SIGTERM trigger cleanup of the owned services and temporary files.
 
 An uncatchable kill or a tool that forcefully terminates the whole process tree can prevent `finally` cleanup. Use that run's `runtime.json` to inspect its exact resources; verify the container's `hydro-addon-blog.e2e` label before removing it and verify ownership before deleting the listed temporary directory. Never use name-wide process killing, global Docker prune, shared-database deletion, or unrelated-home cleanup.
 
@@ -82,7 +82,14 @@ On 2026-11-06, MCP initialization and blank-page navigation were first verified.
 
 ## Automated E2E and Agent Checks
 
-`yarn test:e2e` executes three real-login setup cases and six business scenarios: draft publication/edit persistence, denied non-owner writes, system-editor access, sequential views and independent star state, deletion/status cleanup, and the frontend profile link. The suite uses normal sessions and same-origin requests, with independent browser contexts for the roles. Read-only MongoDB assertions inspect only the run-owned database.
+`yarn test:e2e` executes three real-login setup cases and seventeen business scenarios:
+the original article/frontend regressions plus global role/settings management,
+fine-grained permissions, self-only creation even for root, guest access, and domain independence. The launcher also
+creates a synthetic domain whose guest/default domain permissions are zero, to
+verify that blog access is independent without changing ordinary domain routes.
+The suite uses normal sessions, real sudo and same-origin requests, with independent
+browser contexts for the roles. Read-only MongoDB assertions inspect only the
+run-owned database. See the [testing inventory](testing.md#running-and-extending-e2e).
 
 CI runs the same command after lint and UT. It requires Docker and local Chrome; GitHub's Ubuntu runner image includes Chrome, but a head-specific CI run must still verify that environment. Use MCP to inspect changed pages and reproduce failures; an agent reporting success is not a deterministic CI assertion. Missing infrastructure or failed startup is a failed check, never skipped-success coverage.
 

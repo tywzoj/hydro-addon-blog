@@ -1,15 +1,32 @@
 import type { ObjectId, User } from "hydrooj";
 import { DiscussionNotFoundError, Handler, param, Types, UserModel, UserNotFoundError } from "hydrooj";
 
-import { SYSTEM_DOMAIN } from "./constants";
+import { BlogPermissions, SYSTEM_DOMAIN } from "./constants";
 import { BlogModel } from "./model";
+import type { BlogPolicy } from "./permission";
+import { BlogSettingsModel } from "./settings.model";
 import type { BlogDoc } from "./types";
 
-export class BlogUserBaseHandler extends Handler {
+export class BlogBaseHandler extends Handler {
+    noCheckPermView = true;
+    blog!: BlogPolicy;
+
+    async loadBlog() {
+        this.blog = await BlogSettingsModel.forRequest(this);
+        this.blog.require(BlogPermissions.ACCESS);
+    }
+
+    async __prepare(_?: unknown, _uid?: number) {
+        await this.loadBlog();
+    }
+}
+
+export class BlogUserBaseHandler extends BlogBaseHandler {
     udoc!: User;
 
     @param("uid", Types.Int)
     async __prepare(_, uid: number) {
+        await this.loadBlog();
         const udoc = await UserModel.getById(SYSTEM_DOMAIN, uid);
         if (!udoc) throw new UserNotFoundError(uid);
         this.udoc = udoc;
@@ -24,5 +41,9 @@ export class BlogUserPostBaseHandler extends BlogUserBaseHandler {
         const ddoc = await BlogModel.get(did);
         if (!ddoc || !this.udoc.own(ddoc, true)) throw new DiscussionNotFoundError(SYSTEM_DOMAIN, did);
         this.ddoc = ddoc;
+    }
+
+    requireRead() {
+        this.blog.requireRead(this.ddoc);
     }
 }

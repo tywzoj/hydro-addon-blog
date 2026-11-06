@@ -17,7 +17,14 @@ export default defineConfig({
         restoreMocks: true,
         coverage: {
             provider: "v8",
-            include: ["features/model.ts", "features/handler.ts", "features/handler.base.ts"],
+            include: [
+                "features/model.ts",
+                "features/handler.ts",
+                "features/handler.base.ts",
+                "features/permission.ts",
+                "features/settings.model.ts",
+                "features/settings.handler.ts",
+            ],
             reporter: ["text", "html", "json-summary"],
         },
     },

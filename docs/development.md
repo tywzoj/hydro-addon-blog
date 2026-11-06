@@ -34,6 +34,7 @@ For version-sensitive decisions, record the upstream commit, tag, or installed p
 - Make the smallest complete change for the requested behavior. Avoid unrelated refactoring or new abstractions.
 - Follow `eslint.config.mjs`, `.prettierrc`, and existing TypeScript patterns.
 - Reuse existing constants, types, helpers, and localization mechanisms.
+- Prefer tools, APIs, utilities, and reusable code exposed by Hydro. Inspect the compatible upstream implementation before adding an equivalent; implement a custom alternative only when no suitable exposed implementation exists, and document why reuse is not possible.
 - Keep shared contracts consistent across server code, templates, frontend code, and translations.
 - Preserve the dependency patching workflow. Inspect relevant patches when changing affected dependencies.
 - Add concise English comments only when they clarify non-obvious intent or constraints.
@@ -51,6 +52,19 @@ Do not treat successful compilation, linting, or a plausible-looking diff as pro
 The project's coverage goal includes both UT and E2E; neither replaces the other. Use the [low-impact verification environment](verification-environment.md): local Hydro and Playwright, a disposable MongoDB container, and environment-controlled user-writable configuration, storage, and temporary paths. Do not copy upstream devcontainer assumptions or require root access. A devcontainer is optional, not a prerequisite. Use the project-declared Playwright MCP for agent-assisted browser investigation and verification, and retain repeatable regressions as executable tests rather than only a conversation transcript.
 
 ## Code Requirements
+
+### Constants and Shared Types
+
+- Follow `features/constants.ts`: centralize shared domain/protocol strings and meaningful numeric settings, and reuse them across models, handlers, frontend code, and localization instead of repeating literals.
+- Prefer `as const` value objects for related values and derive literal unions with `typeof` and `keyof`. Reuse named types for repeated object shapes or `Pick`/union declarations; do not maintain a separate literal-type list for values already defined at runtime.
+- Keep constants at the smallest useful scope, and do not merge equal values with different meanings. Preserve persisted identifiers, permission bits, wire values, and defaults during extraction. Ordinary arithmetic, declarative template markup, and independent test expectations need not be replaced merely because the same text appears elsewhere.
+
+### UI and Styling
+
+- Reuse Hydro's built-in UI components, styles, and interaction patterns wherever possible instead of recreating them in the addon.
+- Align UX with existing Hydro patterns, not just visual styling. Inspect the corresponding native workflow and reuse its information hierarchy, control placement, dialogs, selection and bulk actions, feedback, and navigation; document any necessary behavior-specific differences.
+- Avoid overriding Hydro's own UI with HTML templates unless necessary. When an existing Hydro UI needs adjustment, prefer script injection through the extension mechanisms described in the official Hydro documentation, and verify the approach against the compatible upstream source.
+- If a template override or custom UI/style is unavoidable, document why the existing UI and documented script-injection mechanisms cannot meet the requirement, and keep the customization minimal.
 
 ### Types and Input Validation
 

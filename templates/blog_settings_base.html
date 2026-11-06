@@ -1,0 +1,22 @@
+{% extends "layout/basic.html" %}
+{% block content %}
+<div class="row" data-sticky-parent>
+  <div class="medium-9 columns">
+    {% block blog_settings_content %}{% endblock %}
+  </div>
+  <div class="medium-3 columns"><div data-sticky="large">
+    <div class="section side">
+      <ol class="menu blog-settings-menu">
+        {% for route, label in [
+          ['blog_settings', 'Blog settings'],
+          ['blog_settings_roles', 'Roles'],
+          ['blog_settings_permissions', 'Permissions'],
+          ['blog_settings_users', 'Users']
+        ] %}
+        {{ sidemenu.render_item(none, route, label=label) }}
+        {% endfor %}
+      </ol>
+    </div></div>
+  </div>
+</div>
+{% endblock %}

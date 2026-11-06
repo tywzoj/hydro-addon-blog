@@ -29,6 +29,8 @@
                 extra_textarea_class:'auto-resize'
           }) }}
           <div class="row">
+            {% if (not ddoc and controls.publish) or (ddoc and ((ddoc.draft and controls.publish) or (not ddoc.draft and controls.unpublish))) %}
+            <input type="hidden" name="draft_present" value="true">
             {{ form.form_checkbox({
               columns:3,
               label:'Draft',
@@ -36,6 +38,9 @@
               value:ddoc.draft|default(false if ddoc else true),
               row:false
             }) }}
+            {% endif %}
+            {% if controls.pin %}
+            <input type="hidden" name="pin_present" value="true">
             {{ form.form_checkbox({
               columns:3,
               label:'Pin',
@@ -43,12 +48,13 @@
               value:ddoc.pin|default(false),
               row:false
             }) }}
+            {% endif %}
           </div>
           <div class="row"><div class="columns">
             <button name="operation" value="submit" data-default-submit type="submit" class="rounded primary button">
               {{ _('Update') if ddoc else _('Create') }} (Ctrl+Enter)
             </button>
-            {% if ddoc and (handler.user.hasPriv(PRIV.PRIV_EDIT_SYSTEM) or handler.user.own(ddoc)) %}
+            {% if ddoc and controls.delete %}
               <button name="operation" value="delete" type="submit" class="rounded button">
                 {{ _('Delete') }}
               </button>

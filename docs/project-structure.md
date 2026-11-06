@@ -7,13 +7,17 @@ This repository is a fork of the official Hydro blog addon. It runs within a Hyd
 | `index.ts` | Addon initialization, index setup, and feature registration. |
 | `features/handler.ts` | Routes and request handling. |
 | `features/handler.base.ts` | Shared user and post preparation. |
+| `features/permission.ts` | Permission metadata and strict own/others policy using the shared constant catalog. |
+| `features/settings.model.ts` | Global blog roles, revision-checked settings, user assignments and effective-role resolution. |
+| `features/settings.handler.ts` | Settings routes, matrix validation, role management, sudo and audit integration. |
 | `features/model.ts` | Blog persistence, document status, and database indexes. |
-| `features/types.ts` | Blog document and status types. |
-| `features/constants.ts` | Shared route names, template names, domain, and sorting constants. |
+| `features/types.ts` | Blog document/status, role/settings, and shared update/visibility types. |
+| `features/constants.ts` | Shared routes/templates, roles, permission/action identifiers, messages, storage identifiers, and policy values. |
 | `features/i18n.ts` | Application translations. |
 | `features/ui.ts` | Server-side UI integration. |
 | `features/utils.ts` | Shared helpers. |
 | `frontend/` | Browser-side integration with the Hydro UI. |
+| `frontend/blog-settings.page.ts` | Native settings dialogs, selection/bulk actions, inline role feedback, and domain-aware active navigation. |
 | `templates/` | Page templates and reusable components. |
 | `patches/` | Dependency patches applied by `patch-package` during installation. |
 | `tests/unit/` | Vitest model and handler regression tests. |

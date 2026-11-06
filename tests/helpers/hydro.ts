@@ -15,7 +15,7 @@ load("@hydrooj/register");
 
 export const { param } = load("@hydrooj/framework/decorators") as typeof Decorators;
 export const { Types } = load("@hydrooj/framework/validator") as typeof Validators;
-export const { ValidationError } = load("@hydrooj/framework/error") as typeof Errors;
+export const { ValidationError, CreateError, ForbiddenError } = load("@hydrooj/framework/error") as typeof Errors;
 export const { PRIV } = load("@hydrooj/common/permission") as typeof Permissions;
 
 export class UserNotFoundError extends Error {}
@@ -27,7 +27,10 @@ export interface Cursor {
 }
 
 export const DocumentModel = {
-    coll: {},
+    coll: {
+        findOneAndUpdate: vi.fn<(...args: unknown[]) => Promise<BlogDoc | null>>(),
+        deleteOne: vi.fn<(...args: unknown[]) => Promise<{ deletedCount: number }>>(),
+    },
     add: vi.fn<(...args: unknown[]) => Promise<ObjectId>>(),
     get: vi.fn<(...args: unknown[]) => Promise<BlogDoc | null>>(),
     set: vi.fn<(...args: unknown[]) => Promise<BlogDoc>>(),
@@ -51,7 +54,9 @@ export function makeUser(id = 1, privileges = PRIV.PRIV_USER_PROFILE) {
 }
 
 export const UserModel = {
+    coll: { collectionName: "user", aggregate: vi.fn() },
     getById: vi.fn<(...args: unknown[]) => Promise<ReturnType<typeof makeUser> | null>>(),
+    getByUname: vi.fn<(...args: unknown[]) => Promise<ReturnType<typeof makeUser> | null>>(),
     getList: vi.fn<(...args: unknown[]) => Promise<Record<number, ReturnType<typeof makeUser>>>>(),
 };
 
@@ -63,7 +68,9 @@ export class Handler {
     user = makeUser();
     udoc = makeUser();
     ddoc!: BlogDoc;
-    request = { ip: "192.0.2.1" };
+    request = { ip: "192.0.2.1", body: {} as Record<string, unknown> };
+    session = { sudo: true };
+    UiContext: Record<string, unknown> = {};
     response: { template?: string; body?: Record<string, unknown>; redirect?: string } = {};
     ctx = {
         db: {
@@ -75,5 +82,16 @@ export class Handler {
     });
     limitRate = vi.fn<(...args: unknown[]) => Promise<void>>();
     url = vi.fn((route: string, _args: Record<string, unknown>) => `/${route}`);
-    back = vi.fn<(body: Record<string, unknown>) => void>();
+    back = vi.fn<(body?: Record<string, unknown>) => void>();
+}
+
+export function requireSudo(_target: unknown, _name: string, descriptor: PropertyDescriptor) {
+    const original = descriptor.value as (this: Handler, ...args: unknown[]) => unknown;
+    descriptor.value = function (this: Handler, ...args: unknown[]) {
+        if (!this.session.sudo) {
+            this.response.redirect = "/sudo";
+            return "cleanup";
+        }
+        return original.apply(this, args);
+    };
 }

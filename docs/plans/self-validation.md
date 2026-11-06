@@ -2,9 +2,9 @@
 
 ## Status
 
-Planned for a dedicated implementation PR. No implementation PR is recorded yet.
+In progress: baseline investigation is complete; UT and E2E implementation remains planned for a dedicated PR. No implementation PR is recorded yet.
 
-The agent-documentation work establishes the requirements; it does not deliver the runner, scripts, fixtures, dependencies, or CI jobs described here. Update this status and the plan index when implementation begins.
+The [investigation record](self-validation-investigation.md) retains experiments, a recommended approach, and limitations. The repository declares local Playwright MCP and documents its prerequisites; it does not yet deliver the runner, scripts, fixtures, dependencies, or CI jobs described here.
 
 ## Goal
 
@@ -12,7 +12,7 @@ Give contributors and agents repeatable ways to verify changes locally and in CI
 
 ## Current Baseline
 
-Baseline reference: repository revision `d4be3cd`, before the agent-documentation changes. Recheck scripts and CI when starting implementation, and record any changes to this baseline.
+Original baseline reference: repository revision `d4be3cd`, before the agent-documentation changes. The investigation rechecked addon revision `dc5947c`; lint passed, while raw `tsc --noEmit` reported errors in imported dependency sources. Recheck resolved versions and scripts when implementing.
 
 - `package.json` provides `lint` and `lint:fix`, but no automated test or dedicated type-check script.
 - PR validation installs dependencies, applies the existing dependency patches, and runs lint.
@@ -27,11 +27,14 @@ The implementation PR should establish:
 - Documented commands for the checks it introduces, with clear prerequisites and nonzero exit codes on failure.
 - A deliberate type-checking approach compatible with Hydro types and the repository's TypeScript configuration.
 - A minimal test setup and focused regression coverage for selected existing blog behavior.
+- Both UT coverage of addon logic and browser E2E coverage against real Hydro and disposable persistence.
 - Clear boundaries between isolated tests and checks that require Hydro or persistence.
+- Minimal host impact: container-owned Hydro services, service dependencies, and data, with Playwright running locally in isolated browser sessions. A devcontainer may wrap the service development environment if needed; browser containers are not required.
+- Playwright Test for repeatable browser E2E and the project-declared Playwright MCP for agent-assisted verification, with outcomes reported separately.
 - Local and CI execution of the same supported checks, with actionable diagnostics.
 - Documentation that distinguishes available capabilities from optional or still-planned checks.
 
-Exact tooling and initial test cases remain implementation decisions. Do not describe proposed commands as available before they are added.
+The investigation recommends `node:test` with Hydro's loader for UT and a minimal Docker stack for E2E. Exact scripts and fixtures remain implementation work. Do not describe proposed commands as available before they are added.
 
 ## Initial Coverage Priorities
 
@@ -63,7 +66,7 @@ Do not encode unresolved draft-detail visibility, exact tie ordering, atomic mul
 
 | Milestone | Deliverable | Completion evidence |
 | --- | --- | --- |
-| Inspect the baseline | Identify suitable test boundaries, Hydro compatibility constraints, and prerequisites for type checking. | Findings and selected approach recorded in the PR and this plan. |
+| Inspect the baseline (completed) | Identify suitable test boundaries, Hydro compatibility constraints, and prerequisites for type checking. | [Investigation findings](self-validation-investigation.md) record baseline checks, nine passing isolated experiments, a failing mutation control, and remaining gaps. |
 | Establish checks | Add the selected scripts and minimal test tooling without weakening existing checks. | Commands run locally; representative lint, type, or assertion failures produce nonzero exits for the checks introduced. |
 | Add initial regressions | Cover selected observable blog behavior, including a relevant denial or boundary case. | Tests detect the targeted defect or behavioral mismatch and pass for the correct implementation. |
 | Integrate CI | Run supported checks in PR validation with required setup and cleanup. | The corresponding workflow passes on the PR head, with failure detection verified. |
@@ -75,6 +78,9 @@ Do not encode unresolved draft-detail visibility, exact tie ordering, atomic mul
 - Introduced checks are non-interactive, bounded, and do not leave owned processes or test data behind.
 - The test runner executes meaningful tests and does not silently succeed without discovering them.
 - Behavioral tests are deterministic and do not depend on production data or unrelated external services.
+- Both UT and E2E have meaningful initial cases, including denial/failure paths; MCP-only exploration does not satisfy automated E2E delivery.
+- Runtime checks avoid host Hydro/MongoDB installation and clean up their own container resources and local browser sessions after success or failure.
+- The declared MCP is verified through initialization, tool discovery, test-site navigation, and cleanup before claiming it operational.
 - CI exercises the same supported checks documented for local use.
 - Required checks fail visibly when their validation fails; optional environment-dependent checks are explicitly labeled.
 - Existing lint, patch application, and runtime behavior are preserved.
@@ -90,13 +96,13 @@ Review the workflow for the actual PR head and update the [validation guide](../
 
 ## Dependencies and Open Decisions
 
-- Select a test runner and fixture approach based on the existing Node.js, TypeScript, and Hydro integration.
-- Determine whether a standalone type check works with the current configuration; document baseline issues rather than suppressing them to force success.
-- Decide which initial cases can run in isolation and which require a disposable Hydro or database environment.
-- Decide whether environment-dependent integration checks belong in the initial PR or a documented follow-up.
+- Implement the recommended UT runner and validate its fixture boundary; keep complete Hydro authorization in E2E.
+- Resolve the demonstrated standalone type-check failures with an explicitly scoped check or separately justified dependency compatibility work.
+- Provision the minimal Hydro/database/browser environment and choose concrete compatible versions, readiness, fixture seeding, and resource lifecycle.
+- Sequence E2E delivery explicitly if it needs a follow-up PR; it remains a required project coverage layer, not an optional substitute for UT.
 - Confirm intended direct-link draft visibility before introducing a privacy guarantee beyond list filtering. This is a product-policy decision, not a test-runner choice.
 - Decide whether concurrent view deduplication, deterministic tie sorting, or atomic multi-write behavior need separately scoped changes; do not silently add those guarantees in the tooling PR.
 
 ## Delivery Record
 
-No implementation PR or completed milestone is recorded yet. Add the implementation PR, decisions, verification evidence, delivered coverage, and remaining follow-up work as the initiative progresses.
+The baseline investigation milestone is complete; see the [dated findings](self-validation-investigation.md). Development rules now require UT and E2E and a low-impact runtime boundary. The local Playwright MCP declaration passed initialization, tool discovery, blank-page navigation, and browser closure without Docker. Actual addon-flow MCP verification and automated suites are not delivered. Add implementation PRs, actual coverage, container/MCP results, and CI evidence as work progresses.

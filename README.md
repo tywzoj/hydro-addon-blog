@@ -39,6 +39,7 @@ Start with [AGENTS.md](AGENTS.md) for repository-wide rules and the documentatio
 - [Development guidelines and official Hydro references](docs/development.md)
 - [Validation commands and dependency troubleshooting](docs/validation.md)
 - [Testing requirements](docs/testing.md)
+- [Isolated verification environment and Playwright MCP](docs/verification-environment.md)
 - [Collaboration guidelines](docs/collaboration.md)
 - [Project plans and delivery status](docs/plans/README.md)
 

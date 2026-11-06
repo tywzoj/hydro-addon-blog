@@ -4,7 +4,7 @@
 
 This guide provides a repeatable manual protocol for checks that require Hydro. Its expected results come from the [source-derived behavior reference](blog-behavior.md); the protocol has not been executed as part of the documentation work.
 
-The repository does not provision a Hydro instance, database, test accounts, or a containerized test environment. No specific Hydro/database version combination is certified here. Record the environment used for each run and treat unexecuted steps as unverified, not passed.
+The repository does not provision a Hydro instance, database, test accounts, or a containerized test environment. It declares [Playwright MCP](verification-environment.md#project-playwright-mcp) for agent-assisted browser checks and plans automated UT/E2E coverage; neither proves that this protocol has run. Prefer the [isolated runtime boundary](verification-environment.md#proposed-runtime-boundary) for new development verification. No specific Hydro/database version combination is certified here. Record the environment used for each run and treat unexecuted steps as unverified, not passed.
 
 ## Prerequisites
 

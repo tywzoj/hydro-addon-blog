@@ -44,6 +44,8 @@ There is currently no automated test script or dedicated type-check command in `
 
 Follow the [testing requirements](testing.md) for behavioral coverage. Consult the [self-validation plan](plans/self-validation.md) for delivery status. Treat commands as available only after they exist in the repository; a planned capability is not an implemented check. Keep tooling work in its explicitly scoped implementation PR.
 
+The coverage goal requires both UT and browser E2E. Use the [verification-environment guide](verification-environment.md) for low-impact Docker boundaries and the project Playwright MCP declaration. MCP-assisted checks are separate evidence, not an automated E2E suite. The [investigation](plans/self-validation-investigation.md) records a passing lint baseline and raw standalone TypeScript failures; no supported type-check command has been added.
+
 The PR validation workflow installs dependencies and runs lint. When changing the workflow, verify the affected run rather than relying on a check from an earlier commit.
 
 ## Manual Verification

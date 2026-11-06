@@ -6,6 +6,21 @@ The repository currently has linting but no automated test script. The [self-val
 
 This guide defines expectations for implementation work; it does not claim that a test runner, fixtures, integration environment, or additional CI checks already exist. Do not invent executable commands for planned capabilities.
 
+## Required Coverage Layers
+
+The project must develop and maintain both unit-test (UT) and end-to-end (E2E) coverage. Coverage means meaningful assertions for behavior and failure paths, not a mandated percentage or testing every function.
+
+| Layer | Responsibility | Initial examples |
+| --- | --- | --- |
+| UT | Execute actual addon logic deterministically, replacing only external boundaries. Small handler-contract tests may share this runner but must identify their simulated services. | Publication timestamps, legacy-read fallback, query construction, and invalid input before side effects. |
+| E2E | Exercise the loaded addon through a real browser, real Hydro routing, sessions, permissions, templates, and disposable persistence. Do not replace these with mocks. | Author creates and publishes a post; another viewer sees only published list entries; a non-owner write is denied without mutation; edits and deletion persist after reload. |
+
+For behavior changes, select the affected cases in both layers; explain when a layer is not applicable. A UT assertion that a handler calls a privilege service is not proof that Hydro enforces access end to end. Template or browser-flow changes need E2E evidence even when no isolated UT is useful.
+
+Use Playwright Test for the planned repeatable browser E2E suite and the [declared Playwright MCP](verification-environment.md#project-playwright-mcp) for agent-assisted exploration, reproduction, and browser verification. MCP sessions supplement, not replace, checked-in E2E tests and their CI results. Promote discovered regressions into executable UT or E2E cases at the appropriate boundary.
+
+Both runners must reject empty discovery and relevant failures with nonzero exits, have bounded execution, and clean up run-owned resources. Record separately which UT, E2E, and MCP checks actually ran. Until the tooling exists, report missing coverage against this goal using the fallback below.
+
 ## Coverage Expectations
 
 - Add or update focused tests for new behavior and bug fixes when suitable infrastructure is available.
@@ -38,6 +53,7 @@ Use the [behavior reference](blog-behavior.md) to distinguish source-derived beh
 - Use controlled clocks, identifiers, and fixtures when timing or ordering matters.
 - Keep tests isolated. Clean up owned data and resources, including after failures.
 - Never use production databases, real credentials, or personal data in fixtures. Integration checks must use explicitly configured disposable environments.
+- Follow the [verification-environment requirements](verification-environment.md): isolate Hydro and databases in containers; run Playwright locally with independent test sessions. Browser containerization is optional, not required.
 - Do not require external network access for tests that can run locally.
 - Use clear assertions and useful failure messages. Do not rely on arbitrary sleeps to make asynchronous tests pass.
 

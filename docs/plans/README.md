@@ -6,7 +6,8 @@ This directory retains project direction, implementation plans, and consequentia
 
 | Plan | Status | Scope |
 | --- | --- | --- |
-| [Self-validation capabilities](self-validation.md) | Planned | A separate PR for repeatable checks, regression testing, and CI integration. |
+| [Self-validation capabilities](self-validation.md) | In progress | Baseline investigated; UT, browser E2E, isolated runtime, and CI implementation pending. |
+| [Self-validation investigation](self-validation-investigation.md) | Completed | Experiments, upstream research, container recommendation, and explicit unverified boundaries. |
 
 A planned capability is not implemented or validated until the corresponding change supplies evidence. The index records delivery status; individual plans retain their baseline, decisions, and outcomes.
 

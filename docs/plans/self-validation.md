@@ -2,9 +2,9 @@
 
 ## Status
 
-In progress: initial Vitest UT, a local development runtime, and real-browser E2E are delivered and verified locally. A supported type-check command and PR-head CI evidence remain pending. No implementation PR is recorded yet.
+In progress: initial Vitest UT, a local development runtime, and real-browser E2E are delivered and verified locally and in [PR #8](https://github.com/tywzoj/hydro-addon-blog/pull/8). A supported type-check command and broader coverage remain follow-up work.
 
-The [investigation record](self-validation-investigation.md) retains experiments and limitations. The repository provides local Playwright MCP, Vitest UT, managed local Hydro with disposable MongoDB, and Playwright E2E. The workflow includes lint, UT coverage, and E2E; actual PR-head results must still be observed.
+The [investigation record](self-validation-investigation.md) retains experiments and limitations. The repository provides local Playwright MCP, Vitest UT, managed local Hydro with disposable MongoDB, and Playwright E2E. The workflow includes lint, UT coverage, and E2E; recheck the actual PR head after every push rather than reusing earlier evidence.
 
 ## Goal
 
@@ -20,7 +20,7 @@ Original baseline reference: repository revision `d4be3cd`, before the agent-doc
 - Runtime verification may require a configured Hydro instance.
 - `yarn.lock` is intentionally ignored; this initiative does not change that policy.
 
-The bullets above describe the original baseline. The UT implementation now supplies `test`, `test:watch`, and `test:coverage`, with lint and coverage in PR validation. A PR-head CI run has not yet been observed.
+The bullets above describe the original baseline. The UT implementation now supplies `test`, `test:watch`, and `test:coverage`, with lint and coverage in PR validation. Subsequent CI evidence is recorded below.
 
 ## Scope and Requirements
 
@@ -71,7 +71,7 @@ Do not encode unresolved draft-detail visibility, exact tie ordering, atomic mul
 | Inspect the baseline (completed) | Identify suitable test boundaries, Hydro compatibility constraints, and prerequisites for type checking. | [Investigation findings](self-validation-investigation.md) record baseline checks, nine passing isolated experiments, a failing mutation control, and remaining gaps. |
 | Establish checks (UT delivered) | Add Vitest scripts and V8 coverage without weakening lint. | Non-watch UT and coverage pass locally; empty discovery/suites and a publication mutation exit nonzero. Dedicated type checking remains pending. |
 | Add initial regressions (UT/E2E delivered) | Cover selected logic and real browser/service behavior, including denial paths. | 65 UT and nine Playwright checks pass locally; the publication mutation is detected. Broader runtime coverage remains follow-up work. |
-| Integrate CI (configured) | Run supported checks in PR validation with required setup and cleanup. | The workflow runs lint, UT coverage, and E2E with step timeouts; head-specific CI evidence remains pending. |
+| Integrate CI (verified) | Run supported checks in PR validation with required setup and cleanup. | The workflow passed lint, 65 UT, and nine Playwright checks on PR #8 commit `bf9ec33`; later heads must be checked independently. |
 | Document and hand off | Update agent guides with actual commands, prerequisites, coverage, and remaining gaps. | Documentation matches delivered scripts and CI; outcomes and follow-up work are retained here. |
 
 ## Acceptance Criteria
@@ -119,4 +119,6 @@ Failure/lifecycle evidence includes a nonzero empty E2E selection, an invalid po
 
 Runtime integration findings: Cordis services require injection; Hydro's page marker follows the template basename rather than the route name; a hidden login modal duplicates form fields; and star clicks must target the generated button, not its containing element. The E2E selectors and assertions account for these actual framework/UI contracts.
 
-Remaining work: PR-head CI evidence, supported type checking, broader E2E scenarios, and cross-platform/version-matrix verification. No implementation PR or full-runtime compatibility claim is recorded.
+PR #8's [validation run 42183061237](https://github.com/tywzoj/hydro-addon-blog/actions/runs/42183061237) passed on commit `bf9ec331803762ffbce95b031d57091ecaae276b` on 2026-11-06. The Ubuntu 26 runner completed dependency installation, lint, 65 UT, and nine Playwright checks, with Hydro storage under its writable temporary directory. This is evidence for that commit and runner, not every future head or deployment.
+
+Remaining work: supported type checking, broader E2E scenarios, and cross-platform/version-matrix verification. This PR is not merged, and no full-runtime compatibility claim is made.

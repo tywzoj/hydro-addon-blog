@@ -2,9 +2,9 @@
 
 ## Status
 
-In progress: baseline investigation and the initial Vitest UT implementation are complete locally. E2E, disposable runtime, and a supported type-check command remain planned. No implementation PR is recorded yet.
+In progress: initial Vitest UT, a local development runtime, and real-browser E2E are delivered and verified locally. A supported type-check command and PR-head CI evidence remain pending. No implementation PR is recorded yet.
 
-The [investigation record](self-validation-investigation.md) retains experiments and limitations. The repository declares local Playwright MCP and provides Vitest scripts, isolated model/handler fixtures, and a UT workflow step. Runtime provisioning and browser E2E are not delivered.
+The [investigation record](self-validation-investigation.md) retains experiments and limitations. The repository provides local Playwright MCP, Vitest UT, managed local Hydro with disposable MongoDB, and Playwright E2E. The workflow includes lint, UT coverage, and E2E; actual PR-head results must still be observed.
 
 ## Goal
 
@@ -31,12 +31,12 @@ The implementation PR should establish:
 - A minimal test setup and focused regression coverage for selected existing blog behavior.
 - Both UT coverage of addon logic and browser E2E coverage against real Hydro and disposable persistence.
 - Clear boundaries between isolated tests and checks that require Hydro or persistence.
-- Minimal host impact: container-owned Hydro services, service dependencies, and data, with Playwright running locally in isolated browser sessions. A devcontainer may wrap the service development environment if needed; browser containers are not required.
+- Minimal host impact: local Hydro and Playwright, isolated environment-controlled writable directories, and only MongoDB in Docker. A devcontainer may wrap this setup if useful but is not required.
 - Playwright Test for repeatable browser E2E and the project-declared Playwright MCP for agent-assisted verification, with outcomes reported separately.
 - Local and CI execution of the same supported checks, with actionable diagnostics.
 - Documentation that distinguishes available capabilities from optional or still-planned checks.
 
-The maintainer selected Vitest for UT, superseding the investigation's `node:test` recommendation. The delivered tests use Vitest module mocking and real framework decorators loaded through Hydro's register module. A minimal Docker service stack with local Playwright remains the E2E direction.
+The maintainer selected Vitest for UT, superseding the investigation's `node:test` recommendation. The delivered tests use Vitest module mocking and real framework decorators loaded through Hydro's register module. Subsequent source research established that Hydro can run locally without root; the delivered E2E runtime only containerizes MongoDB.
 
 ## Initial Coverage Priorities
 
@@ -70,8 +70,8 @@ Do not encode unresolved draft-detail visibility, exact tie ordering, atomic mul
 | --- | --- | --- |
 | Inspect the baseline (completed) | Identify suitable test boundaries, Hydro compatibility constraints, and prerequisites for type checking. | [Investigation findings](self-validation-investigation.md) record baseline checks, nine passing isolated experiments, a failing mutation control, and remaining gaps. |
 | Establish checks (UT delivered) | Add Vitest scripts and V8 coverage without weakening lint. | Non-watch UT and coverage pass locally; empty discovery/suites and a publication mutation exit nonzero. Dedicated type checking remains pending. |
-| Add initial regressions (UT delivered) | Cover selected model/handler behavior, including denial and failure paths. | 65 tests pass; the publication mutation is detected. Real-service and browser assertions remain pending. |
-| Integrate CI (configured) | Run supported checks in PR validation with required setup and cleanup. | The workflow runs lint and UT coverage with a step timeout; head-specific CI evidence remains pending. |
+| Add initial regressions (UT/E2E delivered) | Cover selected logic and real browser/service behavior, including denial paths. | 65 UT and nine Playwright checks pass locally; the publication mutation is detected. Broader runtime coverage remains follow-up work. |
+| Integrate CI (configured) | Run supported checks in PR validation with required setup and cleanup. | The workflow runs lint, UT coverage, and E2E with step timeouts; head-specific CI evidence remains pending. |
 | Document and hand off | Update agent guides with actual commands, prerequisites, coverage, and remaining gaps. | Documentation matches delivered scripts and CI; outcomes and follow-up work are retained here. |
 
 ## Acceptance Criteria
@@ -81,7 +81,7 @@ Do not encode unresolved draft-detail visibility, exact tie ordering, atomic mul
 - The test runner executes meaningful tests and does not silently succeed without discovering them.
 - Behavioral tests are deterministic and do not depend on production data or unrelated external services.
 - Both UT and E2E have meaningful initial cases, including denial/failure paths; MCP-only exploration does not satisfy automated E2E delivery.
-- Runtime checks avoid host Hydro/MongoDB installation and clean up their own container resources and local browser sessions after success or failure.
+- Runtime checks avoid global Hydro/MongoDB installation and root-only paths; clean up owned child processes, MongoDB, local sessions, and temporary files after success or failure.
 - The declared MCP is verified through initialization, tool discovery, test-site navigation, and cleanup before claiming it operational.
 - CI exercises the same supported checks documented for local use.
 - Required checks fail visibly when their validation fails; optional environment-dependent checks are explicitly labeled.
@@ -100,8 +100,8 @@ Review the workflow for the actual PR head and update the [validation guide](../
 
 - Extend the delivered Vitest cases as behavior changes; keep complete Hydro authorization in E2E.
 - Resolve the demonstrated standalone type-check failures with an explicitly scoped check or separately justified dependency compatibility work.
-- Provision the minimal Hydro/database/browser environment and choose concrete compatible versions, readiness, fixture seeding, and resource lifecycle.
-- Sequence E2E delivery explicitly if it needs a follow-up PR; it remains a required project coverage layer, not an optional substitute for UT.
+- Extend the proven local Hydro/disposable MongoDB/browser environment as needed, retaining its checked storage boundary and lifecycle.
+- Extend E2E coverage for remaining sorting, pagination, localization, and relevant failure scenarios without claiming unsupported privacy or concurrency guarantees.
 - Confirm intended direct-link draft visibility before introducing a privacy guarantee beyond list filtering. This is a product-policy decision, not a test-runner choice.
 - Decide whether concurrent view deduplication, deterministic tie sorting, or atomic multi-write behavior need separately scoped changes; do not silently add those guarantees in the tooling PR.
 
@@ -113,4 +113,10 @@ On 2026-11-06, the maintainer selected Vitest and the initial UT implementation 
 
 Vitest and `@vitest/coverage-v8` are pinned together at `4.0.18`, with Vite 7 and Hydro register `1.0.4`. An attempted `4.1.12` pairing reproducibly failed Yarn Classic's Vite linking; the selected combination installed and applied the existing framework patch successfully, retaining its pre-existing version warning.
 
-Remaining work: PR-head CI evidence, supported type checking, disposable Hydro/MongoDB services, real addon-flow MCP verification, and Playwright E2E. No implementation PR or full-runtime compatibility claim is recorded.
+UT implementation was committed as `1aa01a4`. The subsequent E2E implementation supplies `yarn dev` and `yarn test:e2e`, with Playwright `1.64.1`, locally resolved Hydro `5.0.7`/UI `4.58.5`, and `mongo:7-jammy`. On macOS with Node `24.22.1`, three real-login setup cases and six business scenarios passed. The runtime explicitly redirects `DEFAULT_STORE_PATH`, `HOME`, and temporary paths; only MongoDB runs in Docker. The official devcontainer was inspected but not used.
+
+Failure/lifecycle evidence includes a nonzero empty E2E selection, an invalid port, real failing browser assertions during development, isolated Hydro startup under a CI parent, and graceful development shutdown with owned MongoDB/storage cleanup. The Playwright MCP also logged in, published a post through the actual editor, and confirmed the rendered detail. A force-stopped tool helper required targeted cleanup, motivating the run-owned resource manifest and explicit uncatchable-kill limitation.
+
+Runtime integration findings: Cordis services require injection; Hydro's page marker follows the template basename rather than the route name; a hidden login modal duplicates form fields; and star clicks must target the generated button, not its containing element. The E2E selectors and assertions account for these actual framework/UI contracts.
+
+Remaining work: PR-head CI evidence, supported type checking, broader E2E scenarios, and cross-platform/version-matrix verification. No implementation PR or full-runtime compatibility claim is recorded.

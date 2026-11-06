@@ -10,7 +10,7 @@ These guidelines apply to the entire repository. This project is a Hydro blog ad
 - Keep changes focused on the request and preserve unrelated work.
 - Consult the official Hydro source before implementing Hydro-dependent behavior. Follow the research requirements in the development guide.
 - Define acceptance criteria and verify changed behavior before declaring implementation work complete. Report missing checks explicitly.
-- Cover project behavior with unit tests (UT) and end-to-end tests (E2E). Prefer disposable, container-based runtime validation; use the declared Playwright MCP for agent-assisted browser checks.
+- Cover project behavior with unit tests (UT) and end-to-end tests (E2E). Run Hydro and Playwright locally with isolated writable paths; only MongoDB needs Docker in the default verification environment. Use the declared Playwright MCP for agent-assisted browser checks.
 - Keep project plans under `docs/plans/` and update relevant plans when scope, decisions, or delivery status changes.
 - Do not merge a PR unless explicitly requested.
 

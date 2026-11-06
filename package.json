@@ -11,7 +11,9 @@
     "lint:fix": "eslint --fix",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "dev": "node scripts/hydro-runtime.mjs --serve",
+    "test:e2e": "node scripts/hydro-runtime.mjs"
   },
   "dependencies": {
     "postinstall-postinstall": "^2.1.0"
@@ -20,6 +22,7 @@
     "@eslint/js": "^10.0.1",
     "@hydrooj/register": "1.0.4",
     "@hydrooj/ui-default": "^4.58.0-beta.21",
+    "@playwright/test": "1.64.1",
     "@types/fs-extra": "^11.0.4",
     "@types/jquery": "^3.5.34",
     "@types/js-yaml": "^4",
@@ -33,6 +36,7 @@
     "eslint-plugin-simple-import-sort": "^12.1.1",
     "globals": "^17.3.0",
     "hydrooj": "^5.0.1",
+    "mongodb": "^7.6.0",
     "patch-package": "^8.0.1",
     "prettier": "^3.8.1",
     "typescript": "^5.9.3",

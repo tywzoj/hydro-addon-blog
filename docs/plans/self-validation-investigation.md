@@ -2,7 +2,7 @@
 
 ## Status and Scope
 
-Investigation completed on 2026-11-06, against addon revision `dc5947c` on `users/antares/investigate-self-validation`. This retains the original experiments, not current setup instructions. The maintainer subsequently selected Vitest; the [delivery plan](self-validation.md#delivery-record) records the implemented UT and remaining E2E work.
+Investigation completed on 2026-11-06, against addon revision `dc5947c` on `users/antares/investigate-self-validation`. This retains the original experiments, not current setup instructions. The maintainer subsequently selected Vitest and a local Hydro/browser runtime; the [delivery plan](self-validation.md#delivery-record) records delivered UT/E2E and remaining work.
 
 The maintainer requires both unit-test (UT) and end-to-end (E2E) coverage, minimal host operating-system impact, and a project Playwright MCP declaration. Docker is available as an approach; a devcontainer is optional. These requirements are reflected in the [development guide](../development.md), [testing requirements](../testing.md), and [verification-environment guide](../verification-environment.md).
 
@@ -76,9 +76,9 @@ Do not substitute `noCheck`, a permissive ambient Hydro shim, broad compiler rel
 | Playwright Test against disposable Hydro | Required E2E direction: real sessions, permissions, templates, persistence, and browser behavior. Not executed during this investigation. |
 | Playwright MCP | Local initialization, discovery of 25 tools, `about:blank` navigation, and browser closure passed without Docker. This is agent-assisted verification infrastructure, not an automated E2E suite; real Hydro flows still require the service environment. |
 
-For minimal host impact, implement only the services in the [verification-environment proposal](../verification-environment.md#proposed-runtime-boundary). Upstream Docker and devcontainer examples include judges and privileges irrelevant to this addon. Upstream explicitly labels the Docker installation module as not officially maintained; use its source as a reference, not a certified test stack.
+The original container proposal was superseded by the [implemented local runtime boundary](../verification-environment.md#local-runtime-boundary). Upstream Docker and devcontainer examples include judges and privileges irrelevant to this addon. Upstream explicitly labels the Docker installation module as not officially maintained; use its source as a reference, not a certified test stack.
 
-Maintainer clarification on 2026-11-06: Playwright should run locally; browser containerization is unnecessary for development. Keep Docker isolation for Hydro and MongoDB, expose Hydro on loopback for local browser access, and use independent test profiles. Containerized browsers remain an optional CI choice.
+Maintainer clarifications on 2026-11-06: Playwright and Hydro should run locally; only MongoDB needs Docker. Upstream devcontainer assumptions may be stale. Avoid root-only `/data` defaults through environment variables and independently isolated home/temp directories.
 
 ## Original Proposed Implementation Sequence
 
@@ -105,3 +105,5 @@ Upstream Hydro source was inspected at `3c8286dd1350fcd00412e95d5b056dbfed64edda
 The initial Docker MCP proposal included inspected image metadata but was superseded by the maintainer's local-browser direction and the [official MCP getting-started guide](https://playwright.dev/docs/getting-started-mcp). `.github/mcp.json` now pins the locally launched `@playwright/mcp` package to `0.0.83`, an available published version, with headless Chrome and an isolated profile. No MCP Docker image or dedicated Docker network is needed for startup. A bounded local probe verified initialization, 25 tools, blank-page navigation, and browser closure with exit 0.
 
 Remaining gaps after UT implementation: running Docker engine for the service stack, a provisioned Hydro environment, MCP verification of an actual addon flow, real browser E2E, a supported project type-check command, and head-specific CI evidence. No claim of complete self-validation or full patch compatibility is made.
+
+Those runtime/E2E gaps were subsequently addressed by the local launcher and nine real-browser checks; see the [delivery record](self-validation.md#delivery-record). Source inspection confirmed `DEFAULT_STORE_PATH`, home-relative profiles/static rebuilds, the CI-only in-memory MongoDB branch, `--disableWorker`, the `app/ready` lifecycle, Cordis storage injection, real-user creation, and shipped default-UI assets. Local Hydro/browser E2E and an actual MCP publishing flow were exercised without root access or a Hydro container. Type-check tooling, broader coverage, and PR-head CI evidence remain pending.

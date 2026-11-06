@@ -6,7 +6,7 @@ This directory retains project direction, implementation plans, and consequentia
 
 | Plan | Status | Scope |
 | --- | --- | --- |
-| [Self-validation capabilities](self-validation.md) | In progress | Vitest UT delivered locally and configured in CI; browser E2E, isolated runtime, type-check tooling, and PR-head CI evidence pending. |
+| [Self-validation capabilities](self-validation.md) | In progress | Vitest UT, local Hydro/disposable MongoDB, Playwright E2E, and MCP addon flow verified locally; type-check tooling and PR-head CI evidence pending. |
 | [Self-validation investigation](self-validation-investigation.md) | Completed | Experiments, upstream research, container recommendation, and explicit unverified boundaries. |
 
 A planned capability is not implemented or validated until the corresponding change supplies evidence. The index records delivery status; individual plans retain their baseline, decisions, and outcomes.

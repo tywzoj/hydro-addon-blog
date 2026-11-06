@@ -36,3 +36,7 @@ jobs:
       - name: Unit tests and coverage
         timeout-minutes: 5
         run: yarn test:coverage
+
+      - name: End-to-end tests
+        timeout-minutes: 5
+        run: yarn test:e2e

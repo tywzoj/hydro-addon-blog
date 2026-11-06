@@ -48,7 +48,7 @@ For version-sensitive decisions, record the upstream commit, tag, or installed p
 
 Do not treat successful compilation, linting, or a plausible-looking diff as proof that changed behavior works.
 
-The project's coverage goal includes both UT and E2E; neither replaces the other. Use [low-impact verification environments](verification-environment.md) for Hydro, database, and browser validation. Prefer disposable Docker services over host-level installations; a devcontainer is optional when it improves reproducibility. Use the project-declared Playwright MCP for agent-assisted browser investigation and verification, and retain repeatable regressions as executable tests rather than only a conversation transcript.
+The project's coverage goal includes both UT and E2E; neither replaces the other. Use the [low-impact verification environment](verification-environment.md): local Hydro and Playwright, a disposable MongoDB container, and environment-controlled user-writable configuration, storage, and temporary paths. Do not copy upstream devcontainer assumptions or require root access. A devcontainer is optional, not a prerequisite. Use the project-declared Playwright MCP for agent-assisted browser investigation and verification, and retain repeatable regressions as executable tests rather than only a conversation transcript.
 
 ## Code Requirements
 

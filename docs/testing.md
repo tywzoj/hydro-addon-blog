@@ -2,9 +2,9 @@
 
 ## Current Capability and Scope
 
-The repository provides Vitest UT, V8 coverage, and linting. The [self-validation plan](plans/self-validation.md) tracks remaining E2E, disposable-runtime, and type-check capabilities.
+The repository provides Vitest UT, V8 coverage, Playwright E2E, a disposable local runtime, and linting. The [self-validation plan](plans/self-validation.md) tracks remaining type-check tooling, coverage extensions, and PR-head CI evidence.
 
-The PR workflow runs lint and UT with coverage. No real Hydro integration or automated browser E2E environment is delivered yet. Do not invent executable commands for planned capabilities.
+The PR workflow runs lint, UT with coverage, and E2E. Real Hydro/browser cases are separate from isolated UT and do not establish exhaustive coverage or a complete deployment matrix.
 
 ## Running and Extending UT
 
@@ -39,6 +39,30 @@ The initial implementation verified nonzero exits for unmatched discovery, a dis
 
 Use the official [Vitest module-mocking guide](https://vitest.dev/guide/mocking/modules) and [Vitest 4 coverage reference](https://v4.vitest.dev/config/coverage) when extending the harness; keep package versions and dependency transformation behavior compatible with the installed runner.
 
+## Running and Extending E2E
+
+```sh
+yarn test:e2e
+yarn test:e2e --grep "publication"
+```
+
+The [verification-environment guide](verification-environment.md#local-runtime-boundary) documents Node/Docker/browser prerequisites, local development, writable paths, timeouts, evidence, and cleanup. The launcher owns a local Hydro child and only containerizes MongoDB. It never accepts a production or shared database.
+
+Playwright runs three real-form authentication setup cases and six business tests with independent author, viewer, and system-editor sessions:
+
+| Scenario | Evidence | Related smoke cases |
+| --- | --- | --- |
+| Draft, publication, and edit | Owner sees its draft, ordinary viewer does not; publication becomes visible; edited content persists and preserves first-publication time. | M2, M3 |
+| Non-owner denial | Actual create/edit GET and create/edit/delete POST requests are rejected without the attempted mutation. | M6 |
+| System editor | Actual system privilege permits seeing and editing another author's draft; home still excludes it. | M3, M6 |
+| Sequential views and stars | First viewer read increments once; reload does not; star/unstar persists after reload without changing the author's state. | M7 |
+| Delete | UI deletion removes the post and all of its persisted user statuses. | M8 |
+| Profile frontend | The addon frontend adds a working blog link on the actual Hydro profile page. | M1 |
+
+Use the real Markdown editor and controls; do not inject session cookies, bypass decorators, stub routes, or mock persistence to make E2E green. Direct authenticated denial requests preserve the same-origin Referer expected by Hydro's CSRF handling. MongoDB access is read-only assertion evidence against the run-owned database; fixture accounts are created through Hydro's user model.
+
+The suite uses one worker, no automatic retries, isolated browser contexts, focused-test rejection, and explicit timeouts. Empty selections and real assertion failures return nonzero exits. Keep fixtures unique within the run and promote new relevant failures into the suite. Initial cases do not establish all sorting/pagination outcomes, localization, concurrent deduplication, or unresolved draft direct-link privacy.
+
 ## Required Coverage Layers
 
 The project must develop and maintain both unit-test (UT) and end-to-end (E2E) coverage. Coverage means meaningful assertions for behavior and failure paths, not a mandated percentage or testing every function.
@@ -50,9 +74,9 @@ The project must develop and maintain both unit-test (UT) and end-to-end (E2E) c
 
 For behavior changes, select the affected cases in both layers; explain when a layer is not applicable. A UT assertion that a handler calls a privilege service is not proof that Hydro enforces access end to end. Template or browser-flow changes need E2E evidence even when no isolated UT is useful.
 
-Use Playwright Test for the planned repeatable browser E2E suite and the [declared Playwright MCP](verification-environment.md#project-playwright-mcp) for agent-assisted exploration, reproduction, and browser verification. MCP sessions supplement, not replace, checked-in E2E tests and their CI results. Promote discovered regressions into executable UT or E2E cases at the appropriate boundary.
+Use Playwright Test for repeatable browser E2E and the [declared Playwright MCP](verification-environment.md#project-playwright-mcp) for agent-assisted exploration, reproduction, and browser verification. MCP sessions supplement, not replace, checked-in E2E tests and their CI results. Promote discovered regressions into executable UT or E2E cases at the appropriate boundary.
 
-Both runners must reject empty discovery and relevant failures with nonzero exits, have bounded execution, and clean up run-owned resources. Record separately which UT, E2E, and MCP checks actually ran. Until the tooling exists, report missing coverage against this goal using the fallback below.
+Both runners must reject empty discovery and relevant failures with nonzero exits, have bounded execution, and clean up run-owned resources. Record separately which UT, E2E, and MCP checks actually ran. Report cases outside delivered coverage using the fallback below.
 
 ## Coverage Expectations
 
@@ -75,7 +99,7 @@ Examples of meaningful blog regression cases include:
 | Writes and failures | Invalid input does not mutate data; failed operations are not reported as successful. |
 | UI integration | Links, templates, and translated labels match the server-side route and response contract. |
 
-These are coverage expectations; use the UT inventory above and actual test files to identify delivered cases. Browser and real-service coverage remains pending.
+These are coverage expectations; use the UT/E2E inventories above and actual test files to distinguish delivered cases from remaining gaps.
 
 Use the [behavior reference](blog-behavior.md) to distinguish source-derived behavior from unresolved policy or concurrency guarantees. Use the [prioritized coverage plan](plans/self-validation.md#initial-coverage-priorities) when selecting the first automated cases.
 
@@ -86,7 +110,7 @@ Use the [behavior reference](blog-behavior.md) to distinguish source-derived beh
 - Use controlled clocks, identifiers, and fixtures when timing or ordering matters.
 - Keep tests isolated. Clean up owned data and resources, including after failures.
 - Never use production databases, real credentials, or personal data in fixtures. Integration checks must use explicitly configured disposable environments.
-- Follow the [verification-environment requirements](verification-environment.md): isolate Hydro and databases in containers; run Playwright locally with independent test sessions. Browser containerization is optional, not required.
+- Follow the [verification-environment requirements](verification-environment.md): local Hydro and Playwright with isolated writable paths and sessions, and a disposable MongoDB container.
 - Do not require external network access for tests that can run locally.
 - Use clear assertions and useful failure messages. Do not rely on arbitrary sleeps to make asynchronous tests pass.
 

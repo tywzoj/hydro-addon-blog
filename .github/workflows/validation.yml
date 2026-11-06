@@ -38,5 +38,5 @@ jobs:
         run: yarn test:coverage
 
       - name: End-to-end tests
-        timeout-minutes: 5
+        timeout-minutes: 8
         run: yarn test:e2e

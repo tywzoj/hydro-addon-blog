@@ -236,26 +236,40 @@ export class BlogSettingsModel {
     static async listUsers(page: number) {
         const settings = await this.get();
         const visibleRoles = settings.roles.filter((r) => ![BlogRoles.Guest, BlogRoles.Default].includes(r.name));
-        const rows = await UserModel.coll
+        const rows = await this.users
             .aggregate<{ entries: { _id: number; blogAssignment?: BlogAssignment }[]; count: { total: number }[] }>([
-                { $match: { _id: { $gt: ANONYMOUS_USER_ID }, priv: { $bitsAllSet: PRIV.PRIV_USER_PROFILE } } },
+                { $match: { role: { $in: visibleRoles.map((role) => role.id) } } },
                 {
                     $lookup: {
-                        from: BlogCollections.UserRoles,
+                        from: UserModel.coll.collectionName,
                         localField: "_id",
                         foreignField: "_id",
-                        as: "blogAssignment",
+                        as: "user",
                     },
                 },
-                { $unwind: { path: "$blogAssignment", preserveNullAndEmptyArrays: true } },
+                { $unwind: "$user" },
                 {
                     $match: {
-                        $or: [
-                            { priv: { $bitsAllSet: PRIV.PRIV_EDIT_SYSTEM } },
-                            { "blogAssignment.role": { $in: visibleRoles.map((r) => r.id) } },
+                        "user._id": { $gt: ANONYMOUS_USER_ID },
+                        "user.priv": { $bitsAllSet: PRIV.PRIV_USER_PROFILE },
+                    },
+                },
+                { $project: { _id: 1, blogAssignment: { _id: "$_id", role: "$role" } } },
+                {
+                    $unionWith: {
+                        coll: UserModel.coll.collectionName,
+                        pipeline: [
+                            {
+                                $match: {
+                                    _id: { $gt: ANONYMOUS_USER_ID },
+                                    priv: { $bitsAllSet: PRIV.PRIV_USER_PROFILE | PRIV.PRIV_EDIT_SYSTEM },
+                                },
+                            },
+                            { $project: { _id: 1 } },
                         ],
                     },
                 },
+                { $group: { _id: "$_id", blogAssignment: { $first: "$blogAssignment" } } },
                 { $sort: { _id: 1 } },
                 {
                     $facet: {

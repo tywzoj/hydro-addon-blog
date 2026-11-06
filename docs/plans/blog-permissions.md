@@ -10,6 +10,57 @@ refactor. Local verification records are retained below. The pull request's
 current-head checks are authoritative for CI lint, unit coverage and real-Hydro
 E2E results; historical local results do not substitute for those checks.
 
+## Follow-up: PR Review Corrections
+
+Status: Completed locally; delivered through PR #9.
+
+- Use Hydro's optional-parameter `convert` mode with its Boolean converter so
+  JSON `false` and `0` remain explicit values. Omitted, null and empty fields
+  retain the existing omission behavior. Native form markers and independent
+  article actions continue to use the same authorization checks.
+- Keep the native user selector and override both `queryItems` and `fetchItems`
+  through its exposed props. Both use the system-domain users API and a
+  blog-specific cache key; the page domain, navigation and sudo return remain
+  unchanged.
+- Start user-list aggregation from indexed visible-role assignments, join only
+  those candidates to eligible profiles, union forced-root profiles, and
+  deduplicate before counting and pagination. Load full users only for the
+  returned page. The forced-root privilege filter may still scan user profiles;
+  this removes directory-wide role joins, not all work proportional to users.
+
+Official source was checked at the existing pinned Hydro revision:
+`framework/framework/decorators.ts` supports optional conversion, and
+`packages/ui-default/components/autocomplete/components/UserSelectAutoComplete.tsx`
+allows both lookup callbacks to be overridden. Installed UI 4.58.5 performs
+selected-user fetching directly; the pinned source batches it. The exposed
+callback override works with both implementations.
+
+Acceptance includes JSON publication/unpinning and omitted-field preservation,
+delegated-manager user lookup under a view-restricted domain, search and
+selected-user API routing, forced/explicit-root deduplication, eligibility
+filtering before pagination, and bounded page hydration.
+
+The selected-user regression restores a form value before native attachment to
+exercise an uncached fetch; selecting a search result alone uses Hydro's cache.
+No authentication, application route or permission outcome is mocked.
+
+The preceding head's CI run `42214419625` passed 14 cases before the 150-second
+suite limit prevented the remaining four from running. The expanded 20-case
+suite now has a 300-second global limit, a 330-second parent-process limit, and
+an eight-minute CI step limit covering startup and cleanup. Individual-test,
+action and navigation limits and zero retries remain unchanged.
+
+Local verification passed lint, 113 UT with coverage, and all 20 E2E cases
+(`test-results/hydro-blog-44292-5c2b4e4b/`). MCP confirmed both system-domain user
+lookup paths, domain-prefixed navigation, a single forced-root row, and persisted
+false flags from a real JSON creation request. The temporary article was deleted
+through the application. No console errors were observed. The manual server was
+refreshed with its existing data restored and matching collection counts.
+
+The tests exercise real MongoDB union/deduplication and page results; no
+large-directory benchmark or standalone whole-project type check is claimed.
+Current-head CI evidence is recorded in the PR checks and review replies.
+
 ## Follow-up: Self-Only Creation
 
 Status: Completed locally; included in the feature branch for PR #9.

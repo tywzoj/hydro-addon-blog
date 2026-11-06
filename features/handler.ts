@@ -27,6 +27,13 @@ import { BlogModel } from "./model";
 import type { BlogContentUpdate, BlogDoc } from "./types";
 import { toTemplate } from "./utils";
 
+// Convert JSON false/0 without treating omitted fields as explicit false.
+const OptionalBoolean = [
+    (value: unknown) => (value === undefined || value === null || value === "" ? undefined : Types.Boolean[0](value)),
+    Types.Boolean[1],
+    "convert",
+] as const;
+
 export const SortKeyMap: Record<SortKey, Partial<Record<keyof BlogDoc, SortDirection>>> = {
     [SortKeys.Views]: { views: -1 },
     [SortKeys.Latest]: { firstPublishAt: -1 },
@@ -138,7 +145,7 @@ class BlogUserPostDetailHandler extends BlogUserPostBaseHandler {
         this.blog.requireLogin();
     }
 
-    @param("star", Types.Boolean)
+    @param("star", OptionalBoolean)
     async postStar(_, star: boolean) {
         this.post();
         this.blog.require(BlogPermissions.STAR);
@@ -165,8 +172,8 @@ class BlogUserPostCreateHandler extends BlogUserBaseHandler {
 
     @param("title", Types.Title)
     @param("content", Types.Content)
-    @param("draft", Types.Boolean, true)
-    @param("pin", Types.Boolean, true)
+    @param("draft", OptionalBoolean)
+    @param("pin", OptionalBoolean)
     @param("draft_present", Types.Boolean, true)
     async postSubmit(_, title: string, content: string, draft?: boolean, pin = false, draftPresent = false) {
         draft ??= !draftPresent;
@@ -202,8 +209,8 @@ class BlogUserPostEditHandler extends BlogUserPostBaseHandler {
 
     @param("title", Types.Title)
     @param("content", Types.Content)
-    @param("draft", Types.Boolean, true)
-    @param("pin", Types.Boolean, true)
+    @param("draft", OptionalBoolean)
+    @param("pin", OptionalBoolean)
     @param("draft_present", Types.Boolean, true)
     @param("pin_present", Types.Boolean, true)
     async postSubmit(
@@ -242,14 +249,14 @@ class BlogUserPostEditHandler extends BlogUserPostBaseHandler {
         });
     }
 
-    @param("pin", Types.Boolean)
+    @param("pin", OptionalBoolean)
     async postPin(_, pin: boolean) {
         this.prepare();
         this.blog.requireAction(BlogActions.Pin, this.ddoc.owner);
         await this.update({ pin });
     }
 
-    @param("draft", Types.Boolean)
+    @param("draft", OptionalBoolean)
     async postPublish(_, draft: boolean) {
         this.prepare();
         this.blog.requireAction(draft ? BlogActions.Unpublish : BlogActions.Publish, this.ddoc.owner);

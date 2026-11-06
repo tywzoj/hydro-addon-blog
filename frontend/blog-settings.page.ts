@@ -9,6 +9,7 @@ import {
     request,
     UserSelectAutoComplete,
 } from "@hydrooj/ui-default";
+import type { Udoc } from "hydrooj/src/interface";
 
 import type { BlogOperation } from "../features/constants";
 import {
@@ -16,6 +17,7 @@ import {
     BlogMessages,
     BlogOperations,
     BlogRoles,
+    SYSTEM_DOMAIN,
     TEMPLATE_BLOG_SETTINGS_ROLES,
     TEMPLATE_BLOG_SETTINGS_USERS,
 } from "../features/constants";
@@ -23,6 +25,15 @@ import {
 const DIALOG_CONFIRM_ACTION = "ok" as const;
 const DIALOG_SHOWN_EVENT = "vjDomDialogShown";
 const ROLE_SELECT = 'select[name="role"]';
+
+async function findUsers(args: { search: string } | { auto: string[] }) {
+    const result = (await request.post(`/d/${SYSTEM_DOMAIN}/api/users`, {
+        args,
+        projection: ["_id", "uname", "displayName", "avatarUrl"],
+    })) as Udoc[] & { error?: string };
+    if (result.error) throw new Error(result.error);
+    return result;
+}
 
 function showError(error: unknown) {
     Notification.error(error instanceof Error ? error.message : String(error));
@@ -74,9 +85,19 @@ addPage(
                 return true;
             },
         });
-        const userSelector = new UserSelectAutoComplete<true>(assignmentDialog.$dom.find('[name="uids"]'), {
-            multi: true,
-        });
+        const userSelectorOptions = {
+            multi: true as const,
+            props: {
+                multi: true,
+                cacheKey: "blog-system-user",
+                queryItems: (search: string) => findUsers({ search }),
+                fetchItems: (auto: string[]) => findUsers({ auto }),
+            },
+        };
+        const userSelector = new UserSelectAutoComplete<true>(
+            assignmentDialog.$dom.find('[name="uids"]'),
+            userSelectorOptions,
+        );
         assignmentDialog.$dom.on(DIALOG_SHOWN_EVENT, () => userSelector.focus());
 
         async function assignUserRoles() {

@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 
 import type { BlogPermission } from "../../features/permission";
+import type { BlogDoc } from "../../features/types";
 import { accounts } from "./accounts";
 import { createPost, expect, fillPost, test } from "./fixtures";
 
@@ -291,6 +292,88 @@ test("visible unchecked controls submit false without changing omitted field sem
     await fillPost(page, "Published by unchecked draft", "Explicit checkbox update", false);
     await Promise.all([page.waitForURL(path), page.getByRole("button", { name: /^Update/ }).click()]);
     await expect(page.getByRole("button", { name: "Unpublish", exact: true })).toBeVisible();
+});
+
+test("JSON false and zero publish and unpin while omitted fields remain unchanged", async ({ page, db }) => {
+    const posts = db.collection<BlogDoc>("document");
+    for (const value of [false, 0]) {
+        await page.goto("/blog/2");
+        const title = `JSON public creation ${value}`;
+        const created = await page.request.post("/blog/2/create", {
+            headers: { Referer: page.url() },
+            data: { operation: "submit", title, content: "Explicit JSON fields", draft: value, pin: value },
+        });
+        expect(created.ok()).toBe(true);
+        expect(await posts.findOne({ title })).toMatchObject({ draft: false, pin: false });
+
+        const draftTitle = `JSON draft update ${value}`;
+        const path = await createPost(page, draftTitle, true);
+        const update = (data: Record<string, unknown>) =>
+            page.request.post(`${path}/edit`, { headers: { Referer: page.url() }, data });
+        expect((await update({ operation: "pin", pin: true })).ok()).toBe(true);
+        const content = "Omitted flags must be preserved";
+        expect((await update({ operation: "submit", title: draftTitle, content })).ok()).toBe(true);
+        expect(await posts.findOne({ title: draftTitle })).toMatchObject({ draft: true, pin: true });
+        expect((await update({ operation: "submit", title: draftTitle, content, draft: value, pin: value })).ok()).toBe(
+            true,
+        );
+        expect(await posts.findOne({ title: draftTitle })).toMatchObject({ draft: false, pin: false });
+    }
+});
+
+test("delegated managers search global users from restricted domains and role lists deduplicate root", async ({
+    editor,
+    viewer,
+    db,
+}) => {
+    await createRole(editor, "lookupmanager");
+    await setPermissions(editor, "lookupmanager", ["ACCESS", "MANAGE_SETTINGS"]);
+    await assignRole(editor, accounts.viewer.name, "lookupmanager");
+    await settingsPage(editor, "/blog/settings/users");
+    const forcedAssignment = await editor.request.post("/blog/settings/users", {
+        headers: { Referer: editor.url() },
+        form: { operation: "assign", uid: String(accounts.editor.id), role: "root" },
+    });
+    expect(forcedAssignment.ok()).toBe(true);
+    expect((await viewer.request.get("/d/blogrestricted/p")).status()).toBe(403);
+    const lookups: { path: string; args: { search?: string; auto?: string[] } }[] = [];
+    viewer.on("request", (request) => {
+        const path = new URL(request.url()).pathname;
+        if (path.endsWith("/api/users")) {
+            const data = request.postDataJSON() as { args: { search?: string; auto?: string[] } };
+            lookups.push({ path, args: data.args });
+        }
+    });
+    // Restore a form value before the native selector attaches, exercising its uncached fetch path.
+    await viewer.addInitScript((uid) => {
+        document.addEventListener("DOMContentLoaded", () => {
+            const input = document.querySelector<HTMLInputElement>('input[name="uids"]');
+            if (input) input.value = String(uid);
+        });
+    }, accounts.author.id);
+    await settingsPage(viewer, "/d/blogrestricted/blog/settings/users", accounts.viewer.password);
+    await expect
+        .poll(() => lookups.some((lookup) => lookup.args.auto?.includes(String(accounts.author.id))))
+        .toBe(true);
+    await viewer.getByRole("button", { name: "Assign User Roles", exact: true }).click();
+    const dialog = viewer.locator(".dialog:visible");
+    await dialog.locator(".autocomplete-wrapper input").fill(accounts.author.name);
+    await dialog.locator(".user-select__uname").filter({ hasText: accounts.author.name }).click();
+    await dialog.locator("select").selectOption("lookupmanager");
+    await Promise.all([viewer.waitForNavigation(), dialog.locator('[data-action="ok"]').click()]);
+    await expect(viewer).toHaveURL(/\/d\/blogrestricted\/blog\/settings\/users$/);
+    await expect(viewer.locator("#menu-item-blog_settings_users .menu__link")).toHaveAttribute("aria-current", "page");
+    await expect(viewer.locator(".domain-users tbody tr[data-uid]")).toHaveCount(3);
+    await expect(viewer.locator('tr[data-uid="4"]')).toHaveCount(1);
+    await expect(viewer.locator('tr[data-uid="4"] select')).toBeDisabled();
+    expect(lookups.some((lookup) => lookup.args.search === accounts.author.name)).toBe(true);
+    expect(lookups.some((lookup) => lookup.args.auto?.includes(String(accounts.author.id)))).toBe(true);
+    expect(lookups.every((lookup) => lookup.path === "/d/system/api/users")).toBe(true);
+    expect(await db.collection("blog.user").countDocuments({ _id: accounts.editor.id })).toBe(1);
+    await viewer.goto("/d/blogrestricted/blog/settings/users?page=2");
+    await expect(viewer.locator(".domain-users tbody tr[data-uid]")).toHaveCount(0);
+    await resetUser(editor, accounts.author.id);
+    await resetUser(editor, accounts.viewer.id);
 });
 
 test("native role controls exclude guest and reset assignments without a remove-user action", async ({

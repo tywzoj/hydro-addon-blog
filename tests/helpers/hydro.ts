@@ -54,7 +54,7 @@ export function makeUser(id = 1, privileges = PRIV.PRIV_USER_PROFILE) {
 }
 
 export const UserModel = {
-    coll: { aggregate: vi.fn() },
+    coll: { collectionName: "user", aggregate: vi.fn() },
     getById: vi.fn<(...args: unknown[]) => Promise<ReturnType<typeof makeUser> | null>>(),
     getByUname: vi.fn<(...args: unknown[]) => Promise<ReturnType<typeof makeUser> | null>>(),
     getList: vi.fn<(...args: unknown[]) => Promise<Record<number, ReturnType<typeof makeUser>>>>(),

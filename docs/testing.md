@@ -56,7 +56,7 @@ yarn test:e2e --grep "publication"
 
 The [verification-environment guide](verification-environment.md#local-runtime-boundary) documents Node/Docker/browser prerequisites, local development, writable paths, timeouts, evidence, and cleanup. The launcher owns a local Hydro child and only containerizes MongoDB. It never accepts a production or shared database.
 
-Playwright runs three real-form authentication setup cases and fifteen business tests with independent author, viewer, and system-editor sessions. The original six scenarios are:
+Playwright runs three real-form authentication setup cases and seventeen business tests with independent author, viewer, and system-editor sessions. The original six scenarios are:
 
 | Scenario | Evidence | Related smoke cases |
 | --- | --- | --- |
@@ -92,6 +92,14 @@ assignments falling back to default for authenticated users. A fresh-session cas
 verifies that restricted-domain settings route sudo through the global identity
 entry and return to the original page. Article submission waits for DOM readiness
 and then checks application state rather than waiting for external avatars.
+
+Review regressions send actual JSON `false` and `0` for creation and updates,
+checking publication, unpinning and omission behavior. A delegated manager
+without restricted-domain view permission searches and selects a user through
+the system API, while navigation stays domain-prefixed. The same scenario checks
+that an explicitly assigned, forced-root user appears once and that a later empty
+page remains empty. UT checks candidate filtering before joins, union
+deduplication before pagination, and page-only profile hydration.
 
 The suite uses one worker, no automatic retries, isolated browser contexts, focused-test rejection, and explicit timeouts. Empty selections and real assertion failures return nonzero exits. Keep fixtures unique within the run and promote new relevant failures into the suite. It does not establish every sorting/pagination outcome, all locales, or concurrent view deduplication. MCP checks supplement automated coverage for localized and narrow-screen settings UI.
 

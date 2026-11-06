@@ -17,7 +17,7 @@ import { makeUser, OplogModel, PRIV, UserModel, ValidationError } from "../helpe
 let settings: BlogSettings;
 const findOne = vi.fn();
 const updateOne = vi.fn();
-const assignments = { findOne: vi.fn(), find: vi.fn(), bulkWrite: vi.fn() };
+const assignments = { findOne: vi.fn(), find: vi.fn(), bulkWrite: vi.fn(), aggregate: vi.fn() };
 
 beforeEach(() => {
     vi.resetAllMocks();
@@ -131,19 +131,61 @@ describe("blog settings persistence", () => {
 
     it("filters default and guest before pagination and includes forced-root users", async () => {
         settings.roles.push({ id: "custom-id", name: "custom", permissions: "1" });
-        UserModel.coll.aggregate.mockReturnValue({ toArray: () => Promise.resolve([{ entries: [], count: [] }]) });
+        assignments.aggregate.mockReturnValue({ toArray: () => Promise.resolve([{ entries: [], count: [] }]) });
         UserModel.getList.mockResolvedValue({});
         expect(await BlogSettingsModel.listUsers(2)).toEqual({ entries: [], count: 0 });
-        const pipeline = UserModel.coll.aggregate.mock.calls[0][0] as Record<string, unknown>[];
+        const pipeline = assignments.aggregate.mock.calls[0][0] as Record<string, unknown>[];
+        expect(pipeline[0]).toEqual({ $match: { role: { $in: ["root", "custom-id"] } } });
+        expect(pipeline[1]).toEqual({
+            $lookup: { from: "user", localField: "_id", foreignField: "_id", as: "user" },
+        });
         expect(pipeline[3]).toEqual({
             $match: {
-                $or: [
-                    { priv: { $bitsAllSet: PRIV.PRIV_EDIT_SYSTEM } },
-                    { "blogAssignment.role": { $in: ["root", "custom-id"] } },
+                "user._id": { $gt: 0 },
+                "user.priv": { $bitsAllSet: PRIV.PRIV_USER_PROFILE },
+            },
+        });
+        expect(pipeline[5]).toEqual({
+            $unionWith: {
+                coll: "user",
+                pipeline: [
+                    {
+                        $match: {
+                            _id: { $gt: 0 },
+                            priv: { $bitsAllSet: PRIV.PRIV_USER_PROFILE | PRIV.PRIV_EDIT_SYSTEM },
+                        },
+                    },
+                    { $project: { _id: 1 } },
                 ],
             },
         });
-        expect(pipeline[5]).toMatchObject({ $facet: { entries: [{ $skip: 20 }, { $limit: 20 }, expect.anything()] } });
+        expect(pipeline[6]).toEqual({ $group: { _id: "$_id", blogAssignment: { $first: "$blogAssignment" } } });
+        expect(pipeline[8]).toMatchObject({ $facet: { entries: [{ $skip: 20 }, { $limit: 20 }, expect.anything()] } });
+        expect(UserModel.coll.aggregate).not.toHaveBeenCalled();
+    });
+
+    it("loads profiles only for the paginated results and preserves forced root", async () => {
+        settings.roles.push({ id: "custom-id", name: "reviewer", permissions: "1" });
+        assignments.aggregate.mockReturnValue({
+            toArray: () =>
+                Promise.resolve([
+                    {
+                        entries: [{ _id: 2, blogAssignment: { _id: 2, role: "custom-id" } }, { _id: 4 }],
+                        count: [{ total: 25 }],
+                    },
+                ]),
+        });
+        UserModel.getList.mockResolvedValue({
+            2: makeUser(2),
+            4: makeUser(4, PRIV.PRIV_USER_PROFILE | PRIV.PRIV_EDIT_SYSTEM),
+        });
+        const result = await BlogSettingsModel.listUsers(2);
+        expect(UserModel.getList).toHaveBeenCalledExactlyOnceWith("system", [2, 4]);
+        expect(result.count).toBe(25);
+        expect(result.entries.map(({ user, role, forced }) => ({ uid: user._id, role, forced }))).toEqual([
+            { uid: 2, role: "reviewer", forced: false },
+            { uid: 4, role: "root", forced: true },
+        ]);
     });
 });
 

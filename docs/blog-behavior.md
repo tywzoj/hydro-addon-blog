@@ -51,6 +51,7 @@ Source: [list handlers and sort map](../features/handler.ts), [model queries and
 - List reads use `getMulti`, not the single-post fallback. Do not assume missing publication fields are backfilled or sorted as if persisted.
 - The new-post form initially checks Draft. An omitted draft field defaults to draft on creation; the visible-checkbox marker makes an explicitly unchecked control publish instead.
 - Updates preserve omitted draft/pin fields. Visible-checkbox markers distinguish unchecking a control from not supplying it.
+- JSON `false` and numeric `0` are explicit false values, not omitted fields. Article Boolean parameters reuse Hydro conversion while preserving omission defaults.
 - Content edits that stay published require edit and publish permissions. Publishing, withdrawing, pinning, and deleting have independent controls and do not imply permission to edit content.
 - Checked edits compare the loaded update timestamp and draft state before writing, and advance the timestamp monotonically. Stale writes fail rather than changing content whose publication state has changed.
 
@@ -98,12 +99,14 @@ Source: [write handlers](../features/handler.ts), [model deletion and reply help
   and append built-ins; earlier builtin-configuration history is not reconstructed.
 - Custom role IDs are immutable. Deletion retires the ID and makes affected assignments resolve to default. Recreating the same name never reactivates old assignments; stale assignment records may remain as harmless references to retired IDs.
 - The user table filters out effective guest/default users before counting/pagination, includes forced root and does not duplicate root entries. The native user selector can still assign a role to an unlisted user.
+- The user-list query begins with indexed visible-role assignments, joins eligible profiles, unions forced-root users, and deduplicates before sorting, counting and pagination. It does not join every profile to role assignments. Only the returned page's full profiles are loaded; forced-root privilege filtering may still scan profiles.
 - Role assignment adapts the native domain-user controls: header Assign User Roles dialog,
   multi-user selection, inline role dropdowns, checkbox selection, batch assignment,
   and resetting a role by selecting default. There is no remove-user action.
   Guest is excluded from every assignment control and rejected by both assignment APIs,
   while its anonymous-access permissions remain configurable in the matrix. Forced
   root rows are read-only; single-user assignment remains API-compatible.
+- Both native user search and selected-user fetching use the system-domain API, so a delegated blog manager can assign users from a restricted domain without domain-view permission. Page navigation remains in the original domain.
 - Role management uses a header creation dialog and confirmed batch deletion.
   Both batch APIs validate all selected targets before persistence; no
   cross-document transaction guarantee is added.

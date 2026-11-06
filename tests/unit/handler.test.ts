@@ -266,6 +266,43 @@ describe("create, edit, and delete contracts", () => {
         );
     });
 
+    it.each([false, 0])("preserves explicit JSON %s when creating a published article", async (value) => {
+        const handler = createHandler("/blog/:uid/create");
+        DocumentModel.add.mockResolvedValue(handler.ddoc.docId);
+        await handler.postSubmit({ ...submit, draft: value, pin: value });
+        expect(DocumentModel.add.mock.calls[0][7]).toMatchObject({ draft: false, pin: false });
+    });
+
+    it.each([false, 0])("enforces publication permission for explicit JSON %s", async (value) => {
+        const handler = createHandler("/blog/:uid/create");
+        handler.blog = new BlogPolicy(handler.user, "restricted", BLOG_DEFAULT & ~BLOG_PERM.PUBLISH_OWN);
+        await expect(handler.postSubmit({ ...submit, draft: value })).rejects.toBeInstanceOf(BlogPermissionError);
+        expect(DocumentModel.add).not.toHaveBeenCalled();
+    });
+
+    it.each([false, 0])("publishes and unpins existing articles with explicit JSON %s", async (value) => {
+        const handler = createHandler("/blog/:uid/:did/edit");
+        handler.ddoc.draft = true;
+        handler.ddoc.pin = true;
+        await handler.postSubmit({ ...submit, draft: value, pin: value });
+        expect(DocumentModel.coll.findOneAndUpdate).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.objectContaining({ $set: expect.objectContaining({ draft: false, pin: false }) as unknown }),
+            expect.anything(),
+        );
+    });
+
+    it.each([false, 0])("unpins through the metadata action with explicit JSON %s", async (value) => {
+        const handler = createHandler("/blog/:uid/:did/edit");
+        handler.ddoc.pin = true;
+        await handler.postPin({ domainId: "system", pin: value });
+        expect(DocumentModel.coll.findOneAndUpdate).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.objectContaining({ $set: expect.objectContaining({ pin: false }) as unknown }),
+            expect.anything(),
+        );
+    });
+
     it("treats a visible unchecked draft checkbox as an explicit publication request", async () => {
         const handler = createHandler("/blog/:uid/create");
         DocumentModel.add.mockResolvedValue(handler.ddoc.docId);

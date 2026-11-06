@@ -4,7 +4,12 @@ This is a fork of [Hydro Official Blog Addon](https://github.com/hydro-dev/Hydro
 
 ## Features
 
-TODO
+- Blog home and per-user lists with pagination and sorting by publication time, update time, or views.
+- Post creation and editing with draft and per-user pinning options.
+- Per-user view tracking and star state.
+- Integration with Hydro navigation, user profiles, templates, and localization.
+
+See the [behavior reference](docs/blog-behavior.md) for precise rules and implementation boundaries.
 
 ## Installation
 
@@ -15,12 +20,27 @@ TODO
     cd hydro-addon-blog
     ```
 
-2. Apply the addon to your Hydro instance:
+2. Install addon dependencies using the [development setup instructions](docs/validation.md#environment-and-dependencies).
+
+3. Apply the addon to your Hydro instance:
 
     ```bash
     hydrooj addon add /path/to/hydro-addon-blog
     pm2 restart hydrooj
     ```
+
+The commands above assume an existing Hydro deployment managed by PM2. For development prerequisites, runtime verification, and other deployment considerations, see the [Hydro smoke-testing guide](docs/hydro-smoke-testing.md).
+
+## Development and Project Documentation
+
+Start with [AGENTS.md](AGENTS.md) for repository-wide rules and the documentation index.
+
+- [Project structure](docs/project-structure.md)
+- [Development guidelines and official Hydro references](docs/development.md)
+- [Validation commands and dependency troubleshooting](docs/validation.md)
+- [Testing requirements](docs/testing.md)
+- [Collaboration guidelines](docs/collaboration.md)
+- [Project plans and delivery status](docs/plans/README.md)
 
 ## License
 

@@ -1,0 +1,102 @@
+# Self-Validation Capabilities
+
+## Status
+
+Planned for a dedicated implementation PR. No implementation PR is recorded yet.
+
+The agent-documentation work establishes the requirements; it does not deliver the runner, scripts, fixtures, dependencies, or CI jobs described here. Update this status and the plan index when implementation begins.
+
+## Goal
+
+Give contributors and agents repeatable ways to verify changes locally and in CI, with evidence of behavioral correctness rather than lint alone.
+
+## Current Baseline
+
+Baseline reference: repository revision `d4be3cd`, before the agent-documentation changes. Recheck scripts and CI when starting implementation, and record any changes to this baseline.
+
+- `package.json` provides `lint` and `lint:fix`, but no automated test or dedicated type-check script.
+- PR validation installs dependencies, applies the existing dependency patches, and runs lint.
+- There is no documented automated behavioral test workflow.
+- Runtime verification may require a configured Hydro instance.
+- `yarn.lock` is intentionally ignored; this initiative does not change that policy.
+
+## Scope and Requirements
+
+The implementation PR should establish:
+
+- Documented commands for the checks it introduces, with clear prerequisites and nonzero exit codes on failure.
+- A deliberate type-checking approach compatible with Hydro types and the repository's TypeScript configuration.
+- A minimal test setup and focused regression coverage for selected existing blog behavior.
+- Clear boundaries between isolated tests and checks that require Hydro or persistence.
+- Local and CI execution of the same supported checks, with actionable diagnostics.
+- Documentation that distinguishes available capabilities from optional or still-planned checks.
+
+Exact tooling and initial test cases remain implementation decisions. Do not describe proposed commands as available before they are added.
+
+## Initial Coverage Priorities
+
+These are proposed priorities, not completed tests. Select a small initial set with the highest risk reduction and record the delivered cases. Use the [behavior reference](../blog-behavior.md) to avoid assumptions that exceed the implementation.
+
+| Priority | Candidate | Acceptance scenario | Likely boundary |
+| --- | --- | --- | --- |
+| P0 | Publication timestamps | Draft creation has no first-publication time; first publication sets it; later edits and republishing preserve an existing value. A legacy single-post read supplies its fallback without claiming a database migration. | Model tests with controlled time and a persistence boundary. |
+| P0 | Draft list filtering | Home queries exclude drafts for all viewers. Another user's list excludes drafts for an ordinary viewer, while the owner and a user with `PRIV_EDIT_SYSTEM` retain their list access. | Handler query and permission tests; confirm framework behavior separately. |
+| P0 | Write authorization | An ordinary non-owner cannot create for another user or edit or delete their post; the intended owner and system-privileged paths remain available. | Handler preparation with real permission behavior or a suitable Hydro integration test. |
+| P1 | Sorting and pagination | Supported keys map to descending values; defaults vary by list and viewer; user-list pinning precedes the selected sort; home has no pin precedence; page size is ten. Avoid relying on unspecified tie ordering. | Query construction, plus persistence-backed ordering where available. |
+| P1 | Sequential views and star state | The first eligible read records a view; a later sequential read with recorded status does not increment it. Setting star state updates the current user's status without changing another user's state. | Handler and status persistence boundaries. |
+| P1 | Invalid writes and side effects | Invalid input is rejected before mutation; the create rate limiter and create, edit, and delete log calls are preserved. | Validation and write-path tests; no live rate-limit flooding. |
+| P2 | Runtime and UI smoke checks | Addon loading, templates, profile links, and relevant translated labels work in a disposable Hydro instance. | Documented manual checks initially; automate when the environment is available. |
+
+P0 marks the first candidates to assess, not a requirement to build every integration environment in the initial PR. Explain any deferred P0 case and the available fallback evidence.
+
+Do not encode unresolved draft-detail visibility, exact tie ordering, atomic multi-write behavior, or concurrent view deduplication as passing guarantees. Resolve the intended contract before writing tests that would establish a new policy.
+
+## Non-Goals
+
+- Feature development or unrelated refactoring.
+- Comprehensive coverage of every existing behavior in the first tooling PR.
+- A framework rewrite or an alternative implementation of Hydro.
+- Tests that require production infrastructure or secrets.
+- Changing the package manager or lockfile policy.
+
+## Proposed Milestones
+
+| Milestone | Deliverable | Completion evidence |
+| --- | --- | --- |
+| Inspect the baseline | Identify suitable test boundaries, Hydro compatibility constraints, and prerequisites for type checking. | Findings and selected approach recorded in the PR and this plan. |
+| Establish checks | Add the selected scripts and minimal test tooling without weakening existing checks. | Commands run locally; representative lint, type, or assertion failures produce nonzero exits for the checks introduced. |
+| Add initial regressions | Cover selected observable blog behavior, including a relevant denial or boundary case. | Tests detect the targeted defect or behavioral mismatch and pass for the correct implementation. |
+| Integrate CI | Run supported checks in PR validation with required setup and cleanup. | The corresponding workflow passes on the PR head, with failure detection verified. |
+| Document and hand off | Update agent guides with actual commands, prerequisites, coverage, and remaining gaps. | Documentation matches delivered scripts and CI; outcomes and follow-up work are retained here. |
+
+## Acceptance Criteria
+
+- A contributor can follow the documented setup and run the delivered checks without undocumented manual preparation.
+- Introduced checks are non-interactive, bounded, and do not leave owned processes or test data behind.
+- The test runner executes meaningful tests and does not silently succeed without discovering them.
+- Behavioral tests are deterministic and do not depend on production data or unrelated external services.
+- CI exercises the same supported checks documented for local use.
+- Required checks fail visibly when their validation fails; optional environment-dependent checks are explicitly labeled.
+- Existing lint, patch application, and runtime behavior are preserved.
+- Remaining gaps are recorded with their impact rather than presented as completed work.
+
+## Validation Approach
+
+Use a suitable clean installation or disposable environment to verify setup. Run the supported commands and deliberately introduce temporary, controlled failures to verify the relevant checks reject them, restoring those changes before submission.
+
+For behavioral tests, confirm representative regression assertions fail for the defective behavior and pass for the intended behavior. For checks requiring Hydro or persistence, document the supported environment and isolate owned resources.
+
+Review the workflow for the actual PR head and update the [validation guide](../validation.md) and [testing requirements](../testing.md) with the delivered capabilities.
+
+## Dependencies and Open Decisions
+
+- Select a test runner and fixture approach based on the existing Node.js, TypeScript, and Hydro integration.
+- Determine whether a standalone type check works with the current configuration; document baseline issues rather than suppressing them to force success.
+- Decide which initial cases can run in isolation and which require a disposable Hydro or database environment.
+- Decide whether environment-dependent integration checks belong in the initial PR or a documented follow-up.
+- Confirm intended direct-link draft visibility before introducing a privacy guarantee beyond list filtering. This is a product-policy decision, not a test-runner choice.
+- Decide whether concurrent view deduplication, deterministic tie sorting, or atomic multi-write behavior need separately scoped changes; do not silently add those guarantees in the tooling PR.
+
+## Delivery Record
+
+No implementation PR or completed milestone is recorded yet. Add the implementation PR, decisions, verification evidence, delivered coverage, and remaining follow-up work as the initiative progresses.

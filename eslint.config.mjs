@@ -79,5 +79,29 @@ export default defineConfig(
             "@typescript-eslint/prefer-as-const": "error",
         },
     },
+    {
+        files: ["index.ts", "features/**/*.ts", "frontend/**/*.ts", "tests/unit/**/*.ts", "tests/helpers/fixtures.ts"],
+        rules: {
+            "no-restricted-imports": [
+                "error",
+                {
+                    paths: [
+                        {
+                            name: "mongodb",
+                            allowTypeImports: true,
+                            message: "Import runtime MongoDB values from hydrooj; mongodb imports must be type-only.",
+                        },
+                    ],
+                    patterns: [
+                        {
+                            group: ["mongodb"],
+                            importNames: ["Filter", "ObjectId"],
+                            message: "Import Filter and ObjectId from hydrooj, including type-only imports.",
+                        },
+                    ],
+                },
+            ],
+        },
+    },
     { ignores: IGNORED_FILES },
 );

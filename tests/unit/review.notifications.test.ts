@@ -1,5 +1,5 @@
 import type { Context, User } from "hydrooj";
-import { ObjectId } from "mongodb";
+import { ObjectId } from "hydrooj";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BLOG_PERM, DEFAULT_REVIEW_SETTINGS } from "../../features/constants";

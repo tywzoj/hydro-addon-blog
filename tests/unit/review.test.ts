@@ -1,6 +1,6 @@
 import type { Context } from "hydrooj";
+import { ObjectId } from "hydrooj";
 import type { Collection } from "mongodb";
-import { ObjectId } from "mongodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {

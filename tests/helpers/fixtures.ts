@@ -1,4 +1,4 @@
-import { ObjectId } from "mongodb";
+import { ObjectId } from "hydrooj";
 
 import type { BlogDoc } from "../../features/types";
 

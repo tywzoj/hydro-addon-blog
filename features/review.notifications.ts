@@ -1,9 +1,8 @@
 import { randomUUID } from "node:crypto";
 
-import type { Context, ObjectId, User } from "hydrooj";
-import { DocumentModel, Logger, PRIV, ScheduleModel, SystemModel, UserModel } from "hydrooj";
+import type { Context, User } from "hydrooj";
+import { DocumentModel, Logger, ObjectId, PRIV, ScheduleModel, SystemModel, UserModel } from "hydrooj";
 import type { Collection } from "mongodb";
-import { ObjectId as MongoObjectId } from "mongodb";
 
 import {
     BlogCollections,
@@ -47,7 +46,7 @@ export class BlogReviewNotifications {
     async init() {
         await this.runtime.updateOne(
             { _id: REVIEW_RUNTIME_ID },
-            { $setOnInsert: { taskId: new MongoObjectId(), configRevision: -1, nextSummaryAt: new Date() } },
+            { $setOnInsert: { taskId: new ObjectId(), configRevision: -1, nextSummaryAt: new Date() } },
             { upsert: true },
         );
         const state = (await this.runtime.findOne({ _id: REVIEW_RUNTIME_ID }))!;

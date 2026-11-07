@@ -303,6 +303,29 @@ test("review before publication enforces reviewer-only access, approval, comment
     ).toBe(2);
 });
 
+test("pending withdrawal remains available to delegated non-owners and root", async ({ page, editor, viewer, db }) => {
+    await configure(editor, "before");
+    await reviewerRole(editor, ["ACCESS", "VIEW_DRAFT_OTHERS", "UNPUBLISH_OTHERS"]);
+    const path = await makePost(page, "Delegated pending withdrawal");
+    for (const actor of [viewer, editor]) {
+        await actor.goto(path, navigation);
+        const json = await actor.request.get(path, { headers: { Accept: "application/json" } });
+        expect(await json.json()).not.toHaveProperty("ddoc.reviewPending");
+        await expect(actor.getByRole("button", { name: "Submit for review", exact: true })).toHaveCount(0);
+        await actor.getByRole("button", { name: "Withdraw from review", exact: true }).click();
+        await expect(actor.locator(".dialog:visible")).toContainText("any pending review will be cancelled");
+        await actor.locator('.dialog:visible [data-action="no"]').click();
+        await expect(actor.locator(".dialog:visible")).toHaveCount(0);
+        expect((await postDoc(db, path)).reviewPending).toBe(true);
+        await Promise.all([
+            actor.waitForNavigation(navigation),
+            confirmAction(actor, actor.getByRole("button", { name: "Withdraw from review", exact: true })),
+        ]);
+        expect(await postDoc(db, path)).toMatchObject({ draft: true, reviewPending: false, requiresReview: true });
+        if (actor === viewer) expect((await publication(page, path, false)).ok()).toBe(true);
+    }
+});
+
 test("disabling review confirms automatic approval and hides review controls with accurate publication text", async ({
     page,
     editor,

@@ -101,7 +101,7 @@ describe("approval when disabling review", () => {
             Promise.resolve({ ...doc, draft: false, reviewPending: false }),
         );
         const notify = vi.fn();
-        expect(await BlogReviewModel.approvePending(9, notify)).toBe(101);
+        expect(await BlogReviewModel.approvePending(9, new Date(), notify)).toBe(101);
         expect(notify).toHaveBeenCalledTimes(101);
         expect(DocumentModel.getMulti.mock.calls[2][2]).toMatchObject({
             docId: { $gt: docs[99].docId, $lte: docs[100].docId },
@@ -122,7 +122,7 @@ describe("approval when disabling review", () => {
             });
             return Promise.resolve();
         });
-        expect(await BlogReviewModel.approvePending(9, notify)).toBe(1);
+        expect(await BlogReviewModel.approvePending(9, new Date(), notify)).toBe(1);
         expect(notify).toHaveBeenCalledOnce();
         expect(receipts.size).toBe(1);
         expect(article?.lastReview?.reviewer).toBe(9);
@@ -133,19 +133,20 @@ describe("approval when disabling review", () => {
         queueOnce();
         const notify = vi.fn();
         await Promise.all([
-            BlogReviewModel.approvePending(9, notify),
+            BlogReviewModel.approvePending(9, new Date(), notify),
             BlogReviewModel.decide(snapshot(), 0, 0, ReviewDecisions.Reject, 8, "Rejected first"),
         ]);
         expect(article).toMatchObject({ draft: true, reviewPending: false, rejectionCount: 1 });
         expect(notify).not.toHaveBeenCalled();
     });
 
-    it("does not approve an article newly requeued after the sweep started", async () => {
+    it("excludes later submissions even when the sweep starts after them", async () => {
+        const cutoff = new Date(Date.now() - 60_000);
         article = makeBlog({ reviewPending: true, requiresReview: true });
         queueOnce();
-        article.reviewQueuedAt = new Date(Date.now() + 60_000);
+        article.reviewQueuedAt = new Date();
         const notify = vi.fn();
-        expect(await BlogReviewModel.approvePending(9, notify)).toBe(0);
+        expect(await BlogReviewModel.approvePending(9, cutoff, notify)).toBe(0);
         expect(article.reviewPending).toBe(true);
         expect(notify).not.toHaveBeenCalled();
         expect(DocumentModel.coll.findOneAndUpdate).not.toHaveBeenCalled();
@@ -159,14 +160,14 @@ describe("approval when disabling review", () => {
             return Promise.resolve(null);
         });
         const notify = vi.fn();
-        expect(await BlogReviewModel.approvePending(9, notify)).toBe(1);
+        expect(await BlogReviewModel.approvePending(9, new Date(), notify)).toBe(1);
         expect(article?.lastReview?.version).toBe(1);
         expect(notify).toHaveBeenCalledOnce();
 
         article = makeBlog({ reviewPending: true, requiresReview: true });
         queueOnce();
         DocumentModel.coll.findOneAndUpdate.mockClear().mockResolvedValue(null);
-        await expect(BlogReviewModel.approvePending(9, notify)).rejects.toBeInstanceOf(ValidationError);
+        await expect(BlogReviewModel.approvePending(9, new Date(), notify)).rejects.toBeInstanceOf(ValidationError);
         expect(DocumentModel.coll.findOneAndUpdate).toHaveBeenCalledTimes(3);
     });
 
@@ -174,10 +175,10 @@ describe("approval when disabling review", () => {
         article = makeBlog({ reviewPending: true, requiresReview: true });
         queueOnce();
         const notify = vi.fn().mockRejectedValue(new Error("notice failed"));
-        await expect(BlogReviewModel.approvePending(9, notify)).rejects.toThrow("notice failed");
+        await expect(BlogReviewModel.approvePending(9, new Date(), notify)).rejects.toThrow("notice failed");
         expect(article?.reviewPending).toBe(false);
         queueOnce();
-        expect(await BlogReviewModel.approvePending(9, notify)).toBe(0);
+        expect(await BlogReviewModel.approvePending(9, new Date(), notify)).toBe(0);
         expect(notify).toHaveBeenCalledOnce();
     });
 });

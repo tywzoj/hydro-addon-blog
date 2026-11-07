@@ -86,6 +86,10 @@ Source: [list handlers and sort map](../features/handler.ts), [model queries and
 - JSON `false` and numeric `0` are explicit false values, not omitted fields. Article Boolean parameters reuse Hydro conversion while preserving omission defaults.
 - Independent publish, pin and star actions require an explicit state value. Missing, null or empty states are rejected before persistence; only content submissions support omitted draft/pin fields.
 - Content edits that stay published require edit and publish permissions. Publishing, withdrawing, pinning, and deleting have independent controls and do not imply permission to edit content.
+- Pending-withdrawal controls use an authorized flag derived from the original
+  article, not the private-data projection. Delegated users with draft-read and
+  unpublish permission can withdraw another author's pending draft without
+  receiving its private review metadata or requiring publication permission.
 - Article edits compare update timestamp, draft state, write revision, and empty
   pending-report slot before writing, advancing revisions/timestamps monotonically.
   Stale writes fail instead of overwriting newer publication/review state.
@@ -180,6 +184,8 @@ Source: [write handlers](../features/handler.ts), [model deletion and reply help
   grants report-version immunity where appropriate, and emits author notices and
   per-article Oplog entries. Settings authority authorizes this automatic approval
   without granting general reviewer access.
+  The queue cutoff is captured before committing settings, so a delayed audit
+  cannot extend the sweep to submissions under a later review configuration.
 - Concurrent completed decisions, withdrawals and deletions are not overridden.
   Stale pending edits are reloaded with bounded retries. Settings, approvals,
   audit and messages remain separate native writes: a failure is reported, not

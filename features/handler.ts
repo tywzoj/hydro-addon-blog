@@ -153,13 +153,15 @@ class BlogUserPostDetailHandler extends BlogCommentHandler {
             this.ddoc.views++; // Increment the view count in the ddoc to reflect the change
         }
 
+        const controls = this.blog.controls(this.ddoc);
         this.response.template = toTemplate(TEMPLATE_BLOG_DETAIL);
         this.response.body = {
             ddoc: articleForReader(this.ddoc, this.user._id, this.blog.canReview()),
             dsdoc,
             udoc,
             star: dsdoc?.star ?? false,
-            controls: this.blog.controls(this.ddoc),
+            controls,
+            canWithdrawReview: controls.unpublish && !!this.ddoc.reviewPending,
             canReport: canReport && !reported,
             reportVersion: canReport ? version : undefined,
             canReview: review.mode !== ReviewModes.Disabled && this.blog.canReview() && !!this.ddoc.reviewPending,

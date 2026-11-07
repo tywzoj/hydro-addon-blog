@@ -374,7 +374,7 @@ describe("settings handler boundaries", () => {
     it("uses settings authority for automatic approval, audit and native author notices", async () => {
         const previous = makeBlog({ reviewPending: true, requiresReview: true });
         const next = makeBlog({ draft: false, reviewPending: false, requiresReview: false });
-        vi.spyOn(BlogReviewModel, "approvePending").mockImplementation(async (_uid, notify) => {
+        vi.spyOn(BlogReviewModel, "approvePending").mockImplementation(async (_uid, _cutoff, notify) => {
             await notify(previous, next);
             return 1;
         });
@@ -395,6 +395,28 @@ describe("settings handler boundaries", () => {
         );
         expect(MessageModel.send).toHaveBeenCalledOnce();
         expect(h.back).toHaveBeenCalledWith({ approved: 1 });
+    });
+
+    it("captures the queue boundary before settings and delayed audit writes", async () => {
+        const startedAt = new Date("2026-11-07T10:00:00Z");
+        vi.useFakeTimers();
+        try {
+            vi.setSystemTime(startedAt);
+            updateOne.mockImplementation(() => {
+                vi.setSystemTime(new Date(startedAt.getTime() + 1000));
+                return Promise.resolve({ matchedCount: 1 });
+            });
+            OplogModel.log.mockImplementationOnce(() => {
+                vi.setSystemTime(new Date(startedAt.getTime() + 60_000));
+                return Promise.resolve();
+            });
+            const approve = vi.spyOn(BlogReviewModel, "approvePending").mockResolvedValue(0);
+            const h = handler("blog_settings");
+            await dispatchHandler(h, "post", () => h.postReviewSettings({ ...disabled, confirmDisable: "true" }));
+            expect(approve).toHaveBeenCalledWith(h.user._id, startedAt, expect.any(Function));
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it("surfaces partial batch failure instead of reporting settings success", async () => {

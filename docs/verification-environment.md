@@ -104,10 +104,10 @@ On 2026-11-06, MCP initialization and blank-page navigation were first verified.
 
 ## Automated E2E and Agent Checks
 
-`yarn test:e2e` executes six real-login setup cases and thirty-five business scenarios:
+`yarn test:e2e` executes six real-login setup cases and thirty-six business scenarios:
 the original article/frontend regressions plus global role/settings management,
 fine-grained permissions, self-only creation even for root, guest access, domain
-independence, seven two-level comment/like/moderation scenarios, and seven article
+independence, seven two-level comment/like/moderation scenarios, and eight article
 review/report/reminder cases, plus critical-action confirmation and stale-catalog
 localization coverage. The launcher also
 creates a synthetic domain whose guest/default domain permissions are zero, to

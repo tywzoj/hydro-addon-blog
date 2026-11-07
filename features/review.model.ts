@@ -282,8 +282,11 @@ export class BlogReviewModel {
         });
     }
 
-    static async approvePending(uid: number, onApproved: (previous: BlogDoc, next: BlogDoc) => Promise<void>) {
-        const cutoff = new Date();
+    static async approvePending(
+        uid: number,
+        cutoff: Date,
+        onApproved: (previous: BlogDoc, next: BlogDoc) => Promise<void>,
+    ) {
         const queued: Filter<BlogDoc> = {
             reviewPending: true,
             $or: [{ reviewQueuedAt: { $lte: cutoff } }, { reviewQueuedAt: { $exists: false } }],

@@ -95,6 +95,7 @@ class BlogSettingsHandler extends BlogBaseHandler {
         if (mode === ReviewModes.Disabled && !confirmDisable) {
             throw new ValidationError("confirmDisable", null, BlogConfirmMessages.DisableReview);
         }
+        const queueCutoff = new Date();
         const change = await BlogSettingsModel.setReview(
             { mode, reportLimit, rejectionLimit, reminders, intervalMinutes },
             revision,
@@ -102,7 +103,7 @@ class BlogSettingsHandler extends BlogBaseHandler {
         await OplogModel.log(this, BlogAuditEvents.ReviewSettings, change);
         const approved =
             mode === ReviewModes.Disabled
-                ? await BlogReviewModel.approvePending(this.user._id, async (previous, next) => {
+                ? await BlogReviewModel.approvePending(this.user._id, queueCutoff, async (previous, next) => {
                       await OplogModel.log(this, BlogAuditEvents.Review, {
                           ...BlogReviewModel.audit(next),
                           previous: BlogReviewModel.audit(previous),

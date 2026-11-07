@@ -737,8 +737,9 @@ warning explains publication of all pending articles (including reported ones),
 counter resets, author notices and irreversible consequences. Cancelling leaves
 both settings and articles unchanged.
 
-After committing settings and their audit, a keyset-paged sweep captures an
-enqueue-time cutoff and the initial greatest queued article ID as bounds, and
+Before committing settings, the request captures its enqueue-time cutoff.
+After committing settings and their audit, a keyset-paged sweep uses that cutoff
+and the initial greatest eligible queued article ID as bounds, and
 processes at most 100 records per batch. A freshly requeued article beyond that
 cutoff is not approved by the earlier sweep; legacy missing enqueue times remain
 eligible. Each entry is freshly read and approved through the existing
@@ -838,6 +839,26 @@ After the fix, lint/type checks and `yarn test:coverage` passed (245 tests).
 cases in `hydro-blog-92933-65a3d80d`, exercising both modifiers, exact text
 preservation, cancellation, single submission and ordinary publication.
 A new exact-head CI run is required before recording successful PR validation.
+
+### PR Review Feedback
+
+Two review findings on PR #11 were confirmed against the current code:
+
+- The detail template used projected `reviewPending`, which is deliberately
+  omitted for every non-owner. A server-derived `canWithdrawReview` now combines
+  the original pending state with authorized unpublish capability, drives both
+  the button and confirmation metadata, and leaves private-data projection intact.
+  UT covers authorized/unauthorized non-owners; real-Hydro E2E covers withdrawal
+  by a delegate without publication/review grants and by root.
+- The automatic-approval cutoff was created after the settings audit await.
+  It is now captured before the settings write and passed explicitly to the
+  sweep. Delayed-write/audit UT verifies the capture point; model UT excludes an
+  article submitted after that point even if the sweep starts later.
+
+Lint, type checking and coverage passed (249 unit tests).
+`yarn test:e2e --grep 'pending withdrawal|disabling review'` passed eight cases
+in `hydro-blog-97376-6614df54`. Exact-head CI and thread replies are tracked on
+the delivery PR.
 
 ## Source Evidence and Compatibility
 

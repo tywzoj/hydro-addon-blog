@@ -67,7 +67,7 @@ yarn test:e2e --grep "publication"
 
 The [verification-environment guide](verification-environment.md#local-runtime-boundary) documents Node/Docker/browser prerequisites, local development, writable paths, timeouts, evidence, and cleanup. The launcher owns a local Hydro child and only containerizes MongoDB. It never accepts a production or shared database.
 
-Playwright runs six real-form authentication setup cases and thirty-five business
+Playwright runs six real-form authentication setup cases and thirty-six business
 tests with independent author, viewer, system-editor, and reporter sessions.
 The original six scenarios are:
 
@@ -195,7 +195,7 @@ lease loss before dispatch, configuration changes, and maintenance while
 reminders are disabled. Existing model/settings tests cover conditional writes,
 timestamp preservation, compatible defaults and review-setting validation.
 
-`tests/e2e/review.spec.ts` adds seven real-Hydro cases:
+`tests/e2e/review.spec.ts` adds eight real-Hydro cases:
 
 - Pre-publication privacy, reviewer-only authority, native approval/rejection,
   last-rejection feedback, obsolete decisions, sudo before editing settings,
@@ -207,6 +207,8 @@ timestamp preservation, compatible defaults and review-setting validation.
   disabled-mode holds.
 - Confirmed disabling, automatic publication/report approval, notifications,
   audit, unchanged nonpending rejections, and disabled-mode controls/text.
+- Delegated and root withdrawal of another author's pending draft, preserving
+  private-data projection and independent unpublish permission.
 - Concurrent reviewer decisions with one notice/audit, including restricted domains.
 - Anonymous report denial and native article/comment/status/report cascade.
 - Login and actual periodic worker reminders, default-role recipients, switch

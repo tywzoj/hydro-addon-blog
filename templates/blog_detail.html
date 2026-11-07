@@ -39,8 +39,8 @@
       {% include "partials/blog_review_status.html" %}
       {% if controls.publish or controls.unpublish or controls.pin or controls.delete %}
       <div class="section__body">
-        <form method="post" action="{{ url('blog_post_edit', uid=udoc._id, did=ddoc.docId) }}" data-blog-confirm data-publish-review="{{ 'true' if publishRequiresReview else 'false' }}" data-review-pending="{{ 'true' if ddoc.reviewPending else 'false' }}">
-          {% if ddoc.reviewPending and controls.unpublish %}
+        <form method="post" action="{{ url('blog_post_edit', uid=udoc._id, did=ddoc.docId) }}" data-blog-confirm data-publish-review="{{ 'true' if publishRequiresReview else 'false' }}" data-review-pending="{{ 'true' if canWithdrawReview else 'false' }}">
+          {% if canWithdrawReview %}
           <input type="hidden" name="draft" value="true">
           <button class="rounded button" name="operation" value="publish">{{ _('Withdraw from review') }}</button>
           {% elif (ddoc.draft and controls.publish) or (not ddoc.draft and controls.unpublish) %}

@@ -516,6 +516,24 @@ describe("create, edit, and delete contracts", () => {
 });
 
 describe("views and star state", () => {
+    it.each([
+        [BLOG_PERM.UNPUBLISH_OTHERS, true],
+        [0n, false],
+        [-1n, true],
+    ] as const)("derives withdrawal capability without exposing pending metadata (%s)", async (grants, allowed) => {
+        const handler = createHandler("/blog/:uid/:did", 2);
+        handler.ddoc = makeBlog({ draft: true, reviewPending: true, requiresReview: true });
+        handler.blog = new BlogPolicy(
+            handler.user,
+            "delegate",
+            BLOG_PERM.ACCESS | BLOG_PERM.VIEW_DRAFT_OTHERS | grants,
+        );
+        DocumentModel.getStatus.mockResolvedValue({ docType: 70, docId: handler.ddoc.docId, view: true });
+        await dispatchHandler(handler, "get", () => handler.get());
+        expect(handler.response.body).toHaveProperty("canWithdrawReview", allowed);
+        expect(handler.response.body?.ddoc).not.toHaveProperty("reviewPending");
+    });
+
     it("counts the first eligible view, but not a later sequential view with recorded status", async () => {
         const handler = createHandler("/blog/:uid/:did", 2);
         const status: BlogStatusDoc = { docType: 70, docId: handler.ddoc.docId, view: true, star: true };

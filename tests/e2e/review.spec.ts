@@ -368,8 +368,9 @@ test("review before publication enforces reviewer-only access, approval, comment
     await expect(viewer.getByText("Rejections: 0", { exact: false })).toBeVisible();
     await expect(viewer.locator(".richmedia")).toContainText("Body for Review pre-publication");
     await expect(viewer.locator("form[data-blog-confirm] textarea")).toHaveCount(0);
-    await viewer.getByRole("button", { name: "Reject article", exact: true }).click();
+    await viewer.getByRole("button", { name: "Reject article", exact: true }).press("Enter");
     await expect(viewer.locator(".dialog:visible")).toContainText("its rejection count will increase");
+    await expect(viewer.locator('.dialog:visible textarea[name="reviewComments"]')).toBeFocused();
     await viewer.locator('.dialog:visible textarea[name="reviewComments"]').fill("Please clarify the article.");
     await viewer.locator('.dialog:visible [data-action="cancel"]').click();
     await expect(viewer.locator(".dialog:visible")).toHaveCount(0);
@@ -378,6 +379,7 @@ test("review before publication enforces reviewer-only access, approval, comment
     expect(cancelled.rejectionCount ?? 0).toBe(0);
     expect(await db.collection("oplog").countDocuments({ type: "blog.review", did: did(path) })).toBe(0);
     await viewer.getByRole("button", { name: "Reject article", exact: true }).click();
+    await expect(viewer.locator('.dialog:visible textarea[name="reviewComments"]')).toBeFocused();
     await expect(viewer.locator('.dialog:visible textarea[name="reviewComments"]')).toHaveValue(
         "Please clarify the article.",
     );

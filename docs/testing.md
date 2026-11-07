@@ -87,7 +87,7 @@ yarn test:e2e --grep "publication"
 
 The [verification-environment guide](verification-environment.md#local-runtime-boundary) documents Node/Docker/browser prerequisites, local development, writable paths, timeouts, evidence, and cleanup. The launcher owns a local Hydro child and only containerizes MongoDB. It never accepts a production or shared database.
 
-Playwright runs six real-form authentication setup cases and forty business
+Playwright runs six real-form authentication setup cases and forty-one business
 tests with independent author, viewer, system-editor, and reporter sessions.
 The original six scenarios are:
 

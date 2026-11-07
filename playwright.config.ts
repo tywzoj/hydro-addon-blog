@@ -16,7 +16,7 @@ export default defineConfig({
     retries: 0,
     forbidOnly: true,
     timeout: 30000,
-    globalTimeout: 600000,
+    globalTimeout: 900000,
     reporter: [["list"], ["html", { outputFolder: join(output, "report"), open: "never" }]],
     use: {
         baseURL,

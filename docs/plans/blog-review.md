@@ -201,6 +201,34 @@ These are focused E2E results, not a full-suite or PR-head CI claim. The maintai
 subsequently requested a restart; port 8888 now runs the updated sender with fresh
 disposable test data.
 
+## PR #13 Review and CI Follow-up
+
+The review comment identified missing native autofocus on the rejection comments
+textarea. The template now supplies `data-autofocus`; the review E2E opens Reject
+with Enter and requires the textarea to be focused before typing, including after
+cancelling and reopening. The source basis is
+`packages/ui-default/components/dialog/DomDialog.ts` at the pinned Hydro commit
+above: `_show` focuses `[data-autofocus]` after the opening animation. No custom
+focus handler or timer is introduced.
+
+CI run `42383379945` on `8dab9a4` passed 46 cases before the 600-second global
+suite deadline interrupted the final native periodic-reminder scenario. No
+business assertion failed in that run. The full suite now has 47 cases, and the
+reminder scenario already has an explicit 170-second per-test allowance.
+
+The suite deadline is now 900 seconds, with a 930-second parent deadline to allow
+Playwright teardown and a 20-minute workflow step budget for startup and cleanup.
+The ordinary 30-second test timeout, action/navigation timeouts, one-worker
+isolation and zero retries remain unchanged. The change addresses aggregate
+runtime rather than weakening a failed assertion or extending individual cases.
+
+Local validation passed with `yarn lint`, `yarn typecheck`, `yarn test:coverage`
+(378 tests) and the full `yarn test:e2e` suite (47 cases, 7.1 minutes). The keyboard
+focus assertion passed, as did the final real-worker reminder scenario and owned
+runtime cleanup. The maintainer's port-8888 server had no pending article for an
+additional MCP rejection-dialog check, so its existing data was left unchanged.
+PR-head CI must verify the workflow budget on the remote runner separately.
+
 ## Current Baseline
 
 Repository revision: `2f0b6e2a4fe297bfb49df4573ba13e4794fff336`.

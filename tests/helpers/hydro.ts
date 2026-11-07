@@ -92,6 +92,10 @@ export const ScheduleModel = { coll: { updateOne: vi.fn(), findOne: vi.fn() } };
 export const SystemModel = { get: vi.fn() };
 
 export class Handler {
+    constructor() {
+        vi.spyOn(this as Handler, "url");
+    }
+
     user = makeUser();
     udoc = makeUser();
     ddoc!: BlogDoc;
@@ -114,7 +118,9 @@ export class Handler {
         if (!this.user.hasPriv(privilege)) throw new PrivilegeError("Fixture privilege denial");
     });
     limitRate = vi.fn<(...args: unknown[]) => Promise<void>>();
-    url = vi.fn((route: string, _args: Record<string, unknown>) => `/${route}`);
+    url(this: void, route: string, ..._args: Record<string, unknown>[]) {
+        return `/${route}`;
+    }
     back = vi.fn<(body?: Record<string, unknown>) => void>();
 }
 

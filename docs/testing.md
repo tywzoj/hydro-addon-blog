@@ -25,7 +25,7 @@ yarn test:watch
 yarn test tests/unit/model.test.ts
 ```
 
-`yarn test` and `yarn test:coverage` are non-watch commands. Coverage reports are generated under ignored `coverage/`, including HTML and a JSON summary. Coverage targets article models/handlers, the permission policy, and settings models/handlers; it is not a whole-project or E2E coverage claim. No percentage threshold is imposed as a substitute for meaningful assertions.
+`yarn test` and `yarn test:coverage` are non-watch commands. Coverage reports are generated under ignored `coverage/`, including HTML and a JSON summary. Coverage targets article, comment, review and settings models/handlers, review notifications, shared handler preparation, and the permission policy; it is not a whole-project or E2E coverage claim. No percentage threshold is imposed as a substitute for meaningful assertions.
 
 Vitest discovers `tests/unit/**/*.test.ts`, rejects empty discovery or empty suites, disallows focused `.only` tests, and applies five-second test/hook timeouts. CI additionally limits the UT step to five minutes. Ordinary tests are offline and need neither Docker nor a browser. Use the same non-watch command locally and in CI.
 
@@ -36,6 +36,10 @@ The test boundary is intentionally explicit:
 - The fixture loads installed real Hydro `param`, `Types`, and privilege constants through the official `@hydrooj/register` loader. Invalid-input tests invoke decorated methods with the framework-style raw object, including `domainId`; positional calls can bypass those validators.
 - Persistence, user lookup, pagination, rate limiting, routing capture, and audit services are test boundaries. Fixture users, ownership/privilege enforcement, and lookup errors are not the real Hydro authorization lifecycle.
 - Each test resets mocks; clocks return to real time after every test, the temporary Hydro global is restored after each file, and Vitest isolates files. Do not opt shared-state tests into concurrent execution.
+- The fixture's `url` is a prototype method with a per-instance spy, so subclass
+  overrides and `super.url(...)` remain executable. Its route-name result is not
+  real Hydro URL generation; URL-policy tests assert the arguments sent to the
+  base method, including the system-domain sudo override.
 - Authorization-boundary tests use `dispatchHandler` after fixture hydration to
   run preparation, generic POST and the operation in native order. Hook-count
   assertions reject accidental invocation from actions. This helper does not
@@ -54,6 +58,22 @@ omitted versus unchecked fields, independent metadata operations, and stale writ
 
 Assertions about query construction are not MongoDB ordering tests. Fixture denial is not proof of real Hydro access control. A star-only update assertion does not establish database merge semantics. Sequential views do not establish concurrent exactly-once behavior. Preserve these distinctions when adding tests and use E2E for the actual runtime contracts.
 
+The [2026-11-07 branch-coverage extension](plans/self-validation.md#ut-branch-coverage-extension)
+records 328 passing UT and 99.84% branches in the unchanged coverage scope.
+It adds queue/report response and denial cases, receipt-integrity and overflow
+failures, comment hydration and moderation, settings rendering and writes,
+request-local policy caching, reminder scheduling/recipient boundaries, and
+article publication/control regressions. Temporary deletion and receipt-integrity
+mutations were both detected by the new tests.
+
+The remaining reported branch is the view-count skip path in
+`features/handler.ts`. Existing assertions verify both a previously viewed article
+and anonymous reads without additional count/status writes, but the installed
+V8 reporter gives this path a negative hit count, including in a focused run.
+Treat this as a measurement limitation in the recorded environment, not evidence
+that those assertions are missing or a reason to suppress coverage. Do not add
+duplicate cases, change the coverage scope, or round the result to 100%.
+
 The initial implementation verified nonzero exits for unmatched discovery, a discovered file containing no tests, and a temporary transform that reversed the creation publication branch. Both publication regressions failed under that mutation. Temporary probes were removed; application source was not modified.
 
 Use the official [Vitest module-mocking guide](https://vitest.dev/guide/mocking/modules) and [Vitest 4 coverage reference](https://v4.vitest.dev/config/coverage) when extending the harness; keep package versions and dependency transformation behavior compatible with the installed runner.
@@ -67,7 +87,7 @@ yarn test:e2e --grep "publication"
 
 The [verification-environment guide](verification-environment.md#local-runtime-boundary) documents Node/Docker/browser prerequisites, local development, writable paths, timeouts, evidence, and cleanup. The launcher owns a local Hydro child and only containerizes MongoDB. It never accepts a production or shared database.
 
-Playwright runs six real-form authentication setup cases and thirty-six business
+Playwright runs six real-form authentication setup cases and forty business
 tests with independent author, viewer, system-editor, and reporter sessions.
 The original six scenarios are:
 
@@ -104,11 +124,12 @@ revision conflicts, competing decisions, bounded retries and partial failures.
 
 Use the real Markdown editor and controls; do not inject session cookies, bypass decorators, stub routes, or mock persistence to make E2E green. Direct authenticated denial requests preserve the same-origin Referer expected by Hydro's CSRF handling. MongoDB access is read-only assertion evidence against the run-owned database; fixture accounts are created through Hydro's user model.
 
-`permissions.spec.ts` adds eight scenarios covering real sudo and delegated role
+`permissions.spec.ts` provides eleven scenarios covering real sudo and delegated role
 management, stale matrix saves, default/guest list exclusion, forced root,
 private drafts and rejected public edits, strict own/others permissions, role
 deletion/recreation, anonymous access, domain independence, independent
-publication/pinning/deletion, and visible unchecked controls. Its cleanup restores
+publication/pinning/deletion, visible unchecked controls, native role controls,
+global user lookup, fresh sudo and same-session permission revocation. Its cleanup restores
 fixture assignments and guest permissions through authenticated management
 requests, including after failures; it does not write test outcomes into MongoDB.
 
@@ -143,6 +164,67 @@ Navigation waits for DOM readiness and then asserts actual page controls/content
 It does not wait for third-party avatars or unrelated resources to finish before
 testing application behavior. This avoids observed `load` stalls without mocking
 requests or relaxing permission/persistence assertions.
+
+## Data Authorization Regression Inventory
+
+The data-safety extension builds on the existing suites rather than introducing
+a separate attack runner. It adds 28 UT cases and two real-session revocation
+scenarios, and strengthens four existing E2E cases with protected-state checks.
+
+| Boundary | Regression evidence |
+| --- | --- |
+| Authenticated mutation | Guest identities cannot create, edit, publish, pin, delete or star even when their blog mask contains every grant. |
+| Independent own/others grants | Dedicated publication/pinning and equivalent form submissions enforce the own grant; an others grant cannot restore it. A permitted control still works without unrelated content-edit permission. |
+| Trusted identities and protected fields | Article creation/editing and report/reset actions do not accept forged ownership, reporter IDs, review holds or counter resets as authoritative data. |
+| Request-local policy | Reusing an identity in a new handler reloads policy. Real delegated users reuse the same browser session immediately after revocation, without a refresh, and cannot use captured article, review-decision or counter-reset requests. Restoring grants restores authorized operations. |
+| Management authority | A still-valid sudo session does not restore revoked management permission, including inherited operations and batch role deletion on settings routes. Settings, assignments and successful business audits remain unchanged. |
+| Object and draft boundaries | Foreign article/comment/reply IDs and unreadable draft mutations cannot alter target records, notices or audit history. Authorized draft moderation remains supported. |
+| Private responses | Comment/reply IP fields stay excluded. Materialized hidden-report duplicates acknowledge only the reporter's receipt without exposing content or repeating effects; another reporter is denied. |
+
+`blogState` in `tests/e2e/fixtures.ts` reads the run-owned database without
+mutating it. It snapshots scoped article/comment records, statuses, report
+receipts, article-linked messages and business audits. Tests include unrelated
+sentinel articles and compare after each denial. This is not a whole-database
+snapshot: normal session bookkeeping and authorized reads are legitimate effects.
+Do not perform a successful detail read between snapshots that are intended to
+prove no unauthorized mutation.
+
+The focused runtime selection is:
+
+```sh
+yarn test:e2e --grep 'a non-owner cannot|revoked delegates|comments validate target chains|review reports deduplicate|global settings role assignment|review and reset revocation'
+```
+
+These are blog data-authorization regressions, not CSRF, XSS, dependency or
+general framework attack tests. The original extension did not change production
+behavior. The subsequently confirmed article-IP privacy fix is covered below. See the
+[delivery record](plans/self-validation.md#data-authorization-regression-extension)
+for actual checks and limitations.
+
+### Article IP Response Regressions
+
+The maintainer confirmed that article IP addresses must not be returned.
+Eleven UT cases exercise home/user lists, detail/editor responses and both
+review pages, including privileged readers, legacy embedded reply IPs and
+articles without replies. Assertions retain source IPs and review tokens;
+existing edit/delete cases also verify that server audit snapshots retain IPs.
+
+Two real-Hydro JSON cases exercise public, author, root and reviewer responses
+through ordinary and restricted-domain routes. Read-only database assertions
+verify that addresses remain stored; an actual pin operation retains native
+audit IPs, and review approval still succeeds. The existing guest-policy case
+also checks article JSON IP omission. Both new E2E cases and all eleven UT
+regressions failed before the production fix.
+
+```sh
+yarn test:e2e --grep 'JSON responses omit IPs|guest policy and domain independence'
+```
+
+The response boundary is shared by HTML template data and JSON; no IP stripping
+is delegated to templates or the framework serializer. Legacy embedded replies
+are exercised in UT, not by inserting synthetic legacy records into E2E MongoDB.
+The [delivery record](plans/self-validation.md#article-ip-response-fix) distinguishes
+the focused post-fix checks from the preceding full browser-suite run.
 
 ## Comment Regression Inventory
 
@@ -195,7 +277,7 @@ lease loss before dispatch, configuration changes, and maintenance while
 reminders are disabled. Existing model/settings tests cover conditional writes,
 timestamp preservation, compatible defaults and review-setting validation.
 
-`tests/e2e/review.spec.ts` adds eight real-Hydro cases:
+`tests/e2e/review.spec.ts` provides ten real-Hydro cases:
 
 - Pre-publication privacy, reviewer-only authority, native approval/rejection,
   last-rejection feedback, obsolete decisions, sudo before editing settings,
@@ -210,6 +292,11 @@ timestamp preservation, compatible defaults and review-setting validation.
 - Delegated and root withdrawal of another author's pending draft, preserving
   private-data projection and independent unpublish permission.
 - Concurrent reviewer decisions with one notice/audit, including restricted domains.
+- Same-session review/reset revocation with captured valid tokens, denied queue
+  and detail reads, unchanged scoped state, and successful operations after
+  restoring the grants.
+- Review queue/detail JSON IP omission for reviewers and root, with preserved
+  decision tokens, stored addresses and successful approval.
 - Anonymous report denial and native article/comment/status/report cascade.
 - Login and actual periodic worker reminders, default-role recipients, switch
   semantics, and author notifications remaining enabled.

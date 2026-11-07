@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress: initial Vitest UT, a local development runtime, and real-browser E2E are delivered and verified locally and in [PR #8](https://github.com/tywzoj/hydro-addon-blog/pull/8). Project-scoped type checking is now delivered and verified locally; its new CI step, broader coverage, and cross-platform checks remain to be verified on future PR heads.
+In progress: initial Vitest UT, a local development runtime, and real-browser E2E are delivered and verified locally and in [PR #8](https://github.com/tywzoj/hydro-addon-blog/pull/8). Project-scoped type checking and the additional UT branch coverage recorded below are delivered and verified locally; current-head CI and cross-platform checks remain to be verified on future PR heads.
 
 The [investigation record](self-validation-investigation.md) retains experiments and limitations. The repository provides local Playwright MCP, project-scoped TypeScript checking, Vitest UT, managed local Hydro with disposable MongoDB, and Playwright E2E. The workflow includes lint, type checking, UT coverage, and E2E; recheck the actual PR head after every push rather than reusing earlier evidence.
 
@@ -153,3 +153,234 @@ Remote CI results for this step are tracked on the implementation PR and must
 identify the verified head commit; the local results above do not establish them.
 Broader E2E scenarios and cross-platform/version-matrix verification remain
 follow-up work; no full-runtime compatibility claim is made.
+
+### UT Branch-Coverage Extension
+
+On 2026-11-07, coverage was measured on baseline `284b911` and extended without
+changing production code, dependencies, Vitest discovery, coverage inclusions,
+or exclusions. Acceptance criteria were meaningful assertions for uncovered
+behavior and failure paths, improved coverage in the same scope, and passing
+coverage, lint and project-scoped type checks.
+
+| Metric | Baseline | Extended suite |
+| --- | --- | --- |
+| Passing UT | 249 | 328 |
+| Branches | 86.14% | 99.84% |
+| Statements | 85.36% | 99.18% |
+| Lines | 86.69% | 99.05% |
+| Functions | 82.71% | 99.06% |
+
+The 79 additional cases cover:
+
+- Review queue/detail pagination, private report hydration, independent authority,
+  accepted/duplicate/hidden reports, legacy reset counters, rejection notices,
+  receipt-integrity failures, counter overflow and bounded approval recovery.
+- Comment hydration with nested and legacy replies, user-specific likes, deletion
+  capabilities and notices, successful replies, parent disappearance, no-op like
+  compensation, scoped indexes and stale article-deletion protection.
+- Settings initialization and compatibility, request-local policy caching,
+  concurrent configuration writes, role deletion/assignment and audit payloads,
+  management-page rendering and system-domain sudo arguments.
+- Secondary-instance reminder registration, empty recovery, persisted cadence
+  changes, empty/nonreviewer recipient batches and ownership-safe early exits.
+- Draft-only lists, privacy projections, no-op and unchecked form submissions,
+  independent publication/withdrawal, unreadable-result redirects, report
+  eligibility and legacy author review controls.
+
+The only harness change replaces the instance-field URL mock with a spied
+prototype method. The former shadowed `BlogSettingsHandler.url`; the new fixture
+executes the real override and its `super.url` call while keeping URL generation
+an explicit service boundary. The installed framework's `HandlerCommon.url` in
+`node_modules/@hydrooj/framework/server.ts` is also a prototype method. Decorated
+requests continue using real installed Hydro conversion and simulated lifecycle
+ordering, not a second server implementation.
+
+Local checks use Node.js `24.22.1`, Yarn `1.22.22`, Vitest/coverage-v8 `4.0.18`:
+
+```sh
+yarn lint
+yarn typecheck
+yarn test:coverage
+```
+
+Lint and the 41-file scoped type check pass. All 328 UT pass. Two temporary
+production mutations (reversing the conditional-delete guard and omitting the
+receipt-comment integrity comparison) caused the corresponding new tests to
+fail with exit 1. Both mutations were removed before the final checks.
+
+The unrounded branch result is 663/664. The remaining `if` at
+`features/handler.ts:148` has V8 hit counts `[6, -4]` in the full report. A focused
+run of the existing sequential-view and anonymous-view tests also passes all
+three cases but reports `[1, -1]` for the same branch:
+
+```sh
+yarn test tests/unit/handler.test.ts --coverage \
+  --testNamePattern 'counts the first eligible view|does not track a view' \
+  --coverage.reporter=json --coverage.reportsDirectory=coverage/view-branch-probe
+```
+
+These assertions explicitly check one write across repeated authenticated reads
+and no writes for anonymous identities. The negative counter is a coverage
+measurement limitation in this environment; it was not hidden with exclusions,
+new provider settings, dependency upgrades or repetitive tests. Remaining
+unexecuted lines include the simple article count wrapper, review index
+initialization and notification dependency-injection registration. This is not
+a claim of exhaustive application or concurrency verification.
+
+E2E and MCP were not rerun for this test-only extension: no production handler,
+model, template or browser behavior changed. Existing real-Hydro coverage remains
+separate evidence. No current-head CI run or compatibility matrix is claimed.
+
+### Data Authorization Regression Extension
+
+The next extension starts from `da0798a` and focuses on addon data safety:
+unauthorized create/read/update/delete, independent permissions, target binding,
+private responses and denial before business side effects. It does not restore
+the abandoned general-security suite or introduce framework attack probes.
+
+Acceptance criteria are source-derived denials with meaningful positive
+controls, protected-state comparisons after rejected requests, per-request
+authorization after role revocation, and preservation of existing allowed
+operations. Any demonstrated business defect requires maintainer confirmation
+before a production fix.
+
+The changes add 28 UT cases, extend existing request-policy and review identity
+assertions, add two real-session revocation E2E cases, and strengthen four existing
+E2E scenarios. The shared `blogState` helper captures articles/comments,
+statuses, receipts and scoped business messages/audits through read-only database
+queries. Unrelated sentinel articles help detect accidental query widening.
+The [testing inventory](../testing.md#data-authorization-regression-inventory)
+maps each boundary to its regression.
+
+Important boundaries preserved:
+
+- Authentication is still required even if a guest mask includes write grants.
+- Own and others grants remain separate, and metadata operations do not acquire
+  an unrelated content-edit requirement.
+- New requests reload policy; neither an old browser session nor valid sudo
+  restores a revoked grant.
+- Unreadable drafts deny comment writes/deletion, but authorized moderation of
+  a readable draft remains allowed.
+- A completed hidden-report receipt can be acknowledged by its reporter without
+  exposing hidden content or repeating counts, messages and audits. Pending
+  receipt recovery is a different contract and is not required to be write-free.
+- Safely ignored extra fields are not treated as an error requirement. Trusted
+  identity, ownership and review state remain server-controlled.
+
+Source review did not establish a confirmed business authorization bypass.
+It did identify an unresolved privacy-contract question: article `ip` is
+persisted by `features/model.ts:35-40`, updated from the current editor request
+by `features/handler.ts:290`, and is not removed by
+`features/review.model.ts:39-56`. Additional source inspection established that
+the installed framework's `base.ts:95` JSON path and `serializer.ts:3` do not
+strip `ip`. The default source path therefore retains it for article JSON
+readers; this is source evidence, not a separate runtime observation. Unlike
+comment-IP exclusion, its intended audience was not explicitly defined at that
+point. The maintainer was unavailable for the initial confirmation, so the
+test-only extension made no production fix. The later confirmed decision and
+implementation are recorded under [Article IP Response Fix](#article-ip-response-fix).
+
+The read-only security review covered production paths at `da0798a`, not just the
+test diff (line references below precede the IP response fix):
+
+| Boundary | Source basis |
+| --- | --- |
+| Admission and URL-author binding | `features/handler.base.ts:14`, `features/handler.base.ts:46` |
+| Strict ownership grants and independent mutation checks | `features/permission.ts:91`, `features/handler.ts:274` |
+| Article-scoped comment and nested reply lookup | `features/comments.model.ts:23`, `features/comments.model.ts:33` |
+| Reviewer authority, authenticated reporter identity and conditional writes | `features/review.handler.ts:59`, `features/review.handler.ts:145`, `features/review.model.ts:126` |
+| Management permission, request-local policy and stale settings | `features/settings.handler.ts:62`, `features/settings.model.ts:174`, `features/settings.model.ts:183` |
+
+Local validation uses Node.js `24.22.1`, Hydro `5.0.7`, framework `0.3.2` and UI
+`4.58.5`. `yarn lint`, `yarn typecheck` (41 files) and `yarn test:coverage` pass:
+356 UT, with the same 99.84% scoped branch coverage. The increase is in
+authorization/data assertions, not a coverage-percentage claim.
+
+The focused command below passed five business cases and six real login cases
+in the owned runtime. Artifacts: `test-results/hydro-blog-47669-d5a38d4a/`.
+
+```sh
+yarn test:e2e --grep 'a non-owner cannot|revoked delegates|comments validate target chains|review reports deduplicate|global settings role assignment'
+```
+
+Before the final review/reset revocation case and batch role-deletion denial
+were added, `yarn test:e2e` passed all 43 cases (six authentication setups and
+37 business scenarios).
+Artifacts: `test-results/hydro-blog-49168-5a68b992/`. Both the focused and full
+runs exited successfully; their named MongoDB containers, temporary Hydro
+storage and saved authentication directories were confirmed removed. A final
+`yarn lint`, `yarn typecheck` and `yarn test:coverage` also passed on the current
+tree with 356 UT. The final additions passed lint, type checking and the following
+focused run (two business cases and six real login cases), with artifacts under
+`test-results/hydro-blog-56629-53ccfa15/`:
+
+```sh
+yarn test:e2e --grep 'global settings role assignment|review and reset revocation'
+```
+
+The final `yarn test:e2e` run passed all 44 cases (six authentication setups and
+38 business scenarios), including review/reset revocation and batch role-deletion
+denial. Artifacts: `test-results/hydro-blog-57423-b6fe5eac/`. The focused and final
+runs' named MongoDB containers, temporary Hydro storage and saved authentication
+directories were confirmed removed. Production sources and runtime/coverage
+configuration remain unchanged.
+
+No separate MCP browser session was needed for these request/data assertions;
+the real-browser suite is the runtime evidence. No deployment security
+certification, additional browser/platform matrix, or current-head remote CI
+result is implied.
+
+### Article IP Response Fix
+
+On 2026-11-07, the maintainer confirmed that IP addresses must not be returned
+and authorized the production fix. The acceptance criteria are: no article or
+legacy embedded reply IP in ordinary or review response objects, no privilege
+exception, unchanged stored IPs/audit snapshots, preserved review tokens and
+unchanged authorization.
+
+The shared response-only `articleForResponse` projection is applied at all six
+article response paths: home/user lists, detail/editor, review queue/detail.
+It clones articles and legacy replies rather than mutating prepared documents.
+The existing review-metadata projection remains separate because edit/delete
+audit snapshots also use it. Database reads/writes, authorization, dependency
+versions and native audit calls are unchanged.
+
+Upstream research rechecked official Hydro commit
+`3bae56fe8edddff12346bcb1c8281269c94688d8`:
+`framework/framework/serializer.ts` does not exclude IP fields, and
+`packages/hydrooj/src/model/oplog.ts` persists supplied audit data along with
+the operator's `operateIp`. The installed framework `0.3.2` and Hydro `5.0.7`
+match these relevant behaviors. The addon therefore filters response copies
+explicitly rather than relying on framework serialization or modifying audit
+data. The general official documentation was consulted; these source paths
+define the specific serialization/audit contract.
+
+Before the fix, eleven new UT cases failed on returned IPs. Two new real-Hydro
+JSON cases also failed with returned loopback addresses, confirming the prior
+source-derived propagation at runtime. Expected-failure artifacts:
+`test-results/article-ip-ut-before.log` and
+`test-results/hydro-blog-63710-33d1102a/`.
+
+Post-fix validation:
+
+```sh
+yarn lint
+yarn typecheck
+yarn test:coverage
+yarn test:e2e --grep 'JSON responses omit IPs|guest policy and domain independence'
+```
+
+Lint, the 41-file scoped type check and all 367 UT pass; scoped branch coverage
+remains 99.84%. The focused E2E run passes nine cases (six real logins and three
+business cases), including author/viewer/root, reviewer and guest JSON checks,
+restricted-domain routes, retained database/audit IPs and successful review
+approval. Artifacts: `test-results/hydro-blog-64446-97637f89/`.
+Both the expected-failure and passing runs removed their owned MongoDB containers,
+temporary Hydro storage and authentication files; cleanup was checked explicitly.
+
+The preceding full 44-case browser run belongs to the test-only extension;
+the now-46-case full suite was not rerun for this response-only fix. The focused
+cases cover every changed response path, and the full UT suite covers existing
+policy and write behavior. No separate MCP session or remote CI run is claimed.
+The legacy inline-reply regression uses UT fixtures rather than E2E database
+writes. No production data was modified.

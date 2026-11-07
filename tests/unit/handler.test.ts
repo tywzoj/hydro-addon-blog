@@ -4,8 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BlogConfirmMessages, DEFAULT_REVIEW_SETTINGS, ReviewMessages } from "../../features/constants";
 import { applyHandler } from "../../features/handler";
 import { BLOG_DEFAULT, BLOG_PERM, BlogPermissionError, BlogPolicy } from "../../features/permission";
+import { BlogReviewModel } from "../../features/review.model";
 import { BlogSettingsModel, initialSettings, resolveBlogPolicy } from "../../features/settings.model";
-import type { BlogStatusDoc } from "../../features/types";
+import type { BlogDoc, BlogStatusDoc } from "../../features/types";
 import { injectUI } from "../../features/ui";
 import { makeBlog } from "../helpers/fixtures";
 import type { Handler } from "../helpers/hydro";
@@ -15,6 +16,7 @@ import {
     DocumentModel,
     ForbiddenError,
     makeUser,
+    MessageModel,
     OplogModel,
     PRIV,
     PrivilegeError,
@@ -74,6 +76,16 @@ beforeEach(() => {
 });
 
 describe("route and preparation contracts", () => {
+    it("loads home policy through base preparation before admitting access", async () => {
+        const handler = createHandler("/blog");
+        const forRequest = vi.spyOn(BlogSettingsModel, "forRequest");
+        await handler.__prepare({ domainId: "system" });
+        expect(forRequest).toHaveBeenCalledWith(handler);
+        expect(handler.blog.role).toBe("default");
+        forRequest.mockResolvedValue(new BlogPolicy(handler.user, "denied", 0n));
+        await expect(handler.__prepare({ domainId: "system" })).rejects.toBeInstanceOf(BlogPermissionError);
+    });
+
     it.each(["disabled", "before", "after"] as const)(
         "gates homepage and dropdown review entries in %s mode",
         async (mode) => {
@@ -171,6 +183,57 @@ describe("route and preparation contracts", () => {
 });
 
 describe("list query contracts", () => {
+    it.each([
+        ["/blog", 0, 0],
+        ["/blog", 2, PRIV.PRIV_USER_PROFILE],
+        ["/blog/:uid", 1, PRIV.PRIV_USER_PROFILE],
+        ["/blog/:uid", 2, PRIV.PRIV_USER_PROFILE | PRIV.PRIV_EDIT_SYSTEM],
+        ["/blog/:uid/:did", 1, PRIV.PRIV_USER_PROFILE],
+        ["/blog/:uid/:did", 2, PRIV.PRIV_USER_PROFILE],
+        ["/blog/:uid/:did/edit", 1, PRIV.PRIV_USER_PROFILE],
+        ["/blog/:uid/:did/edit", 2, PRIV.PRIV_USER_PROFILE | PRIV.PRIV_EDIT_SYSTEM],
+    ] as const)("omits article and legacy reply IPs at %s for reader %s", async (path, uid, privileges) => {
+        const handler = createHandler(path, uid, privileges);
+        if (!uid) handler.blog = new BlogPolicy(handler.user, "guest", BLOG_PERM.ACCESS | BLOG_PERM.VIEW_PUBLISHED);
+        const doc = makeBlog({
+            draft: false,
+            ip: "192.0.2.10",
+            reply: [{ _id: handler.ddoc.docId, owner: 3, content: "Legacy reply", ip: "192.0.2.11" }],
+        });
+        handler.ddoc = doc;
+        const list = path === "/blog" || path === "/blog/:uid";
+        if (list) handler.ctx.db.paginate.mockResolvedValue([[doc], 1, 1]);
+        await dispatchHandler(handler, "get", () => handler.get({ domainId: "system" }));
+        const body = handler.response.body as { ddoc?: BlogDoc; ddocs?: BlogDoc[] };
+        const exposed = list ? body.ddocs![0] : body.ddoc!;
+        expect(exposed).not.toHaveProperty("ip");
+        expect(exposed.reply[0]).not.toHaveProperty("ip");
+        expect(exposed).toMatchObject({ title: doc.title, reply: [{ content: "Legacy reply", owner: 3 }] });
+        expect(doc.ip).toBe("192.0.2.10");
+        expect(doc.reply[0].ip).toBe("192.0.2.11");
+    });
+
+    it("omits IP from a legacy article without creating a reply field", async () => {
+        const handler = createHandler("/blog/:uid/:did");
+        handler.ddoc = makeBlog({ ip: "192.0.2.12", reply: undefined });
+        await handler.get();
+        expect(handler.response.body?.ddoc).not.toHaveProperty("ip");
+        expect((handler.response.body?.ddoc as BlogDoc).reply).toBeUndefined();
+        expect(handler.ddoc.ip).toBe("192.0.2.12");
+    });
+
+    it("restricts a draft-only author's list and preserves private projection rules", async () => {
+        const handler = createHandler("/blog/:uid");
+        handler.blog = new BlogPolicy(handler.user, "draft-reader", BLOG_PERM.ACCESS | BLOG_PERM.VIEW_DRAFT_OWN);
+        const doc = makeBlog({ reportCount: 5, rejectionCount: 2 });
+        handler.ctx.db.paginate.mockResolvedValue([[doc], 1, 1]);
+        await handler.get({ domainId: "system" });
+        expect(DocumentModel.getMulti).toHaveBeenCalledWith("system", 70, { owner: 1, draft: true });
+        expect(sort).toHaveBeenLastCalledWith({ pin: -1, updateAt: -1 });
+        expect(handler.response.body?.ddocs).toEqual([expect.objectContaining({ rejectionCount: 2 })]);
+        expect((handler.response.body?.ddocs as unknown[])[0]).not.toHaveProperty("reportCount");
+    });
+
     it.each([true, false])(
         "shows My Blog based on authentication, not create/review grants (%s)",
         async (authenticated) => {
@@ -248,6 +311,61 @@ describe("list query contracts", () => {
 });
 
 describe("write authorization contracts", () => {
+    it.each([
+        ["/blog/:uid/create", "postSubmit", submit],
+        ["/blog/:uid/:did/edit", "postSubmit", { ...submit, title: "Anonymous update" }],
+        ["/blog/:uid/:did/edit", "postDelete", {}],
+        ["/blog/:uid/:did/edit", "postPin", { domainId: "system", pin: true }],
+        ["/blog/:uid/:did/edit", "postPublish", { domainId: "system", draft: true }],
+        ["/blog/:uid/:did", "postStar", { domainId: "system", star: true }],
+    ] as const)("requires authentication for %s / %s even with every blog grant", async (path, operation, args) => {
+        const handler = createHandler(path, 0, 0);
+        handler.blog = new BlogPolicy(handler.user, "guest", -1n);
+        await expect(dispatchHandler(handler, "post", () => handler[operation](args))).rejects.toBeInstanceOf(
+            PrivilegeError,
+        );
+        expect(handler.limitRate).not.toHaveBeenCalled();
+        for (const write of [
+            DocumentModel.add,
+            DocumentModel.coll.findOneAndUpdate,
+            DocumentModel.coll.deleteOne,
+            DocumentModel.setStatus,
+            OplogModel.log,
+            MessageModel.send,
+        ]) {
+            expect(write).not.toHaveBeenCalled();
+        }
+    });
+
+    it.each([
+        ["postPublish", { domainId: "system", draft: false }, BLOG_PERM.PUBLISH_OWN, BLOG_PERM.PUBLISH_OTHERS],
+        [
+            "postSubmit",
+            { ...submit, draft: undefined, draft_present: true },
+            BLOG_PERM.PUBLISH_OWN,
+            BLOG_PERM.PUBLISH_OTHERS,
+        ],
+        ["postPin", { domainId: "system", pin: true }, BLOG_PERM.PIN_OWN, BLOG_PERM.PIN_OTHERS],
+        ["postSubmit", { ...submit, pin: true }, BLOG_PERM.PIN_OWN, BLOG_PERM.PIN_OTHERS],
+    ] as const)(
+        "does not bypass an own grant through %s or its submission equivalent",
+        async (operation, args, own, others) => {
+            const handler = createHandler("/blog/:uid/:did/edit");
+            handler.ddoc.draft = true;
+            const restricted = (BLOG_DEFAULT & ~own & ~BLOG_PERM.EDIT_OWN) | others;
+            handler.blog = new BlogPolicy(handler.user, "restricted", restricted);
+            await expect(dispatchHandler(handler, "post", () => handler[operation](args))).rejects.toBeInstanceOf(
+                BlogPermissionError,
+            );
+            expect(DocumentModel.coll.findOneAndUpdate).not.toHaveBeenCalled();
+            expect(OplogModel.log).not.toHaveBeenCalled();
+            handler.blog = new BlogPolicy(handler.user, "permitted", restricted | own);
+            await dispatchHandler(handler, "post", () => handler[operation](args));
+            expect(DocumentModel.coll.findOneAndUpdate).toHaveBeenCalledOnce();
+            expect(OplogModel.log).toHaveBeenCalledOnce();
+        },
+    );
+
     it.each(["/blog/:uid/create", "/blog/:uid/:did/edit"])("rejects ordinary non-owner writes at %s", (path) => {
         const handler = createHandler(path, 2);
         expect(() => (path.endsWith("/edit") ? handler.get() : handler.prepare())).toThrow(ForbiddenError);
@@ -271,6 +389,130 @@ describe("write authorization contracts", () => {
 });
 
 describe("create, edit, and delete contracts", () => {
+    it("keeps creation attributed to the authenticated user despite forged identity and review fields", async () => {
+        const handler = createHandler("/blog/:uid/create");
+        DocumentModel.add.mockResolvedValue(handler.ddoc.docId);
+        await dispatchHandler(handler, "post", () =>
+            handler.postSubmit({
+                ...submit,
+                uid: 9,
+                owner: 9,
+                requiresReview: false,
+                reportCount: 0,
+                writeRevision: 100,
+            }),
+        );
+        const [, , owner, , , , , fields] = DocumentModel.add.mock.calls[0];
+        expect(owner).toBe(handler.user._id);
+        expect(fields).toMatchObject({ title: submit.title, draft: true });
+        for (const field of ["uid", "owner", "requiresReview", "reportCount", "writeRevision"]) {
+            expect(fields).not.toHaveProperty(field);
+        }
+    });
+
+    it("does not apply forged ownership or review resets during an authorized draft edit", async () => {
+        const handler = createHandler("/blog/:uid/:did/edit");
+        handler.ddoc = makeBlog({ reviewPending: true, requiresReview: true, reportCount: 4, rejectionCount: 2 });
+        await dispatchHandler(handler, "post", () =>
+            handler.postSubmit({
+                ...submit,
+                title: "Authorized draft edit",
+                owner: 9,
+                requiresReview: false,
+                reviewPending: false,
+                reportCount: 0,
+                rejectionCount: 0,
+                contentVersion: 999,
+                writeRevision: 999,
+            }),
+        );
+        const { $set } = DocumentModel.coll.findOneAndUpdate.mock.calls[0][1] as { $set: Record<string, unknown> };
+        expect($set).toMatchObject({
+            title: "Authorized draft edit",
+            draft: true,
+            contentVersion: 1,
+            writeRevision: 1,
+        });
+        for (const field of ["owner", "requiresReview", "reviewPending", "reportCount", "rejectionCount"]) {
+            expect($set).not.toHaveProperty(field);
+        }
+    });
+
+    it("redirects an author without draft-read permission to their list after draft creation", async () => {
+        const handler = createHandler("/blog/:uid/create");
+        handler.blog = new BlogPolicy(handler.user, "creator", BLOG_DEFAULT & ~BLOG_PERM.VIEW_DRAFT_OWN);
+        DocumentModel.add.mockResolvedValue(handler.ddoc.docId);
+        await dispatchHandler(handler, "post", () => handler.postSubmit(submit));
+        expect(handler.response.redirect).toBe("/blog_list_user");
+        expect(OplogModel.log).toHaveBeenCalledOnce();
+    });
+
+    it("treats an unchanged submission as a redirect without writing or auditing", async () => {
+        const handler = createHandler("/blog/:uid/:did/edit");
+        await dispatchHandler(handler, "post", () => handler.postSubmit({ ...submit, draft: false }));
+        expect(handler.response.redirect).toBe("/blog_post_detail");
+        expect(DocumentModel.coll.findOneAndUpdate).not.toHaveBeenCalled();
+        expect(OplogModel.log).not.toHaveBeenCalled();
+    });
+
+    it("interprets visible unchecked edit controls as publication and unpinning", async () => {
+        const handler = createHandler("/blog/:uid/:did/edit");
+        handler.ddoc = makeBlog({ pin: true });
+        await dispatchHandler(handler, "post", () =>
+            handler.postSubmit({
+                domainId: "system",
+                title: handler.ddoc.title,
+                content: handler.ddoc.content,
+                draft_present: true,
+                pin_present: true,
+            }),
+        );
+        expect(DocumentModel.coll.findOneAndUpdate).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.objectContaining({ $set: expect.objectContaining({ draft: false, pin: false }) as unknown }),
+            { returnDocument: "after" },
+        );
+    });
+
+    it.each([true, false])("allows independent publication state draft=%s without edit permission", async (draft) => {
+        const handler = createHandler("/blog/:uid/:did/edit");
+        handler.blog = new BlogPolicy(handler.user, "publisher", BLOG_DEFAULT & ~BLOG_PERM.EDIT_OWN);
+        handler.ddoc = makeBlog({ draft: !draft, reviewPending: true });
+        await dispatchHandler(handler, "post", () => handler.postPublish({ domainId: "system", draft }));
+        expect(DocumentModel.coll.findOneAndUpdate).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.objectContaining({
+                $set: expect.objectContaining({ draft, ...(draft ? { reviewPending: false } : {}) }) as unknown,
+            }),
+            { returnDocument: "after" },
+        );
+        expect(OplogModel.log).toHaveBeenCalledOnce();
+    });
+
+    it("redirects to the author's list when a successful withdrawal removes read access", async () => {
+        const handler = createHandler("/blog/:uid/:did/edit");
+        handler.blog = new BlogPolicy(handler.user, "publisher", BLOG_DEFAULT & ~BLOG_PERM.VIEW_DRAFT_OWN);
+        DocumentModel.coll.findOneAndUpdate.mockResolvedValue(makeBlog({ draft: true }));
+        await dispatchHandler(handler, "post", () => handler.postPublish({ domainId: "system", draft: true }));
+        expect(handler.response.redirect).toBe("/blog_list_user");
+        expect(OplogModel.log).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+        { mode: "before", draft: false, requiresReview: false, expected: true },
+        { mode: "disabled", draft: true, requiresReview: true, expected: true },
+        { mode: "after", draft: true, requiresReview: false, expected: false },
+    ])(
+        "renders the editor's review requirement for $mode / hold=$requiresReview",
+        async ({ mode, draft, requiresReview, expected }) => {
+            const handler = createHandler("/blog/:uid/:did/edit");
+            handler.UiContext.blogReviewMode = mode;
+            handler.ddoc = makeBlog({ draft, requiresReview });
+            await dispatchHandler(handler, "get", () => handler.get());
+            expect(handler.response.body?.publishRequiresReview).toBe(expected);
+        },
+    );
+
     it("rejects system-editor creation for another user before rate limiting or writes", async () => {
         const handler = createHandler("/blog/:uid/create", 2, PRIV.PRIV_USER_PROFILE | PRIV.PRIV_EDIT_SYSTEM);
         await expect(dispatchHandler(handler, "post", () => handler.postSubmit(submit))).rejects.toBeInstanceOf(
@@ -448,6 +690,7 @@ describe("create, edit, and delete contracts", () => {
 
     it("updates the post, records the edit, and redirects to its detail page", async () => {
         const handler = createHandler("/blog/:uid/:did/edit");
+        handler.ddoc.ip = "192.0.2.13";
         const prepare = vi.spyOn(handler, "prepare");
         DocumentModel.coll.findOneAndUpdate.mockResolvedValue(handler.ddoc);
         await dispatchHandler(handler, "post", () => handler.postSubmit({ ...submit, draft: "false", pin: "true" }));
@@ -476,6 +719,7 @@ describe("create, edit, and delete contracts", () => {
 
     it("deletes the post and statuses, logs the operation, and redirects to the author's list", async () => {
         const handler = createHandler("/blog/:uid/:did/edit");
+        handler.ddoc.ip = "192.0.2.14";
         const prepare = vi.spyOn(handler, "prepare");
         await dispatchHandler(handler, "post", () => handler.postDelete());
         expect(prepare).toHaveBeenCalledOnce();
@@ -516,6 +760,72 @@ describe("create, edit, and delete contracts", () => {
 });
 
 describe("views and star state", () => {
+    it("does not block a legacy author's draft when review counters are absent", async () => {
+        const handler = createHandler("/blog/:uid/:did");
+        handler.ddoc = makeBlog();
+        await handler.get();
+        expect(handler.response.body).toMatchObject({
+            reviewBlocked: false,
+            publishRequiresReview: false,
+            canReview: false,
+            canReset: false,
+        });
+        expect(handler.response.body?.ddoc).not.toHaveProperty("rejectionCount");
+    });
+
+    it.each([false, true])("exposes report controls only without an existing receipt (%s)", async (reported) => {
+        vi.spyOn(BlogSettingsModel, "review").mockResolvedValue({ ...DEFAULT_REVIEW_SETTINGS, mode: "after" });
+        const findReceipt = vi
+            .spyOn(BlogReviewModel.reports, "findOne")
+            .mockResolvedValue(reported ? { _id: "receipt" } : null);
+        const handler = createHandler("/blog/:uid/:did", 2);
+        handler.ddoc.contentVersion = 4;
+        DocumentModel.getStatus.mockResolvedValue({ docType: 70, docId: handler.ddoc.docId, view: true });
+        await handler.get({ domainId: "system" });
+        expect(findReceipt).toHaveBeenCalledWith({
+            _id: `system:70:${handler.ddoc.docId.toHexString()}:4:2`,
+        });
+        expect(handler.response.body).toMatchObject({ canReport: !reported, reportVersion: 4, star: false });
+        expect(DocumentModel.inc).not.toHaveBeenCalled();
+    });
+
+    it("hides reporting controls for an approved content version", async () => {
+        vi.spyOn(BlogSettingsModel, "review").mockResolvedValue({ ...DEFAULT_REVIEW_SETTINGS, mode: "after" });
+        const findReceipt = vi.spyOn(BlogReviewModel.reports, "findOne");
+        const handler = createHandler("/blog/:uid/:did", 2);
+        handler.ddoc.reportApprovedVersion = 0;
+        await handler.get();
+        expect(handler.response.body).toMatchObject({ canReport: false, reportVersion: undefined });
+        expect(findReceipt).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        { mode: "before" as const, requiresReview: false },
+        { mode: "after" as const, requiresReview: true },
+    ])(
+        "shows an owner's review hold, counters and independent reset controls in $mode mode",
+        async ({ mode, requiresReview }) => {
+            vi.spyOn(BlogSettingsModel, "review").mockResolvedValue({ ...DEFAULT_REVIEW_SETTINGS, mode });
+            const handler = createHandler("/blog/:uid/:did");
+            handler.blog = new BlogPolicy(
+                handler.user,
+                "reviewer",
+                BLOG_DEFAULT | BLOG_PERM.REVIEW | BLOG_PERM.RESET_REVIEW_COUNTERS,
+            );
+            handler.ddoc = makeBlog({ reviewPending: true, requiresReview, rejectionCount: 3, reportCount: 5 });
+            await handler.get();
+            expect(handler.response.body).toMatchObject({
+                canReview: true,
+                canReset: true,
+                canViewReportCount: true,
+                canWithdrawReview: true,
+                publishRequiresReview: true,
+                reviewBlocked: true,
+                ddoc: { reportCount: 5, rejectionCount: 3 },
+            });
+        },
+    );
+
     it.each([
         [BLOG_PERM.UNPUBLISH_OTHERS, true],
         [0n, false],

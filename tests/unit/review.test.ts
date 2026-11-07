@@ -7,6 +7,7 @@ import {
     BLOG_PERM,
     DEFAULT_REVIEW_SETTINGS,
     ReviewDecisions,
+    ReviewMessages,
     ReviewModes,
     ReviewReasons,
 } from "../../features/constants";
@@ -14,14 +15,25 @@ import { BlogModel } from "../../features/model";
 import { BlogPolicy } from "../../features/permission";
 import { applyReviewHandler } from "../../features/review.handler";
 import { articleForReader, BlogReviewModel, publicationUpdate, reviewComment } from "../../features/review.model";
+import { BlogSettingsModel } from "../../features/settings.model";
 import type { BlogDoc, BlogReport } from "../../features/types";
 import { makeBlog } from "../helpers/fixtures";
 import type { Handler } from "../helpers/hydro";
-import { dispatchHandler, DocumentModel, makeUser, MessageModel, OplogModel, ValidationError } from "../helpers/hydro";
+import {
+    dispatchHandler,
+    DocumentModel,
+    DocumentNotFoundError,
+    makeUser,
+    MessageModel,
+    OplogModel,
+    UserModel,
+    ValidationError,
+} from "../helpers/hydro";
 
 let article: BlogDoc | null;
 const receipts = new Map<string, BlogReport>();
 const reports = {
+    find: vi.fn(),
     findOne: vi.fn(),
     updateOne: vi.fn(),
     deleteOne: vi.fn(),
@@ -81,6 +93,42 @@ describe("approval when disabling review", () => {
         DocumentModel.getMulti.mockReturnValue(cursor);
         return cursor;
     }
+
+    it("finishes an empty queue without decisions or notifications", async () => {
+        const cursor = queueOnce();
+        cursor.toArray.mockReset().mockResolvedValue([]);
+        const notify = vi.fn();
+        expect(await BlogReviewModel.approvePending(9, new Date(), notify)).toBe(0);
+        expect(DocumentModel.get).not.toHaveBeenCalled();
+        expect(notify).not.toHaveBeenCalled();
+    });
+
+    it("skips an article deleted during a decision and continues the sweep", async () => {
+        article = makeBlog({ reviewPending: true });
+        queueOnce();
+        vi.spyOn(BlogReviewModel, "decide").mockRejectedValue(new DocumentNotFoundError());
+        const notify = vi.fn();
+        expect(await BlogReviewModel.approvePending(9, new Date(), notify)).toBe(0);
+        expect(notify).not.toHaveBeenCalled();
+    });
+
+    it("retries review conflicts but propagates integrity and storage failures", async () => {
+        article = makeBlog({ reviewPending: true });
+        queueOnce();
+        const decide = vi
+            .spyOn(BlogReviewModel, "decide")
+            .mockRejectedValueOnce(new ValidationError("review", null, ReviewMessages.Changed))
+            .mockResolvedValue({ ...snapshot(), reviewPending: false });
+        const notify = vi.fn();
+        expect(await BlogReviewModel.approvePending(9, new Date(), notify)).toBe(1);
+        expect(decide).toHaveBeenCalledTimes(2);
+        for (const failure of [new ValidationError("report", null, ReviewMessages.Integrity), new Error("offline")]) {
+            queueOnce();
+            decide.mockClear().mockRejectedValue(failure);
+            await expect(BlogReviewModel.approvePending(9, new Date(), notify)).rejects.toBe(failure);
+            expect(decide).toHaveBeenCalledOnce();
+        }
+    });
 
     it("continues beyond the first batch with a stable article-ID cursor", async () => {
         const docs = Array.from({ length: 101 }, () => makeBlog({ docId: new ObjectId(), reviewPending: true }));
@@ -243,6 +291,34 @@ describe("review publication state machine", () => {
 });
 
 describe("independent report consistency", () => {
+    it("leaves an article without a pending receipt untouched during recovery", async () => {
+        await BlogReviewModel.materialize(snapshot());
+        expect(reports.updateOne).not.toHaveBeenCalled();
+        expect(DocumentModel.coll.updateOne).not.toHaveBeenCalled();
+    });
+
+    it.each(["missing", "operationId", "comments", "revision"])(
+        "preserves the pending slot when the stored receipt has a conflicting %s",
+        async (field) => {
+            reports.updateOne.mockRejectedValueOnce(new Error("pause receipt"));
+            await expect(BlogReviewModel.report(snapshot(), 3, 0, "original", after)).rejects.toThrow("pause receipt");
+            const pending = snapshot();
+            const stored = { ...pending.pendingReportWrite! };
+            const mismatch = field === "missing" ? null : { ...stored, [field]: field === "revision" ? 99 : "other" };
+            reports.findOne.mockResolvedValueOnce(mismatch);
+            await expect(BlogReviewModel.materialize(pending)).rejects.toBeInstanceOf(ValidationError);
+            expect(DocumentModel.coll.updateOne).not.toHaveBeenCalled();
+            expect(article?.pendingReportWrite).toEqual(pending.pendingReportWrite);
+        },
+    );
+
+    it("rejects a report counter overflow without accepting a receipt", async () => {
+        article!.reportCount = Number.MAX_SAFE_INTEGER;
+        await expect(BlogReviewModel.report(snapshot(), 3, 0, "", after)).rejects.toBeInstanceOf(ValidationError);
+        expect(DocumentModel.coll.findOneAndUpdate).not.toHaveBeenCalled();
+        expect(receipts.size).toBe(0);
+    });
+
     it("hides only the fourth report and deduplicates a previously accepted hidden report", async () => {
         for (const uid of [3, 4, 5]) {
             expect((await BlogReviewModel.report(snapshot(), uid, 0, `report-${uid}`, after)).hidden).toBe(false);
@@ -353,6 +429,15 @@ describe("independent report consistency", () => {
 });
 
 describe("review decisions and visibility", () => {
+    it("rejects an overflowing rejection count and a stale reset without mutation", async () => {
+        article = makeBlog({ reviewPending: true, rejectionCount: Number.MAX_SAFE_INTEGER, writeRevision: 4 });
+        await expect(BlogReviewModel.decide(snapshot(), 0, 0, ReviewDecisions.Reject, 9, "")).rejects.toBeInstanceOf(
+            ValidationError,
+        );
+        await expect(BlogReviewModel.reset(snapshot(), 3)).rejects.toBeInstanceOf(ValidationError);
+        expect(DocumentModel.coll.findOneAndUpdate).not.toHaveBeenCalled();
+    });
+
     it("restores report-hidden content, clears counts and exempts only that content version", async () => {
         await BlogReviewModel.report(snapshot(), 3, 0, "", { ...after, reportLimit: 0 });
         await BlogReviewModel.decide(snapshot(), article!.reviewGeneration!, 0, ReviewDecisions.Approve, 9, "");
@@ -446,9 +531,11 @@ describe("native review handler boundaries", () => {
         blog: BlogPolicy;
         prepare: () => void;
         post: () => void;
-        get: () => void;
+        get: (args?: Record<string, unknown>) => unknown;
+        _prepare: (args: Record<string, unknown>) => Promise<void>;
         postDecide: (args: Record<string, unknown>) => Promise<void>;
         postResetReview: (args: Record<string, unknown>) => Promise<void>;
+        postReport: (args: Record<string, unknown>) => Promise<void>;
     }
     const register = vi.fn<(name: string, path: string, Class: new () => ReviewHandler) => void>();
     applyReviewHandler({ Route: register } as unknown as Context);
@@ -461,6 +548,218 @@ describe("native review handler boundaries", () => {
         handler.ddoc = snapshot();
         return handler;
     }
+
+    it.each(["/blog/review", "/blog/review/:did"])(
+        "omits article IPs at %s without hiding review tokens",
+        async (path) => {
+            article = makeBlog({
+                ip: "192.0.2.20",
+                reviewPending: true,
+                contentVersion: 2,
+                reviewGeneration: 3,
+                reportCount: 4,
+                reply: [{ _id: new ObjectId(), owner: 3, content: "Legacy reply", ip: "192.0.2.21" }],
+            });
+            const handler = reviewer(path);
+            const cursor = { project: vi.fn(), sort: vi.fn() };
+            cursor.project.mockReturnValue(cursor);
+            cursor.sort.mockReturnValue(cursor);
+            DocumentModel.getMulti.mockReturnValue(cursor);
+            reports.find.mockReturnValue(cursor);
+            const list = path === "/blog/review";
+            handler.ctx.db.paginate.mockResolvedValue([list ? [snapshot()] : [], 1, 1]);
+            UserModel.getList.mockResolvedValue({});
+            DocumentModel.count.mockResolvedValue(1);
+            await dispatchHandler(handler, "get", () => handler.get({ domainId: "system" }));
+            const body = handler.response.body as { ddoc?: BlogDoc; ddocs?: BlogDoc[] };
+            const exposed = list ? body.ddocs![0] : body.ddoc!;
+            expect(exposed).not.toHaveProperty("ip");
+            expect(exposed.reply[0]).not.toHaveProperty("ip");
+            expect(exposed).toMatchObject({ contentVersion: 2, reviewGeneration: 3, reportCount: 4 });
+            expect(article.ip).toBe("192.0.2.20");
+            expect(article.reply[0].ip).toBe("192.0.2.21");
+        },
+    );
+
+    it("loads review targets by converted ID and rejects missing targets", async () => {
+        const handler = reviewer();
+        await handler._prepare({ domainId: "restricted", did: article!.docId.toHexString() });
+        expect(DocumentModel.get).toHaveBeenCalledWith("system", 70, article!.docId);
+        expect(handler.ddoc).toEqual(article);
+        article = null;
+        await expect(
+            handler._prepare({ domainId: "restricted", did: handler.ddoc.docId.toHexString() }),
+        ).rejects.toBeInstanceOf(DocumentNotFoundError);
+    });
+
+    it("lists the private pending queue with stable sorting, pagination and author hydration", async () => {
+        const handler = reviewer("/blog/review");
+        const cursor = { project: vi.fn(), sort: vi.fn() };
+        cursor.project.mockReturnValue(cursor);
+        cursor.sort.mockReturnValue(cursor);
+        DocumentModel.getMulti.mockReturnValue(cursor);
+        article!.reviewPending = true;
+        handler.ctx.db.paginate.mockResolvedValue([[snapshot()], 2, 21]);
+        DocumentModel.count.mockResolvedValue(21);
+        const users = { 1: makeUser(1) };
+        UserModel.getList.mockResolvedValue(users);
+        await dispatchHandler(handler, "get", () => handler.get({ domainId: "system" }));
+        expect(DocumentModel.getMulti).toHaveBeenCalledWith("system", 70, { reviewPending: true });
+        expect(cursor.project).toHaveBeenCalledWith({ pendingReportWrite: 0, lastReview: 0 });
+        expect(cursor.sort).toHaveBeenCalledWith({ reviewQueuedAt: 1, docId: 1 });
+        expect(handler.ctx.db.paginate).toHaveBeenCalledWith(cursor, 1, 20);
+        expect(UserModel.getList).toHaveBeenCalledWith("system", [1]);
+        expect(handler.response).toEqual({
+            template: "blog_review.html",
+            body: { ddocs: [snapshot()], dpcount: 2, page: 1, udict: users, pendingCount: 21 },
+        });
+    });
+
+    it("loads reports only for the pending article and hydrates their reporters", async () => {
+        article!.reviewPending = true;
+        const handler = reviewer();
+        const cursor = { sort: vi.fn() };
+        cursor.sort.mockReturnValue(cursor);
+        reports.find.mockReturnValue(cursor);
+        const report = { reporter: 3, comments: "Private report" };
+        const paginate = vi.fn().mockResolvedValue([[report], 1, 1]);
+        Object.assign(handler.ctx.db, { paginate });
+        const users = { 1: makeUser(1), 3: makeUser(3) };
+        UserModel.getList.mockResolvedValue(users);
+        await dispatchHandler(handler, "get", () => handler.get({ domainId: "system" }));
+        expect(reports.find).toHaveBeenCalledWith({ articleId: article!.docId });
+        expect(cursor.sort).toHaveBeenCalledWith({ acceptedAt: -1, _id: 1 });
+        expect(paginate).toHaveBeenCalledWith(cursor, 1, 20);
+        expect(UserModel.getList).toHaveBeenCalledWith("system", [1, 3]);
+        expect(handler.response).toEqual({
+            template: "blog_review_detail.html",
+            body: { ddoc: snapshot(), reports: [report], page: 1, dpcount: 1, udict: users, canReset: false },
+        });
+    });
+
+    it("does not display reports for an article no longer awaiting review", async () => {
+        const handler = reviewer();
+        await expect(dispatchHandler(handler, "get", () => handler.get())).rejects.toBeInstanceOf(ValidationError);
+        expect(reports.find).not.toHaveBeenCalled();
+        expect(handler.response.body).toBeUndefined();
+    });
+
+    it.each(["/blog/review", "/blog/review/:did"])("denies unauthorized queue reads at %s", async (path) => {
+        const handler = reviewer(path, BLOG_PERM.MANAGE_SETTINGS);
+        await expect(dispatchHandler(handler, "get", () => handler.get())).rejects.toThrow();
+        expect(DocumentModel.getMulti).not.toHaveBeenCalled();
+        expect(reports.find).not.toHaveBeenCalled();
+    });
+
+    it("sends a rejection notice with the validated comment and original version", async () => {
+        article = makeBlog({ reviewPending: true, contentVersion: 4, reviewGeneration: 2 });
+        const handler = reviewer();
+        await dispatchHandler(handler, "post", () =>
+            handler.postDecide({
+                domainId: "restricted",
+                generation: "2",
+                version: "4",
+                decision: "reject",
+                comments: "  Revise this  ",
+            }),
+        );
+        expect(article?.lastReview).toMatchObject({ version: 4, comments: "Revise this", decision: "reject" });
+        expect(JSON.parse(MessageModel.send.mock.calls[0][2] as string)).toMatchObject({
+            params: ["Test post", 4, "Revise this", "/blog_post_detail"],
+        });
+        expect(handler.response).toMatchObject({ body: { decision: "reject" }, redirect: "/blog_review" });
+    });
+
+    it("renders zero counters for legacy reset targets", async () => {
+        const handler = reviewer("/blog/review/:did/reset", BLOG_PERM.REVIEW | BLOG_PERM.RESET_REVIEW_COUNTERS);
+        await dispatchHandler(handler, "get", () => handler.get());
+        expect(handler.response.body).toEqual({
+            did: article!.docId,
+            revision: 0,
+            reportCount: 0,
+            rejectionCount: 0,
+            canViewReportCount: true,
+        });
+    });
+
+    it.each([0, 3])("accepts a report and sends an author notice only above limit %s", async (reportLimit) => {
+        vi.spyOn(BlogSettingsModel, "review").mockResolvedValue({ ...after, reportLimit });
+        const handler = reviewer("/blog/:uid/:did/report", BLOG_PERM.VIEW_PUBLISHED);
+        await dispatchHandler(handler, "post", () =>
+            handler.postReport({
+                domainId: "restricted",
+                version: "0",
+                comments: "  Please review  ",
+                reporter: 3,
+                uid: 3,
+                owner: 9,
+                reportCount: 999,
+            }),
+        );
+        expect(handler.limitRate).toHaveBeenCalledWith("report_blog", 3600, 60);
+        expect(receipts.size).toBe(1);
+        expect(article).toMatchObject({ owner: 1, reportCount: 1, draft: reportLimit === 0 });
+        expect([...receipts.values()]).toEqual([
+            expect.objectContaining({ reporter: 9, version: 0, comments: "Please review" }),
+        ]);
+        expect(OplogModel.log).toHaveBeenCalledWith(
+            handler,
+            "blog.report",
+            expect.objectContaining({
+                comments: "Please review",
+                hidden: reportLimit === 0,
+                previous: expect.objectContaining({ reportCount: 0 }) as unknown,
+            }),
+        );
+        expect(MessageModel.send).toHaveBeenCalledTimes(reportLimit === 0 ? 1 : 0);
+        expect(handler.response).toEqual({
+            body: { reported: true, duplicate: false },
+            redirect: "/blog_list_home",
+        });
+    });
+
+    it.each(["receipt", "pending"])(
+        "acknowledges the reporter's hidden %s without duplicate side effects",
+        async (state) => {
+            vi.spyOn(BlogSettingsModel, "review").mockResolvedValue(after);
+            if (state === "pending") {
+                reports.updateOne.mockRejectedValueOnce(new Error("pause"));
+                await expect(
+                    BlogReviewModel.report(snapshot(), 9, 0, "Original", { ...after, reportLimit: 0 }),
+                ).rejects.toThrow("pause");
+            } else {
+                await BlogReviewModel.report(snapshot(), 9, 0, "Original", { ...after, reportLimit: 0 });
+            }
+            const handler = reviewer("/blog/:uid/:did/report", BLOG_PERM.VIEW_PUBLISHED);
+            await dispatchHandler(handler, "post", () => handler.postReport({ domainId: "system", version: "0" }));
+            expect(handler.response.body).toEqual({ reported: true, duplicate: true });
+            expect(article?.reportCount).toBe(1);
+            expect(receipts.size).toBe(1);
+            expect(OplogModel.log).not.toHaveBeenCalled();
+            expect(MessageModel.send).not.toHaveBeenCalled();
+        },
+    );
+
+    it("denies a hidden article to another reporter before rate limiting", async () => {
+        await BlogReviewModel.report(snapshot(), 3, 0, "", { ...after, reportLimit: 0 });
+        const handler = reviewer("/blog/:uid/:did/report", BLOG_PERM.VIEW_PUBLISHED);
+        await expect(
+            dispatchHandler(handler, "post", () => handler.postReport({ domainId: "system", version: "0" })),
+        ).rejects.toThrow();
+        expect(handler.limitRate).not.toHaveBeenCalled();
+        expect(article?.reportCount).toBe(1);
+    });
+
+    it("does not accept a report after rate limiting fails", async () => {
+        const handler = reviewer("/blog/:uid/:did/report", BLOG_PERM.VIEW_PUBLISHED);
+        handler.limitRate.mockRejectedValue(new Error("rate limited"));
+        await expect(
+            dispatchHandler(handler, "post", () => handler.postReport({ domainId: "system", version: "0" })),
+        ).rejects.toThrow("rate limited");
+        expect(DocumentModel.coll.findOneAndUpdate).not.toHaveBeenCalled();
+        expect(OplogModel.log).not.toHaveBeenCalled();
+        expect(handler.response.body).toBeUndefined();
+    });
 
     it("authorizes approval solely through review and emits one native message/audit", async () => {
         article = makeBlog({ reviewPending: true, requiresReview: true });
@@ -495,9 +794,23 @@ describe("native review handler boundaries", () => {
         ).rejects.toThrow();
         const handler = reviewer("/blog/review/:did/reset", BLOG_PERM.RESET_REVIEW_COUNTERS);
         const prepare = vi.spyOn(handler, "prepare");
-        await dispatchHandler(handler, "post", () => handler.postResetReview({ domainId: "system", revision: "0" }));
+        await dispatchHandler(handler, "post", () =>
+            handler.postResetReview({
+                domainId: "system",
+                revision: "0",
+                draft: false,
+                requiresReview: false,
+                owner: 9,
+            }),
+        );
         expect(prepare).toHaveBeenCalledOnce();
-        expect(article).toMatchObject({ draft: true, requiresReview: true, rejectionCount: 0, reportCount: 0 });
+        expect(article).toMatchObject({
+            owner: 1,
+            draft: true,
+            requiresReview: true,
+            rejectionCount: 0,
+            reportCount: 0,
+        });
     });
 
     it("hides report counts from reset-only users without denying their reset operation", async () => {

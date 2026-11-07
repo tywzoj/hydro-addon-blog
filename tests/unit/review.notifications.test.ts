@@ -61,6 +61,39 @@ afterEach(() => {
 });
 
 describe("native maintenance initialization and recovery", () => {
+    it("registers worker and login callbacks on secondary instances without scheduling duplicate tasks", async () => {
+        vi.stubEnv("NODE_APP_INSTANCE", "1");
+        const taskId = new ObjectId();
+        runtime.findOne.mockResolvedValue({ taskId });
+        const addHandler = vi.fn<(name: string, callback: () => Promise<void>) => void>();
+        const on = vi.fn<(name: string, callback: (_: unknown, user: User) => Promise<void>) => void>();
+        const instance = new BlogReviewNotifications({
+            db: { collection: () => runtime },
+            worker: { addHandler },
+            on,
+            effect: vi.fn(),
+        } as unknown as Context);
+        const tick = vi.spyOn(instance, "tick").mockResolvedValue();
+        const login = vi.spyOn(instance, "login").mockResolvedValue();
+        await instance.init();
+        expect(ScheduleModel.coll.updateOne).not.toHaveBeenCalled();
+        expect(addHandler.mock.calls[0][0]).toBe("blog.review.maintenance");
+        await addHandler.mock.calls[0][1]();
+        expect(tick).toHaveBeenCalledWith(taskId);
+        expect(on.mock.calls[0][0]).toBe("auth/login");
+        const user = makeUser(2) as unknown as User;
+        await on.mock.calls[0][1]("password", user);
+        expect(login).toHaveBeenCalledWith(user);
+    });
+
+    it("finishes recovery immediately when no report writes are pending", async () => {
+        DocumentModel.getMulti.mockReturnValue(cursor([]));
+        const materialize = vi.spyOn(BlogReviewModel, "materialize");
+        await service.recover();
+        expect(DocumentModel.getMulti).toHaveBeenCalledOnce();
+        expect(materialize).not.toHaveBeenCalled();
+    });
+
     it("uses the persisted task identity and disposes its own handler context", async () => {
         vi.stubEnv("NODE_APP_INSTANCE", "0");
         const taskId = new ObjectId();
@@ -156,6 +189,62 @@ describe("reviewer login reminders", () => {
 });
 
 describe("periodic summary ownership and recipients", () => {
+    it("anchors a changed reminder cadence to its persisted change time", async () => {
+        const changedAt = new Date("2026-11-07T10:00:00Z");
+        settings.review = {
+            ...DEFAULT_REVIEW_SETTINGS,
+            reminderChangedAt: changedAt,
+            reminderRevision: 4,
+            intervalMinutes: 10,
+        };
+        runtime.findOneAndUpdate.mockResolvedValue(null);
+        await service.summary();
+        expect(runtime.updateOne).toHaveBeenCalledWith({ _id: "global", configRevision: { $lt: 4 } }, [
+            {
+                $set: {
+                    configRevision: 4,
+                    nextSummaryAt: { $add: [{ $literal: changedAt }, 600_000] },
+                    runId: "$$REMOVE",
+                    leaseUntil: "$$REMOVE",
+                },
+            },
+        ]);
+        expect(MessageModel.send).not.toHaveBeenCalled();
+    });
+
+    it("releases a claimed summary when there are no eligible user identities", async () => {
+        users = [];
+        await service.summary();
+        expect(UserModel.coll.find).not.toHaveBeenCalled();
+        expect(MessageModel.send).not.toHaveBeenCalled();
+        expect(runtime.updateOne).toHaveBeenLastCalledWith(
+            { _id: "global", runId: expect.any(String) as unknown },
+            { $unset: { runId: "", leaseUntil: "" } },
+        );
+    });
+
+    it("continues past a full batch without reviewers and sends only to later eligible users", async () => {
+        settings.roles.push({ id: "denied", name: "denied", permissions: "0" });
+        assignments = users.slice(0, 100).map((user) => ({ _id: user._id, role: "denied" }));
+        await service.summary();
+        const recipients = MessageModel.send.mock.calls.flatMap((call) => call[1] as number[]);
+        expect(recipients).toEqual(users.slice(100).map((user) => user._id));
+        expect(MessageModel.send).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not deliver after a cadence change during recipient lookup", async () => {
+        UserModel.coll.find.mockImplementation(({ _id }: { _id: { $gt: number; $lte: number } }) => {
+            settings.review!.reminderRevision++;
+            return cursor(users.filter((user) => user._id > _id.$gt && user._id <= _id.$lte));
+        });
+        await service.summary();
+        expect(MessageModel.send).not.toHaveBeenCalled();
+        expect(runtime.updateOne).toHaveBeenLastCalledWith(
+            { _id: "global", runId: expect.any(String) as unknown },
+            { $unset: { runId: "", leaseUntil: "" } },
+        );
+    });
+
     it("visits every page including default, retired and legacy-guest roles without duplicate root", async () => {
         settings.deletedRoles.push("retired");
         settings.roles.push({ id: "denied", name: "denied", permissions: "0" });

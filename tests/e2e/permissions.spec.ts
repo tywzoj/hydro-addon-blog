@@ -4,7 +4,7 @@ import type { Udoc } from "hydrooj/src/interface";
 import type { BlogPermission } from "../../features/permission";
 import type { BlogAssignment, BlogDoc, BlogSettings } from "../../features/types";
 import { accounts } from "./accounts";
-import { confirmAction, createPost, expect, fillPost, test } from "./fixtures";
+import { blogState, confirmAction, createPost, expect, fillPost, test } from "./fixtures";
 
 async function settingsPage(page: Page, path: string, password = accounts.editor.password) {
     await page.goto(path, { waitUntil: "domcontentloaded" });
@@ -137,6 +137,51 @@ test("global settings role assignment and delegation follow Hydro management sem
     expect(await db.collection<BlogAssignment>("blog.user").findOne({ _id: 2 })).toMatchObject({ role: "root" });
     await resetUser(viewer, 2);
     await resetUser(editor, 3);
+    const revokedSettings = (await db.collection<BlogSettings>("blog.settings").findOne({ _id: "global" }))!;
+    const revokedAssignments = await db.collection<BlogAssignment>("blog.user").find().sort({ _id: 1 }).toArray();
+    const revokedAudits = await db
+        .collection("oplog")
+        .find({ operator: 3, type: { $regex: "^blog\\." } })
+        .sort({ _id: 1 })
+        .toArray();
+    const settingsData = {
+        operation: "review_settings",
+        revision: revokedSettings.revision,
+        mode: "before",
+        reportLimit: 3,
+        rejectionLimit: 3,
+        reminders: true,
+        intervalMinutes: 1440,
+    };
+    const forbiddenActions: [string, Record<string, unknown>][] = [
+        ...["/blog/settings", "/blog/settings/roles", "/blog/settings/permissions", "/blog/settings/users"].map(
+            (path): [string, Record<string, unknown>] => [path, settingsData],
+        ),
+        ["/blog/settings/roles", { operation: "add", role: "denied_manager_role", revision: revokedSettings.revision }],
+        ["/blog/settings/roles", { operation: "delete", role: "blogmanager", revision: revokedSettings.revision }],
+        [
+            "/blog/settings/roles",
+            { operation: "delete_roles", roles: "blogmanager,matrix_order", revision: revokedSettings.revision },
+        ],
+        ["/blog/settings/permissions", { revision: revokedSettings.revision, permissions: { default: ["1000", "0"] } }],
+        ["/d/blogrestricted/blog/settings/users", { operation: "assign", uid: "2", role: "root" }],
+        ["/blog/settings/users", { operation: "set_users", uids: [2, 3], role: "root" }],
+    ];
+    for (const [path, data] of forbiddenActions) {
+        const denied = await viewer.request.post(path, { headers: { Referer: viewer.url() }, data });
+        expect(denied.status()).toBe(403);
+        expect(await db.collection<BlogSettings>("blog.settings").findOne({ _id: "global" })).toEqual(revokedSettings);
+        expect(await db.collection<BlogAssignment>("blog.user").find().sort({ _id: 1 }).toArray()).toEqual(
+            revokedAssignments,
+        );
+        expect(
+            await db
+                .collection("oplog")
+                .find({ operator: 3, type: { $regex: "^blog\\." } })
+                .sort({ _id: 1 })
+                .toArray(),
+        ).toEqual(revokedAudits);
+    }
     expect((await viewer.goto("/blog/settings", { waitUntil: "domcontentloaded" }))?.status()).toBe(403);
     await settingsPage(editor, "/blog/settings/users");
     const before = await db
@@ -258,6 +303,74 @@ test("own permissions stay revoked with others grants and role deletion does not
     await expect(editor.locator('tr[data-uid="2"]')).toHaveCount(0);
 });
 
+test("revoked delegates cannot reuse a session or captured requests to read or mutate protected data", async ({
+    page,
+    viewer,
+    editor,
+    db,
+}) => {
+    const publicPath = await createPost(page, "Revocation public target");
+    const draftPath = await createPost(page, "Revocation private target", true);
+    const sentinel = await createPost(page, "Revocation unrelated sentinel");
+    await createRole(editor, "revocable_data");
+    await setPermissions(editor, "revocable_data", [
+        "ACCESS",
+        "VIEW_PUBLISHED",
+        "VIEW_DRAFT_OTHERS",
+        "EDIT_OTHERS",
+        "PIN_OTHERS",
+        "DELETE_OTHERS",
+        "PUBLISH_OTHERS",
+    ]);
+    await assignRole(editor, accounts.viewer.name, "revocable_data");
+    await viewer.goto(draftPath, { waitUntil: "domcontentloaded" });
+    await expect(viewer.locator(".topic__content")).toContainText("Body for Revocation private target");
+    const captured = {
+        operation: "submit",
+        title: "Authorized delegate edit",
+        content: "Private revocation canary",
+        draft: true,
+    };
+    const permitted = await viewer.request.post(`${draftPath}/edit`, {
+        headers: { Referer: viewer.url() },
+        data: captured,
+    });
+    expect(permitted.ok(), await permitted.text()).toBe(true);
+    await setPermissions(editor, "revocable_data", ["ACCESS", "VIEW_PUBLISHED"]);
+    const before = await blogState(db, [publicPath, draftPath, sentinel]);
+    const staleSessionWrite = await viewer.request.post(`${draftPath}/edit`, {
+        headers: { Referer: viewer.url() },
+        data: { ...captured, content: "Denied after revocation" },
+    });
+    expect(staleSessionWrite.status()).toBe(403);
+    expect(await blogState(db, [publicPath, draftPath, sentinel])).toEqual(before);
+
+    for (const prefix of ["", "/d/blogrestricted"]) {
+        for (const accept of ["text/html", "application/json"]) {
+            const denied = await viewer.request.get(`${prefix}${draftPath}`, { headers: { Accept: accept } });
+            expect(denied.status()).toBe(403);
+            expect(await denied.text()).not.toContain("Private revocation canary");
+        }
+        const listed = await viewer.request.get(`${prefix}/blog/2`, { headers: { Accept: "application/json" } });
+        expect(listed.ok()).toBe(true);
+        expect(await listed.text()).not.toContain("Private revocation canary");
+        for (const path of [publicPath, draftPath]) {
+            const deniedEditor = await viewer.request.get(`${prefix}${path}/edit`);
+            expect(deniedEditor.status()).toBe(403);
+            for (const operation of ["submit", "pin", "publish", "delete"]) {
+                const denied = await viewer.request.post(`${prefix}${path}/edit`, {
+                    headers: { Referer: viewer.url() },
+                    data: { ...captured, operation, draft: false, pin: true, owner: 3, role: "root" },
+                });
+                expect(denied.status()).toBe(403);
+                expect(await blogState(db, [publicPath, draftPath, sentinel])).toEqual(before);
+            }
+        }
+    }
+    await viewer.goto(publicPath, { waitUntil: "domcontentloaded" });
+    await expect(viewer.locator(".topic__content")).toContainText("Body for Revocation public target");
+});
+
 test("guest policy and domain independence preserve authenticated mutation requirements", async ({
     page,
     editor,
@@ -274,6 +387,9 @@ test("guest policy and domain independence preserve authenticated mutation requi
         await setPermissions(editor, "guest", ["ACCESS", "VIEW_PUBLISHED", "STAR", "MANAGE_SETTINGS"]);
         await guest.goto(path, { waitUntil: "domcontentloaded" });
         await expect(guest.getByRole("heading", { name: "Global blog across domains" })).toBeVisible();
+        const guestJSON = await guest.request.get(path, { headers: { Accept: "application/json" } });
+        expect(guestJSON.ok()).toBe(true);
+        expect(await guestJSON.json()).not.toHaveProperty("ddoc.ip");
         await expect(guest.locator("[data-star]")).toHaveCount(0);
         await guest.goto("/blog/settings", { waitUntil: "domcontentloaded" });
         await expect(guest).toHaveURL(/\/login/);

@@ -59,6 +59,23 @@ Handlers paginate ten posts at a time and validate the page as a positive intege
 
 Source: [list handlers and sort map](../features/handler.ts), [model queries and indexes](../features/model.ts).
 
+## Article IP Privacy
+
+Article IP addresses are server-only metadata. Home/user lists, article detail,
+editor, review queue and review detail responses omit the article `ip` and any
+legacy embedded reply `ip` fields, for both HTML template data and JSON.
+This applies equally to guests, authors, reviewers and root; permissions do not
+grant an exception. Current independent comments already exclude both levels'
+IP fields through their query projection.
+
+The response-only `articleForResponse` projection clones the article and legacy
+reply objects. It does not erase stored addresses, modify prepared documents,
+remove review tokens or change authorization. Existing write-side IP capture and
+server audit payloads remain unchanged. The separate `articleForReader` helper
+still controls review-metadata visibility and is also used for audit snapshots;
+user-facing article data must additionally pass through `articleForResponse`.
+No database migration or framework serialization patch is required.
+
 ## Publication and Editing
 
 - Article deletion, explicit publication/withdrawal, saving published content or

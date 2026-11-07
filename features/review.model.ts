@@ -36,6 +36,19 @@ export function reviewComment(value: unknown): string {
 
 export const OptionalReviewComment = [reviewComment, () => true] as const;
 
+export function articleForResponse(doc: BlogDoc): BlogDoc {
+    const result = { ...doc };
+    delete result.ip;
+    if (doc.reply) {
+        result.reply = doc.reply.map((reply) => {
+            const visible = { ...reply };
+            delete visible.ip;
+            return visible;
+        });
+    }
+    return result;
+}
+
 export function articleForReader(doc: BlogDoc, uid: number, canReview = false): BlogDoc {
     const result = { ...doc };
     delete result.pendingReportWrite;

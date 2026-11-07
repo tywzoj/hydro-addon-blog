@@ -176,6 +176,76 @@ test.afterEach(async ({ editor }) => {
     }
 });
 
+test("notifications use recipient preferences for review decisions and mixed-language mentions", async ({
+    page,
+    viewer,
+    editor,
+    db,
+}) => {
+    async function setLanguage(target: Page, language: string) {
+        await target.goto("/home/settings/preference", navigation);
+        await target.locator('select[name="viewLang"]').selectOption(language);
+        await Promise.all([
+            target.waitForNavigation(navigation),
+            target.locator('input.primary[type="submit"]').click(),
+        ]);
+    }
+    async function latestNotice(uid: number, path: string) {
+        const notice = await db
+            .collection<{ content: string; to: number[] }>("message")
+            .findOne({ to: uid, content: { $regex: did(path).toHexString() } }, { sort: { _id: -1 } });
+        expect(notice).not.toBeNull();
+        return JSON.parse(notice!.content) as { message: string; params: (string | number)[] };
+    }
+
+    await configure(editor, "before", false);
+    try {
+        await setLanguage(page, "zh");
+        const path = await makePost(page, "Recipient language review");
+        const feedback = '<b data-notice-markup="true">Please revise</b>';
+        expect((await decide(editor, path, "reject", feedback)).ok()).toBe(true);
+        expect(await latestNotice(accounts.author.id, path)).toMatchObject({
+            message: "你的博客文章“{0}”（版本 {1}）未通过审查。{2}（{3:link}）。",
+            params: ["Recipient language review", 0, feedback, path],
+        });
+        await page.goto("/home/messages?uid=1", navigation);
+        await page.locator(".messagepad").getByRole("heading", { name: "Hydro", exact: true }).click();
+        await expect(page.locator(".messagepad__content")).toContainText("未通过审查");
+        await expect(page.locator(".messagepad__content")).toContainText(feedback);
+        await expect(page.locator(".messagepad__content [data-notice-markup]")).toHaveCount(0);
+
+        await setLanguage(page, "en");
+        await setLanguage(editor, "zh");
+        expect((await publication(page, path, false)).ok()).toBe(true);
+        expect((await decide(editor, path, "approve")).ok()).toBe(true);
+        expect(await latestNotice(accounts.author.id, path)).toMatchObject({
+            message: ReviewMessages.ApprovedNotice,
+        });
+
+        await viewer.goto(path, navigation);
+        const response = await viewer.request.post(path, {
+            headers: headers(viewer),
+            form: { operation: "reply", content: "@[](/user/2) @[](/user/4)" },
+        });
+        expect(response.ok()).toBe(true);
+        expect(await latestNotice(accounts.author.id, path)).toEqual({
+            message: "User {0} mentioned you in {1:link}",
+            params: [accounts.viewer.name, path],
+        });
+        expect(await latestNotice(accounts.editor.id, path)).toEqual({
+            message: "用户 {0} 在 {1:link} 中提到了你。",
+            params: [accounts.viewer.name, path],
+        });
+        await editor.goto("/home/messages?uid=1", navigation);
+        await editor.locator(".messagepad").getByRole("heading", { name: "Hydro", exact: true }).click();
+        await expect(editor.locator(".messagepad__content")).toContainText("提到了你");
+        await expect(editor.locator(`.messagepad__content a[href="${path}"]`)).toBeVisible();
+    } finally {
+        await setLanguage(page, "en");
+        await setLanguage(editor, "en");
+    }
+});
+
 test("review JSON responses omit IPs without losing decision tokens or stored addresses", async ({
     page,
     viewer,

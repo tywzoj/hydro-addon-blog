@@ -158,6 +158,49 @@ before the final commit and PR.
 Final commit-ready checks passed: `yarn lint`, `yarn typecheck`,
 `yarn test:coverage` (373 tests across eight files), and `git diff --check`.
 
+## Recipient-language Notification Follow-up (2026-11-07)
+
+New blog notices now resolve their template against the target user's persisted
+`viewLang`, falling back to `server.language` when unset/empty. The shared sender
+covers review results, report hiding, disabling-review approvals, login/periodic
+reminders, comment mentions and deletion notices. It projects only IDs/languages,
+deduplicates recipients and groups native sends by language. Missing accounts
+and empty batches produce no messages. Language groups retain existing awaited
+failure behavior, including the possibility of partial delivery.
+
+The localized template stays separate from unmodified message parameters so
+user-controlled text remains escaped and `:link` placeholders remain clickable
+in the native message UI. Existing stored messages are not migrated.
+
+Source basis:
+[Hydro MessageModel](https://github.com/hydro-dev/Hydro/blob/3bae56fe8edddff12346bcb1c8281269c94688d8/packages/hydrooj/src/model/message.ts),
+checked against installed Hydro 5.0.7. Its `sendNotification` establishes the
+recipient-language/server-language fallback, but cannot be reused directly because
+it selects system-privilege recipients and formats a flat string. The addon's
+shared helper keeps explicit recipients and native rich-message parameters using
+`MessageModel.send`. No frontend language catalog or framework patch is introduced.
+
+Evidence:
+
+- `yarn lint`, `yarn typecheck`, `yarn test` and `yarn test:coverage` passed:
+  378 tests across nine files; the new shared sender is included in coverage.
+- `yarn test:e2e --grep 'notifications use recipient|comments matrix|disabling review|review reminders use'`
+  passed comment moderation, automatic approval and real-worker/login reminders.
+  The new message-page assertion initially omitted native conversation selection.
+- After selecting the Hydro conversation explicitly,
+  `yarn test:e2e --grep 'notifications use recipient'` passed all seven cases
+  including authentication. It verifies opposite actor/recipient languages,
+  preference changes between review decisions, mixed-language mention recipients,
+  stored template language, escaped feedback and clickable message links.
+- Declared MCP against a separate isolated port-8893 runtime verified an English
+  actor's mention rendered in Chinese for a Chinese-preference recipient, with
+  the expected native article link. That temporary runtime is separate from the
+  maintainer's port-8888 server; existing test data was not replaced.
+
+These are focused E2E results, not a full-suite or PR-head CI claim. The maintainer
+subsequently requested a restart; port 8888 now runs the updated sender with fresh
+disposable test data.
+
 ## Current Baseline
 
 Repository revision: `2f0b6e2a4fe297bfb49df4573ba13e4794fff336`.

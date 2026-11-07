@@ -73,6 +73,14 @@ export const UserModel = {
     getById: vi.fn<(...args: unknown[]) => Promise<ReturnType<typeof makeUser> | null>>(),
     getByUname: vi.fn<(...args: unknown[]) => Promise<ReturnType<typeof makeUser> | null>>(),
     getList: vi.fn<(...args: unknown[]) => Promise<Record<number, ReturnType<typeof makeUser>>>>(),
+    getMulti(query: { _id: { $in: number[] } }) {
+        const users: { _id: number; viewLang?: string }[] = query._id.$in.map((_id) => ({ _id }));
+        const cursor = {
+            project: (_fields: Record<string, number>) => cursor,
+            toArray: () => Promise.resolve(users),
+        };
+        return cursor;
+    },
 };
 
 export const OplogModel = {
@@ -107,6 +115,7 @@ export class Handler {
     }
     response: { template?: string; body?: Record<string, unknown>; redirect?: string } = {};
     ctx = {
+        i18n: { translate: (message: string, _languages: string[]) => message },
         db: {
             paginate: vi.fn<(cursor: Cursor, page: number, size: number) => Promise<[BlogDoc[], number, number]>>(),
         },

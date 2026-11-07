@@ -25,7 +25,7 @@ yarn test:watch
 yarn test tests/unit/model.test.ts
 ```
 
-`yarn test` and `yarn test:coverage` are non-watch commands. Coverage reports are generated under ignored `coverage/`, including HTML and a JSON summary. Coverage targets article, comment, review and settings models/handlers, review notifications, shared handler preparation, and the permission policy; it is not a whole-project or E2E coverage claim. No percentage threshold is imposed as a substitute for meaningful assertions.
+`yarn test` and `yarn test:coverage` are non-watch commands. Coverage reports are generated under ignored `coverage/`, including HTML and a JSON summary. Coverage targets article, comment, review and settings models/handlers, review notifications, shared recipient-localized message delivery, shared handler preparation, and the permission policy; it is not a whole-project or E2E coverage claim. No percentage threshold is imposed as a substitute for meaningful assertions.
 
 Vitest discovers `tests/unit/**/*.test.ts`, rejects empty discovery or empty suites, disallows focused `.only` tests, and applies five-second test/hook timeouts. CI additionally limits the UT step to five minutes. Ordinary tests are offline and need neither Docker nor a browser. Use the same non-watch command locally and in CI.
 

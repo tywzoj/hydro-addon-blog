@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type { Context, ObjectId, User } from "hydrooj";
-import { DocumentModel, Logger, MessageModel, PRIV, ScheduleModel, SystemModel, UserModel } from "hydrooj";
+import { DocumentModel, Logger, PRIV, ScheduleModel, SystemModel, UserModel } from "hydrooj";
 import type { Collection } from "mongodb";
 import { ObjectId as MongoObjectId } from "mongodb";
 
@@ -18,6 +18,7 @@ import {
     SYSTEM_DOMAIN,
     TYPE_BLOG,
 } from "./constants";
+import { sendBlogMessage } from "./notifications";
 import { BlogReviewModel } from "./review.model";
 import { BlogSettingsModel, resolveBlogPolicy } from "./settings.model";
 import type { BlogReviewRuntime } from "./types";
@@ -29,15 +30,6 @@ declare module "hydrooj" {
 }
 
 const logger = new Logger("blog/review");
-
-export async function sendReviewMessage(to: number | number[], message: string, params: (string | number)[]) {
-    await MessageModel.send(
-        1,
-        to,
-        JSON.stringify({ message, params }),
-        MessageModel.FLAG_RICHTEXT | MessageModel.FLAG_UNREAD,
-    );
-}
 
 export class BlogReviewNotifications {
     runtime: Collection<BlogReviewRuntime>;
@@ -96,7 +88,7 @@ export class BlogReviewNotifications {
             if (!policy.canReview()) return;
             const count = await BlogReviewModel.count();
             if (count && (await BlogSettingsModel.review()).reminders) {
-                await sendReviewMessage(user._id, ReviewMessages.SummaryNotice, [count, this.url()]);
+                await sendBlogMessage(this.ctx, user._id, ReviewMessages.SummaryNotice, [count, this.url()]);
             }
         } catch (error) {
             logger.error("Login review reminder failed: %s", error);
@@ -231,7 +223,7 @@ export class BlogReviewNotifications {
                         [{ $set: { leaseUntil: { $add: ["$$NOW", REVIEW_LEASE_MS] } } }],
                     );
                     if (!owned.matchedCount || this.disposed) return;
-                    await sendReviewMessage(targets, ReviewMessages.SummaryNotice, [count, this.url()]);
+                    await sendBlogMessage(this.ctx, targets, ReviewMessages.SummaryNotice, [count, this.url()]);
                 }
                 after = users[users.length - 1]._id;
             }

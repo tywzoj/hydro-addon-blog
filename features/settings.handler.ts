@@ -26,9 +26,9 @@ import {
     TEMPLATE_BLOG_SETTINGS_USERS,
 } from "./constants";
 import { BlogBaseHandler } from "./handler.base";
+import { sendBlogMessage } from "./notifications";
 import { BLOG_PERMISSIONS } from "./permission";
 import { BlogReviewModel } from "./review.model";
-import { sendReviewMessage } from "./review.notifications";
 import { BlogSettingsModel, permissionMatrixRoles } from "./settings.model";
 import type { BlogRole } from "./types";
 import { toTemplate } from "./utils";
@@ -118,7 +118,7 @@ class BlogSettingsHandler extends BlogBaseHandler {
                           did: next.docId,
                           domainId: SYSTEM_DOMAIN,
                       });
-                      await sendReviewMessage(next.owner, ReviewMessages.ApprovedNotice, [
+                      await sendBlogMessage(this.ctx, next.owner, ReviewMessages.ApprovedNotice, [
                           next.title,
                           next.contentVersion ?? 0,
                           link,

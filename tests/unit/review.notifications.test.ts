@@ -35,6 +35,7 @@ beforeEach(() => {
     runtime.updateOne.mockResolvedValue({ matchedCount: 1 });
     runtime.findOneAndUpdate.mockResolvedValue({ runId: "claimed" });
     service = new BlogReviewNotifications({
+        i18n: { translate: (message: string) => message },
         db: { collection: () => runtime },
         server: { router: { url: () => "/blog/review" } },
     } as unknown as Context);

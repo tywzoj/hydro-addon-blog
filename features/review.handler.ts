@@ -18,8 +18,8 @@ import {
     SYSTEM_DOMAIN,
 } from "./constants";
 import { BlogBaseHandler, BlogUserPostBaseHandler } from "./handler.base";
+import { sendBlogMessage } from "./notifications";
 import { articleForResponse, BlogReviewModel, OptionalReviewComment } from "./review.model";
-import { sendReviewMessage } from "./review.notifications";
 import { BlogSettingsModel } from "./settings.model";
 import type { BlogDoc } from "./types";
 import { toTemplate } from "./utils";
@@ -102,7 +102,8 @@ class BlogReviewDetailHandler extends BlogReviewTargetHandler {
             comments,
         });
         const link = this.url(ROUTE_BLOG_POST_DETAIL, { uid: next.owner, did: next.docId, domainId: SYSTEM_DOMAIN });
-        await sendReviewMessage(
+        await sendBlogMessage(
+            this.ctx,
             next.owner,
             decision === ReviewDecisions.Approve ? ReviewMessages.ApprovedNotice : ReviewMessages.RejectedNotice,
             decision === ReviewDecisions.Approve ? [next.title, version, link] : [next.title, version, comments, link],
@@ -175,7 +176,7 @@ class BlogReportHandler extends BlogUserPostBaseHandler {
                 hidden: result.hidden,
             });
             if (result.hidden) {
-                await sendReviewMessage(result.doc.owner, ReviewMessages.HiddenNotice, [
+                await sendBlogMessage(this.ctx, result.doc.owner, ReviewMessages.HiddenNotice, [
                     result.doc.title,
                     version,
                     this.url(ROUTE_BLOG_POST_DETAIL, {

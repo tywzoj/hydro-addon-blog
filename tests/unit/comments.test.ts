@@ -560,7 +560,6 @@ describe("comment handler protocol", () => {
     it("notifies mentions before persistence, deduplicating targets without readability filtering", async () => {
         const h = handler();
         const limiter = vi.spyOn(h, "limitRate");
-        UserModel.getList.mockResolvedValue({ 3: makeUser(3) });
         const calls: string[] = [];
         MessageModel.send.mockImplementation(() => {
             calls.push("message");
@@ -570,7 +569,7 @@ describe("comment handler protocol", () => {
             return Promise.reject(new Error("write failed"));
         });
         await expect(h.postReply(undefined, "@[](/user/3) @[](/user/3)")).rejects.toThrow("write failed");
-        expect(UserModel.getList).toHaveBeenCalledWith("system", [3]);
+        expect(MessageModel.send).toHaveBeenCalledExactlyOnceWith(1, [3], expect.any(String), 5);
         expect(calls).toEqual(["message", "write"]);
         expect(limiter).toHaveBeenCalledWith("add_blog_comment", 3600, 60);
         expect(OplogModel.log).not.toHaveBeenCalled();

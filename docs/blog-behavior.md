@@ -314,6 +314,30 @@ Source: [review model](../features/review.model.ts),
 [notifications](../features/review.notifications.ts), and the
 [review plan and evidence](plans/blog-review.md).
 
+## Notification Language
+
+New review decisions, report-hiding notices, automatic-approval notices, reviewer
+reminders, comment mentions and deletion notices select their message template
+using each recipient's persisted `viewLang`. An unset or empty preference falls
+back to `server.language`. The actor's request language is not used.
+
+The shared sender reads only recipient IDs and language preferences in one bulk
+query, deduplicates targets and groups delivery by language. Missing accounts and
+empty recipient lists do not create messages. Native system-sender identity,
+rich-text/unread flags, and awaited error propagation remain unchanged.
+
+Only the template is translated. Usernames, article titles, comments and links
+remain separate native rich-message parameters, preserving escaped display and
+clickable links rather than interpolating untrusted content into the template.
+Existing message records are not rewritten. Multiple language groups can be
+partially delivered if a later send fails; there is still no transaction or
+notification outbox.
+
+This follows Hydro's recipient-language selection in `MessageModel.sendNotification`,
+but uses `MessageModel.send` because the built-in notification helper selects its
+own system-privilege recipients and formats a flat string instead of this addon's
+explicit recipients and structured link parameters.
+
 ## Comments, Replies, and Likes
 
 - Reading comments inherits article reading; there is no separate comment-read

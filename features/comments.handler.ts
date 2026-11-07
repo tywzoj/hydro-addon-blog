@@ -1,5 +1,5 @@
 import type { ObjectId } from "hydrooj";
-import { MessageModel, OplogModel, param, Types, UserModel } from "hydrooj";
+import { OplogModel, param, Types, UserModel } from "hydrooj";
 
 import { BlogCommentModel, commentIds, commentOwners } from "./comments.model";
 import {
@@ -11,6 +11,7 @@ import {
     SYSTEM_DOMAIN,
 } from "./constants";
 import { BlogUserPostBaseHandler } from "./handler.base";
+import { sendBlogMessage } from "./notifications";
 
 export class BlogCommentHandler extends BlogUserPostBaseHandler {
     post() {
@@ -56,16 +57,10 @@ export class BlogCommentHandler extends BlogUserPostBaseHandler {
 
     async notifyMentions(content: string) {
         const ids = [...new Set(Array.from(content.matchAll(/@\[\]\(\/user\/(\d+)\)/g), (match) => +match[1]))];
-        const users = await UserModel.getList(SYSTEM_DOMAIN, ids);
-        await MessageModel.send(
-            1,
-            Object.keys(users).map(Number),
-            JSON.stringify({
-                message: "User {0} mentioned you in {1:link}",
-                params: [this.user.uname, this.commentUrl()],
-            }),
-            MessageModel.FLAG_RICHTEXT | MessageModel.FLAG_UNREAD,
-        );
+        await sendBlogMessage(this.ctx, ids, "User {0} mentioned you in {1:link}", [
+            this.user.uname,
+            this.commentUrl(),
+        ]);
     }
 
     async limitComment() {
@@ -115,13 +110,7 @@ export class BlogCommentHandler extends BlogUserPostBaseHandler {
               };
         await Promise.all([
             BlogCommentModel.delete(this.ddoc.docId, drid, drrid),
-            target.owner !== this.user._id &&
-                MessageModel.send(
-                    1,
-                    target.owner,
-                    JSON.stringify(notice),
-                    MessageModel.FLAG_RICHTEXT | MessageModel.FLAG_UNREAD,
-                ),
+            target.owner !== this.user._id && sendBlogMessage(this.ctx, target.owner, notice.message, notice.params),
             OplogModel.log(this, drrid ? BlogAuditEvents.DeleteTailReply : BlogAuditEvents.DeleteComment, target),
         ]);
         this.back();

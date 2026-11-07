@@ -4,8 +4,9 @@
 <div class="row">
   <div class="medium-9 columns">
     <div class="section">
+      {% if ddoc %}{% include "partials/blog_review_status.html" %}{% endif %}
       <div class="section__body">
-        <form method="post">
+        <form method="post" data-blog-confirm data-publish-review="{{ 'true' if publishRequiresReview else 'false' }}" data-initial-draft="{{ 'true' if not ddoc or ddoc.draft else 'false' }}">
           <div class="row">
             <div class="medium-12 columns">
               <label>

@@ -3,6 +3,7 @@ import type { Collection } from "mongodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BLOG_DEFAULT, BLOG_PERM } from "../../features/permission";
+import { BlogReviewModel } from "../../features/review.model";
 import { applySettingsHandler, parsePermissions } from "../../features/settings.handler";
 import type { BlogAssignment, BlogSettings } from "../../features/settings.model";
 import {
@@ -11,8 +12,17 @@ import {
     permissionMatrixRoles,
     resolveBlogPolicy,
 } from "../../features/settings.model";
+import { makeBlog } from "../helpers/fixtures";
 import type { Handler } from "../helpers/hydro";
-import { makeUser, OplogModel, PRIV, UserModel, ValidationError } from "../helpers/hydro";
+import {
+    dispatchHandler,
+    makeUser,
+    MessageModel,
+    OplogModel,
+    PRIV,
+    UserModel,
+    ValidationError,
+} from "../helpers/hydro";
 
 let settings: BlogSettings;
 const findOne = vi.fn();
@@ -32,6 +42,68 @@ beforeEach(() => {
 });
 
 describe("blog settings persistence", () => {
+    it("saves moderation independently of roles and changes reminder revision only for cadence changes", async () => {
+        const input = {
+            mode: "before" as const,
+            reportLimit: 0,
+            rejectionLimit: 3,
+            reminders: true,
+            intervalMinutes: 1440,
+        };
+        await BlogSettingsModel.setReview(input, 0);
+        expect(updateOne).toHaveBeenLastCalledWith(
+            { _id: "global", revision: 0 },
+            {
+                $set: {
+                    "review.mode": "before",
+                    "review.reportLimit": 0,
+                    "review.rejectionLimit": 3,
+                    "review.reminders": true,
+                    "review.intervalMinutes": 1440,
+                    "review.reminderRevision": 0,
+                },
+                $inc: { revision: 1 },
+            },
+        );
+        await BlogSettingsModel.setReview({ ...input, reminders: false }, 0);
+        expect(updateOne).toHaveBeenLastCalledWith(
+            expect.anything(),
+            expect.objectContaining({
+                $set: expect.objectContaining({ "review.reminderRevision": 1 }) as unknown,
+                $currentDate: { "review.reminderChangedAt": true },
+            }),
+        );
+    });
+
+    it("supplies compatible review defaults without mutating legacy settings", async () => {
+        delete settings.review;
+        expect(await BlogSettingsModel.review()).toMatchObject({
+            mode: "disabled",
+            reminders: true,
+            intervalMinutes: 1440,
+        });
+        expect(updateOne).not.toHaveBeenCalled();
+    });
+
+    it("rejects malformed or stale review configuration before persistence", async () => {
+        const input = {
+            mode: "after" as const,
+            reportLimit: 3,
+            rejectionLimit: 3,
+            reminders: true,
+            intervalMinutes: 1440,
+        };
+        for (const changes of [
+            { reportLimit: -1 },
+            { rejectionLimit: 0 },
+            { intervalMinutes: 0 },
+            { intervalMinutes: Number.MAX_SAFE_INTEGER },
+        ]) {
+            await expect(BlogSettingsModel.setReview({ ...input, ...changes }, 0)).rejects.toThrow();
+        }
+        await expect(BlogSettingsModel.setReview(input, 9)).rejects.toThrow();
+        expect(updateOne).not.toHaveBeenCalled();
+    });
     it("creates roles from the current default and rejects duplicates with a zero mask", async () => {
         settings.roles[1].permissions = "0";
         const role = await BlogSettingsModel.addRole("审稿人", 0);
@@ -80,7 +152,7 @@ describe("blog settings persistence", () => {
         );
     });
 
-    it.each([null, [], { missing: "0" }, { default: "21" }, { default: "999" }, { default: "-1" }, { default: {} }])(
+    it.each([null, [], { missing: "0" }, { default: "23" }, { default: "999" }, { default: "-1" }, { default: {} }])(
         "rejects malformed or unknown permission submissions %j",
         (input) => expect(() => parsePermissions(input, settings.roles)).toThrow(ValidationError),
     );
@@ -254,6 +326,7 @@ interface SettingsHandler extends Handler {
     postAdd: (args: Record<string, unknown>) => Promise<void>;
     postDelete: (args: Record<string, unknown>) => unknown;
     postSetUsers: (args: Record<string, unknown>) => Promise<void>;
+    postReviewSettings: (args: Record<string, unknown>) => Promise<void>;
 }
 
 describe("settings handler boundaries", () => {
@@ -272,6 +345,78 @@ describe("settings handler boundaries", () => {
         });
         return h;
     }
+
+    const disabled = {
+        domainId: "system",
+        revision: "0",
+        mode: "disabled",
+        reportLimit: "3",
+        rejectionLimit: "3",
+        reminders: "true",
+        intervalMinutes: "1440",
+    };
+
+    it("requires explicit disable confirmation and rejects stale settings before approving articles", async () => {
+        const approve = vi.spyOn(BlogReviewModel, "approvePending").mockResolvedValue(0);
+        const h = handler("blog_settings");
+        await expect(dispatchHandler(h, "post", () => h.postReviewSettings(disabled))).rejects.toBeInstanceOf(
+            ValidationError,
+        );
+        expect(updateOne).not.toHaveBeenCalled();
+        await expect(
+            dispatchHandler(h, "post", () =>
+                h.postReviewSettings({ ...disabled, confirmDisable: "true", revision: "9" }),
+            ),
+        ).rejects.toBeInstanceOf(ValidationError);
+        expect(approve).not.toHaveBeenCalled();
+    });
+
+    it("uses settings authority for automatic approval, audit and native author notices", async () => {
+        const previous = makeBlog({ reviewPending: true, requiresReview: true });
+        const next = makeBlog({ draft: false, reviewPending: false, requiresReview: false });
+        vi.spyOn(BlogReviewModel, "approvePending").mockImplementation(async (_uid, notify) => {
+            await notify(previous, next);
+            return 1;
+        });
+        const h = handler("blog_settings");
+        const prepare = vi.spyOn(h, "prepare");
+        expect(h.blog.canReview()).toBe(false);
+        await dispatchHandler(h, "post", () => h.postReviewSettings({ ...disabled, confirmDisable: "true" }));
+        expect(prepare).toHaveBeenCalledOnce();
+        expect(OplogModel.log).toHaveBeenCalledWith(
+            h,
+            "blog.review",
+            expect.objectContaining({
+                decision: "approve",
+                automatic: true,
+                settingsMode: "disabled",
+                articleDomainId: "system",
+            }),
+        );
+        expect(MessageModel.send).toHaveBeenCalledOnce();
+        expect(h.back).toHaveBeenCalledWith({ approved: 1 });
+    });
+
+    it("surfaces partial batch failure instead of reporting settings success", async () => {
+        vi.spyOn(BlogReviewModel, "approvePending").mockRejectedValue(new Error("batch failed"));
+        const h = handler("blog_settings");
+        await expect(
+            dispatchHandler(h, "post", () => h.postReviewSettings({ ...disabled, confirmDisable: "true" })),
+        ).rejects.toThrow("batch failed");
+        expect(updateOne).toHaveBeenCalledOnce();
+        expect(h.back).not.toHaveBeenCalled();
+    });
+
+    it("blocks settings actions at preparation before any mutation or automatic approval", async () => {
+        const h = handler("blog_settings", BLOG_DEFAULT);
+        const approve = vi.spyOn(BlogReviewModel, "approvePending").mockResolvedValue(0);
+        await expect(
+            dispatchHandler(h, "post", () => h.postReviewSettings({ ...disabled, confirmDisable: "true" })),
+        ).rejects.toThrow();
+        expect(updateOne).not.toHaveBeenCalled();
+        expect(approve).not.toHaveBeenCalled();
+        expect(OplogModel.log).not.toHaveBeenCalled();
+    });
 
     it("uses a single management gate for every page", () => {
         for (const name of routes.keys()) {

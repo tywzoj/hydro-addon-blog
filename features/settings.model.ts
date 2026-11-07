@@ -18,11 +18,14 @@ import {
     BlogMessages,
     BlogRoles,
     BUILTIN_BLOG_ROLES,
+    DEFAULT_REVIEW_SETTINGS,
+    REVIEW_MINUTE_MS,
+    ReviewModes,
     SYSTEM_DOMAIN,
 } from "./constants";
 import type { BlogIdentity } from "./permission";
 import { BlogPolicy } from "./permission";
-import type { BlogAssignment, BlogRole, BlogSettings } from "./types";
+import type { BlogAssignment, BlogReviewSettings, BlogRole, BlogSettings } from "./types";
 
 export { BUILTIN_BLOG_ROLES } from "./constants";
 export type { BlogAssignment, BlogRole, BlogSettings } from "./types";
@@ -74,6 +77,7 @@ export function initialSettings(): BlogSettings {
             { id: BlogRoles.Root, name: BlogRoles.Root, permissions: BLOG_ALL.toString() },
         ],
         deletedRoles: [],
+        review: { ...DEFAULT_REVIEW_SETTINGS },
     };
 }
 
@@ -108,6 +112,55 @@ export class BlogSettingsModel {
             throw new ValidationError(BlogCollections.Settings);
         }
         return settings;
+    }
+
+    static async review(): Promise<BlogReviewSettings> {
+        return { ...DEFAULT_REVIEW_SETTINGS, ...(await this.get()).review };
+    }
+
+    static async setReview(
+        input: Omit<BlogReviewSettings, "reminderRevision" | "reminderChangedAt">,
+        revision: number,
+    ) {
+        if (
+            !Object.values(ReviewModes).includes(input.mode) ||
+            !Number.isSafeInteger(input.reportLimit) ||
+            input.reportLimit < 0 ||
+            !Number.isSafeInteger(input.rejectionLimit) ||
+            input.rejectionLimit < 1 ||
+            !Number.isSafeInteger(input.intervalMinutes) ||
+            input.intervalMinutes < 1 ||
+            !Number.isFinite(new Date(Date.now() + input.intervalMinutes * REVIEW_MINUTE_MS).getTime()) ||
+            typeof input.reminders !== "boolean"
+        ) {
+            throw new ValidationError("review");
+        }
+        const settings = await this.get();
+        if (settings.revision !== revision) throw new ValidationError("revision", null, BlogMessages.SettingsChanged);
+        const previous = { ...DEFAULT_REVIEW_SETTINGS, ...settings.review };
+        const changed = previous.reminders !== input.reminders || previous.intervalMinutes !== input.intervalMinutes;
+        const review: BlogReviewSettings = {
+            ...previous,
+            ...input,
+            reminderRevision: previous.reminderRevision + Number(changed),
+        };
+        const result = await this.settings.updateOne(
+            { _id: BLOG_SETTINGS_ID, revision },
+            {
+                $set: {
+                    "review.mode": review.mode,
+                    "review.reportLimit": review.reportLimit,
+                    "review.rejectionLimit": review.rejectionLimit,
+                    "review.reminders": review.reminders,
+                    "review.intervalMinutes": review.intervalMinutes,
+                    "review.reminderRevision": review.reminderRevision,
+                },
+                $inc: { revision: 1 },
+                ...(changed ? { $currentDate: { "review.reminderChangedAt": true as const } } : {}),
+            },
+        );
+        if (!result.matchedCount) throw new ValidationError("revision", null, BlogMessages.SettingsChanged);
+        return { previous, review };
     }
 
     static async policy(user: BlogIdentity) {

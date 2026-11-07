@@ -12,6 +12,7 @@ import {
     BlogAuditEvents,
     BlogPermissions,
     ListPageScenario,
+    ReviewModes,
     ROUTE_BLOG_LIST_HOME,
     ROUTE_BLOG_LIST_USER,
     ROUTE_BLOG_POST_CREATE,
@@ -25,6 +26,8 @@ import {
 } from "./constants";
 import { BlogBaseHandler, BlogUserBaseHandler, BlogUserPostBaseHandler } from "./handler.base";
 import { BlogModel } from "./model";
+import { articleForReader, BlogReviewModel } from "./review.model";
+import { BlogSettingsModel } from "./settings.model";
 import type { BlogContentUpdate, BlogDoc } from "./types";
 import { toTemplate } from "./utils";
 
@@ -62,7 +65,7 @@ class BlogListHandler extends BlogBaseHandler {
         this.response.template = toTemplate(TEMPLATE_BLOG_LIST);
         this.response.body = {
             scenario: ListPageScenario.Home,
-            ddocs,
+            ddocs: ddocs.map((doc) => articleForReader(doc, this.user._id, this.blog.canReview())),
             dpcount,
             page,
             sort,
@@ -70,7 +73,9 @@ class BlogListHandler extends BlogBaseHandler {
             udoc: this.user,
             udict,
             can_create: this.blog.canCreate(this.user._id),
+            can_my_blog: this.blog.authenticated,
             can_settings: this.blog.has(BlogPermissions.MANAGE_SETTINGS),
+            can_review: !!this.UiContext.blogReviewer,
         };
     }
 }
@@ -103,7 +108,7 @@ class BlogListUserHandler extends BlogUserBaseHandler {
         this.response.template = toTemplate(TEMPLATE_BLOG_LIST);
         this.response.body = {
             scenario: ListPageScenario.User,
-            ddocs,
+            ddocs: ddocs.map((doc) => articleForReader(doc, this.user._id, this.blog.canReview())),
             dpcount,
             page,
             sort,
@@ -111,7 +116,9 @@ class BlogListUserHandler extends BlogUserBaseHandler {
             is_owner: isOwner,
             udoc: this.udoc,
             can_create: this.blog.canCreate(this.udoc._id),
+            can_my_blog: this.blog.authenticated,
             can_settings: this.blog.has(BlogPermissions.MANAGE_SETTINGS),
+            can_review: !!this.UiContext.blogReviewer,
         };
     }
 }
@@ -124,6 +131,19 @@ class BlogUserPostDetailHandler extends BlogCommentHandler {
         const canTrackView = this.blog.authenticated;
         const dsdoc = canTrackView ? await BlogModel.getStatus(this.ddoc.docId, this.user._id) : null;
         const udoc = await UserModel.getById(SYSTEM_DOMAIN, this.ddoc.owner);
+        const review = await BlogSettingsModel.review();
+        const version = this.ddoc.contentVersion ?? 0;
+        const canReport =
+            this.blog.authenticated &&
+            this.user._id !== this.ddoc.owner &&
+            !this.ddoc.draft &&
+            review.mode !== ReviewModes.Disabled &&
+            this.ddoc.reportApprovedVersion !== version;
+        const reported =
+            canReport &&
+            !!(await BlogReviewModel.reports.findOne({
+                _id: BlogReviewModel.reportId(this.ddoc.docId, version, this.user._id),
+            }));
 
         if (canTrackView && !dsdoc?.view) {
             await Promise.all([
@@ -135,11 +155,21 @@ class BlogUserPostDetailHandler extends BlogCommentHandler {
 
         this.response.template = toTemplate(TEMPLATE_BLOG_DETAIL);
         this.response.body = {
-            ddoc: this.ddoc,
+            ddoc: articleForReader(this.ddoc, this.user._id, this.blog.canReview()),
             dsdoc,
             udoc,
             star: dsdoc?.star ?? false,
             controls: this.blog.controls(this.ddoc),
+            canReport: canReport && !reported,
+            reportVersion: canReport ? version : undefined,
+            canReview: review.mode !== ReviewModes.Disabled && this.blog.canReview() && !!this.ddoc.reviewPending,
+            canViewReportCount: this.blog.canReview(),
+            canReset: review.mode !== ReviewModes.Disabled && this.blog.canResetReview(),
+            publishRequiresReview:
+                this.blog.can(BlogActions.Publish, this.ddoc.owner) &&
+                (review.mode === ReviewModes.Before || (!!this.ddoc.draft && !!this.ddoc.requiresReview)),
+            reviewBlocked:
+                this.ddoc.owner === this.user._id && (this.ddoc.rejectionCount ?? 0) >= review.rejectionLimit,
             ...comments,
         };
     }
@@ -151,7 +181,6 @@ class BlogUserPostDetailHandler extends BlogCommentHandler {
 
     @param("star", Types.Boolean, false)
     async postStar(_, star: boolean) {
-        this.post();
         this.blog.require(BlogPermissions.STAR);
         await BlogModel.setStar(this.ddoc.docId, this.user._id, star);
         this.back({ star });
@@ -167,6 +196,7 @@ class BlogUserPostCreateHandler extends BlogUserBaseHandler {
         this.response.template = toTemplate(TEMPLATE_BLOG_EDIT);
         this.response.body = {
             ddoc: null,
+            publishRequiresReview: this.UiContext.blogReviewMode === ReviewModes.Before,
             controls: {
                 publish: this.blog.can(BlogActions.Publish, this.udoc._id),
                 pin: this.blog.can(BlogActions.Pin, this.udoc._id),
@@ -181,7 +211,6 @@ class BlogUserPostCreateHandler extends BlogUserBaseHandler {
     @param("draft_present", Types.Boolean, true)
     async postSubmit(_, title: string, content: string, draft?: boolean, pin = false, draftPresent = false) {
         draft ??= !draftPresent;
-        this.prepare();
         if (!draft) this.blog.requireAction(BlogActions.Publish, this.udoc._id);
         if (pin) this.blog.requireAction(BlogActions.Pin, this.udoc._id);
         await this.limitRate(
@@ -189,11 +218,14 @@ class BlogUserPostCreateHandler extends BlogUserBaseHandler {
             BLOG_CREATE_RATE_LIMIT.PeriodSeconds,
             BLOG_CREATE_RATE_LIMIT.MaxOperations,
         );
-        const did = await BlogModel.add(this.user._id, title, content, draft, pin, this.request.ip);
+        const review = await BlogSettingsModel.review();
+        const did = await BlogModel.add(this.user._id, title, content, draft, pin, this.request.ip, review);
         await OplogModel.log(this, BlogAuditEvents.Create, { did });
         this.response.body = { did };
         this.response.redirect = this.url(
-            this.blog.readable({ owner: this.udoc._id, draft }) ? ROUTE_BLOG_POST_DETAIL : ROUTE_BLOG_LIST_USER,
+            this.blog.readable({ owner: this.udoc._id, draft: draft || review.mode === ReviewModes.Before })
+                ? ROUTE_BLOG_POST_DETAIL
+                : ROUTE_BLOG_LIST_USER,
             { uid: this.udoc._id, did },
         );
     }
@@ -208,7 +240,15 @@ class BlogUserPostEditHandler extends BlogUserPostBaseHandler {
     get() {
         this.blog.requireAction(BlogActions.Edit, this.ddoc.owner);
         this.response.template = toTemplate(TEMPLATE_BLOG_EDIT);
-        this.response.body = { ddoc: this.ddoc, controls: this.blog.controls(this.ddoc) };
+        this.response.body = {
+            ddoc: articleForReader(this.ddoc, this.user._id, this.blog.canReview()),
+            controls: this.blog.controls(this.ddoc),
+            canViewReportCount: this.blog.canReview(),
+            publishRequiresReview:
+                this.blog.can(BlogActions.Publish, this.ddoc.owner) &&
+                (this.UiContext.blogReviewMode === ReviewModes.Before ||
+                    (!!this.ddoc.draft && !!this.ddoc.requiresReview)),
+        };
     }
 
     @param("title", Types.Title)
@@ -228,7 +268,6 @@ class BlogUserPostEditHandler extends BlogUserPostBaseHandler {
     ) {
         draft ??= draftPresent ? false : !!this.ddoc.draft;
         pin ??= pinPresent ? false : !!this.ddoc.pin;
-        this.prepare();
         const changedContent = title !== this.ddoc.title || content !== this.ddoc.content;
         if (changedContent) this.blog.requireAction(BlogActions.Edit, this.ddoc.owner);
         if (!draft && (changedContent || this.ddoc.draft)) {
@@ -243,9 +282,15 @@ class BlogUserPostEditHandler extends BlogUserPostBaseHandler {
         await this.update({ title, content, draft, pin });
     }
 
-    async update(update: BlogContentUpdate) {
-        const next = await BlogModel.edit(this.ddoc, { ...update, ip: this.request.ip }, true);
-        await OplogModel.log(this, BlogAuditEvents.Edit, this.ddoc);
+    async update(update: BlogContentUpdate, withdraw = false) {
+        const next = await BlogModel.edit(
+            this.ddoc,
+            { ...update, ip: this.request.ip },
+            true,
+            await BlogSettingsModel.review(),
+            withdraw,
+        );
+        await OplogModel.log(this, BlogAuditEvents.Edit, articleForReader(this.ddoc, 0));
         this.response.body = { did: this.ddoc.docId };
         this.response.redirect = this.url(this.blog.readable(next) ? ROUTE_BLOG_POST_DETAIL : ROUTE_BLOG_LIST_USER, {
             uid: this.udoc._id,
@@ -255,23 +300,20 @@ class BlogUserPostEditHandler extends BlogUserPostBaseHandler {
 
     @param("pin", Types.Boolean, false)
     async postPin(_, pin: boolean) {
-        this.prepare();
         this.blog.requireAction(BlogActions.Pin, this.ddoc.owner);
         await this.update({ pin });
     }
 
     @param("draft", Types.Boolean, false)
     async postPublish(_, draft: boolean) {
-        this.prepare();
         this.blog.requireAction(draft ? BlogActions.Unpublish : BlogActions.Publish, this.ddoc.owner);
-        await this.update({ draft });
+        await this.update({ draft }, draft);
     }
 
     async postDelete() {
-        this.prepare();
         this.blog.requireAction(BlogActions.Delete, this.ddoc.owner);
         await BlogModel.deleteChecked(this.ddoc);
-        await OplogModel.log(this, BlogAuditEvents.Delete, this.ddoc);
+        await OplogModel.log(this, BlogAuditEvents.Delete, articleForReader(this.ddoc, 0));
         this.response.redirect = this.url(ROUTE_BLOG_LIST_USER, { uid: this.ddoc.owner });
     }
 }

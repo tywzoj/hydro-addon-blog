@@ -46,14 +46,14 @@ describe("publication state", () => {
     it("assigns the first publication time when a draft is first published", async () => {
         const draft = makeBlog();
         const updated = makeBlog({ draft: false, firstPublishAt: new Date() });
-        DocumentModel.set.mockResolvedValue(updated);
+        DocumentModel.coll.findOneAndUpdate.mockResolvedValue(updated);
 
         await expect(BlogModel.edit(draft, { draft: false })).resolves.toEqual(updated);
-        expect(DocumentModel.set).toHaveBeenCalledWith("system", 70, draft.docId, {
-            draft: false,
-            updateAt: new Date(),
-            firstPublishAt: new Date(),
-        });
+        expect(DocumentModel.coll.findOneAndUpdate).toHaveBeenCalledWith(
+            expect.objectContaining({ docId: draft.docId, pendingReportWrite: { $exists: false } }),
+            { $set: { draft: false, updateAt: new Date(), firstPublishAt: new Date(), writeRevision: 1 } },
+            { returnDocument: "after" },
+        );
         expect(draft.firstPublishAt).toBeUndefined();
     });
 
@@ -61,14 +61,23 @@ describe("publication state", () => {
         "preserves an existing publication time during %j",
         async (update) => {
             const doc = makeBlog({ firstPublishAt: new Date("2026-01-02T00:00:00Z") });
-            DocumentModel.set.mockResolvedValue(doc);
+            DocumentModel.coll.findOneAndUpdate.mockResolvedValue(doc);
 
             await BlogModel.edit(doc, update);
 
-            expect(DocumentModel.set).toHaveBeenCalledWith("system", 70, doc.docId, {
-                ...update,
-                updateAt: new Date(),
-            });
+            expect(DocumentModel.coll.findOneAndUpdate).toHaveBeenCalledWith(
+                expect.objectContaining({ docId: doc.docId }),
+                {
+                    $set: {
+                        ...update,
+                        firstPublishAt: doc.firstPublishAt,
+                        updateAt: new Date(),
+                        writeRevision: 1,
+                        ...("title" in update ? { contentVersion: 1 } : {}),
+                    },
+                },
+                { returnDocument: "after" },
+            );
         },
     );
 
@@ -76,12 +85,20 @@ describe("publication state", () => {
         "does not publish an unpublished draft during %j",
         async (update) => {
             const doc = makeBlog();
-            DocumentModel.set.mockResolvedValue(doc);
+            DocumentModel.coll.findOneAndUpdate.mockResolvedValue(doc);
             await BlogModel.edit(doc, update);
-            expect(DocumentModel.set).toHaveBeenCalledWith("system", 70, doc.docId, {
-                ...update,
-                updateAt: new Date(),
-            });
+            expect(DocumentModel.coll.findOneAndUpdate).toHaveBeenCalledWith(
+                expect.objectContaining({ docId: doc.docId }),
+                {
+                    $set: {
+                        ...update,
+                        updateAt: new Date(),
+                        writeRevision: 1,
+                        ...("title" in update ? { contentVersion: 1 } : {}),
+                    },
+                },
+                { returnDocument: "after" },
+            );
         },
     );
 
@@ -111,12 +128,15 @@ describe("publication state", () => {
 describe("persistence mutations", () => {
     it("deletes both the post and all user statuses", async () => {
         const { docId } = makeBlog();
-        DocumentModel.deleteOne.mockResolvedValue({});
+        DocumentModel.get.mockResolvedValue(makeBlog());
+        DocumentModel.coll.deleteOne.mockResolvedValue({ deletedCount: 1 });
         DocumentModel.deleteMultiStatus.mockResolvedValue({});
 
         await BlogModel.del(docId);
 
-        expect(DocumentModel.deleteOne).toHaveBeenCalledWith("system", 70, docId);
+        expect(DocumentModel.coll.deleteOne).toHaveBeenCalledWith(
+            expect.objectContaining({ domainId: "system", docType: 70, docId }),
+        );
         expect(DocumentModel.deleteMultiStatus).toHaveBeenCalledWith("system", 70, { docId });
     });
 
@@ -147,7 +167,7 @@ describe("persistence mutations", () => {
 
     it("propagates a failed edit", async () => {
         const failure = new Error("Write failed");
-        DocumentModel.set.mockRejectedValue(failure);
+        DocumentModel.coll.findOneAndUpdate.mockRejectedValue(failure);
         await expect(BlogModel.edit(makeBlog(), { title: "Edited" })).rejects.toBe(failure);
     });
 });

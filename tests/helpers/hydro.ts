@@ -69,7 +69,7 @@ export function makeUser(id = 1, privileges = PRIV.PRIV_USER_PROFILE) {
 }
 
 export const UserModel = {
-    coll: { collectionName: "user", aggregate: vi.fn() },
+    coll: { collectionName: "user", aggregate: vi.fn(), find: vi.fn(), findOne: vi.fn() },
     getById: vi.fn<(...args: unknown[]) => Promise<ReturnType<typeof makeUser> | null>>(),
     getByUname: vi.fn<(...args: unknown[]) => Promise<ReturnType<typeof makeUser> | null>>(),
     getList: vi.fn<(...args: unknown[]) => Promise<Record<number, ReturnType<typeof makeUser>>>>(),
@@ -83,6 +83,13 @@ export const MessageModel = {
     FLAG_UNREAD: 1,
     send: vi.fn(),
 };
+export class Logger {
+    error = vi.fn();
+    warn = vi.fn();
+    constructor(_name: string) {}
+}
+export const ScheduleModel = { coll: { updateOne: vi.fn(), findOne: vi.fn() } };
+export const SystemModel = { get: vi.fn() };
 
 export class Handler {
     user = makeUser();
@@ -91,6 +98,9 @@ export class Handler {
     request = { ip: "192.0.2.1", body: {} as Record<string, unknown> };
     session = { sudo: true };
     UiContext: Record<string, unknown> = {};
+    translate(message: string) {
+        return message;
+    }
     response: { template?: string; body?: Record<string, unknown>; redirect?: string } = {};
     ctx = {
         db: {
@@ -106,6 +116,17 @@ export class Handler {
     limitRate = vi.fn<(...args: unknown[]) => Promise<void>>();
     url = vi.fn((route: string, _args: Record<string, unknown>) => `/${route}`);
     back = vi.fn<(body?: Record<string, unknown>) => void>();
+}
+
+// Fixtures hydrate article/user/policy data; Hydro runs these phases before operation dispatch.
+export async function dispatchHandler<T>(
+    handler: { prepare?: () => void | Promise<void>; post?: () => void | Promise<void> },
+    method: "get" | "post",
+    operation: () => T,
+): Promise<Awaited<T>> {
+    await handler.prepare?.();
+    if (method === "post") await handler.post?.();
+    return await operation();
 }
 
 export function requireSudo(_target: unknown, _name: string, descriptor: PropertyDescriptor) {

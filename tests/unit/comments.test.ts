@@ -10,6 +10,7 @@ import { initialSettings, resolveBlogPolicy } from "../../features/settings.mode
 import type { BlogCommentDoc } from "../../features/types";
 import { makeBlog } from "../helpers/fixtures";
 import {
+    dispatchHandler,
     DocumentModel,
     DocumentNotFoundError,
     makeUser,
@@ -240,16 +241,21 @@ describe("comment persistence", () => {
         });
     });
 
-    it("does not clean comments while unchecked article removal is still pending", async () => {
+    it("does not clean comments while article removal is still pending", async () => {
         let removeArticle!: () => void;
-        DocumentModel.deleteOne.mockImplementation(
+        let removalStarted!: () => void;
+        const started = new Promise<void>((resolve) => {
+            removalStarted = resolve;
+        });
+        DocumentModel.coll.deleteOne.mockImplementation(
             () =>
-                new Promise<void>((resolve) => {
-                    removeArticle = resolve;
+                new Promise<{ deletedCount: number }>((resolve) => {
+                    removeArticle = () => resolve({ deletedCount: 1 });
+                    removalStarted();
                 }),
         );
         const deletion = BlogModel.del(article.docId);
-        await Promise.resolve();
+        await started;
         const cleanedBeforeRemoval = DocumentModel.coll.deleteMany.mock.calls.length;
         removeArticle();
         await deletion;
@@ -413,8 +419,10 @@ describe("comment handler protocol", () => {
 
     it("retains native deletion notices and deletion-only audits", async () => {
         const h = handler(1);
+        const post = vi.spyOn(h, "post");
         const deleted = vi.spyOn(BlogCommentModel, "delete").mockResolvedValue();
-        await h.postDeleteReply(undefined, id);
+        await dispatchHandler(h, "post", () => h.postDeleteReply(undefined, id));
+        expect(post).toHaveBeenCalledOnce();
         expect(deleted).toHaveBeenCalledWith(article.docId, id, undefined);
         expect(MessageModel.send).toHaveBeenCalledWith(1, 2, expect.stringContaining("Comment co..."), 5);
         expect(OplogModel.log).toHaveBeenCalledWith(h, "blog.reply.delete", expect.objectContaining({ owner: 2 }));

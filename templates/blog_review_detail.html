@@ -1,0 +1,44 @@
+{% import "components/paginator.html" as paginator with context %}
+{% import "components/user.html" as user with context %}
+{% extends "layout/basic.html" %}
+{% block content %}
+<div class="row"><div class="medium-9 columns">
+  <div class="section">
+    <div class="section__header"><h1 class="section__title">{{ ddoc.title }}</h1></div>
+    <div class="section__body">
+      <p>{{ user.render_inline(udict[ddoc.owner]) }} &middot;
+        {{ _('Content version') }}: {{ ddoc.contentVersion|default(0) }} &middot;
+        {{ _('Reports') }}: {{ ddoc.reportCount|default(0) }} &middot;
+        {{ _('Rejections') }}: {{ ddoc.rejectionCount|default(0) }}</p>
+      <p>{{ _('Report review') if ddoc.reviewReason == 'report' else _('Publication review') }}</p>
+      <div class="typo richmedia">{{ ddoc.content|markdown|safe }}</div>
+    </div>
+    <div class="section__body">
+      <form method="post" data-blog-confirm>
+        <input type="hidden" name="operation" value="decide">
+        <input type="hidden" name="generation" value="{{ ddoc.reviewGeneration|default(0) }}">
+        <input type="hidden" name="version" value="{{ ddoc.contentVersion|default(0) }}">
+        <label>{{ _('Review comments (optional)') }}
+          <textarea class="textbox" name="comments" maxlength="65535" rows="4"></textarea>
+        </label>
+        <button class="rounded primary button" name="decision" value="approve">{{ _('Approve article') }}</button>
+        <button class="rounded button" name="decision" value="reject">{{ _('Reject article') }}</button>
+        {% if canReset %}<a class="rounded button" href="{{ url('blog_review_reset', did=ddoc.docId) }}">{{ _('Reset review counters') }}</a>{% endif %}
+      </form>
+    </div>
+  </div>
+  <div class="section">
+    <div class="section__header"><h2 class="section__title">{{ _('Reports') }}</h2></div>
+    <div class="section__body">
+    {% for report in reports %}
+      <div class="section__body">
+        <p>{{ user.render_inline(udict[report.reporter]) }} &middot;
+          {{ _('Content version') }}: {{ report.version }} &middot; {{ datetimeSpan(report.acceptedAt)|safe }}</p>
+        <div class="typo"><pre>{{ report.comments }}</pre></div>
+      </div>
+    {% endfor %}
+    {% if dpcount %}{{ paginator.render(page, dpcount) }}{% endif %}
+    </div>
+  </div>
+</div><div class="medium-3 columns"><a class="rounded button" href="{{ url('blog_review') }}">{{ _('Blog review') }}</a></div></div>
+{% endblock %}

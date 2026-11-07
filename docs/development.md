@@ -66,8 +66,14 @@ The project's coverage goal includes both UT and E2E; neither replaces the other
 - Avoid overriding Hydro's own UI with HTML templates unless necessary. When an existing Hydro UI needs adjustment, prefer script injection through the extension mechanisms described in the official Hydro documentation, and verify the approach against the compatible upstream source.
 - If a template override or custom UI/style is unavoidable, document why the existing UI and documented script-injection mechanisms cannot meet the requirement, and keep the customization minimal.
 
-### Types and Input Validation
+### Handler Lifecycle
 
+Follow the [Hydro handler lifecycle](handler-lifecycle.md). Let the framework
+invoke lifecycle hooks; never call them from handler actions. Keep common
+preparation in hooks, operation-specific permissions in actions, and genuine
+shared behavior in ordinary helpers.
+
+### Types and Input Validation
 - Use existing domain types and type-only imports where appropriate. Avoid introducing `any`, unsafe assertions, or lint suppressions to conceal a mismatched contract.
 - Validate untrusted request parameters with the established Hydro mechanisms. TypeScript types do not validate runtime input.
 - Validate supported sort keys, identifiers, pagination parameters, and state transitions before using them in queries or writes.

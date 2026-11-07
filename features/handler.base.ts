@@ -1,7 +1,7 @@
 import type { ObjectId, User } from "hydrooj";
 import { DiscussionNotFoundError, Handler, param, Types, UserModel, UserNotFoundError } from "hydrooj";
 
-import { BlogPermissions, SYSTEM_DOMAIN } from "./constants";
+import { BlogConfirmMessages, BlogPermissions, ReviewMessages, SYSTEM_DOMAIN } from "./constants";
 import { BlogModel } from "./model";
 import type { BlogPolicy } from "./permission";
 import { BlogSettingsModel } from "./settings.model";
@@ -14,6 +14,12 @@ export class BlogBaseHandler extends Handler {
     async loadBlog() {
         this.blog = await BlogSettingsModel.forRequest(this);
         this.blog.require(BlogPermissions.ACCESS);
+        this.UiContext.blogConfirmations = Object.fromEntries(
+            [...Object.values(BlogConfirmMessages), ReviewMessages.ResetConfirm].map((key) => [
+                key,
+                this.translate(key),
+            ]),
+        );
     }
 
     async __prepare(_?: unknown, _uid?: number) {

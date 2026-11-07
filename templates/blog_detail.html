@@ -36,12 +36,16 @@
           {{ ddoc['content']|markdown|safe }}
         </div>
       </div>
+      {% include "partials/blog_review_status.html" %}
       {% if controls.publish or controls.unpublish or controls.pin or controls.delete %}
       <div class="section__body">
-        <form method="post" action="{{ url('blog_post_edit', uid=udoc._id, did=ddoc.docId) }}">
-          {% if (ddoc.draft and controls.publish) or (not ddoc.draft and controls.unpublish) %}
+        <form method="post" action="{{ url('blog_post_edit', uid=udoc._id, did=ddoc.docId) }}" data-blog-confirm data-publish-review="{{ 'true' if publishRequiresReview else 'false' }}" data-review-pending="{{ 'true' if ddoc.reviewPending else 'false' }}">
+          {% if ddoc.reviewPending and controls.unpublish %}
+          <input type="hidden" name="draft" value="true">
+          <button class="rounded button" name="operation" value="publish">{{ _('Withdraw from review') }}</button>
+          {% elif (ddoc.draft and controls.publish) or (not ddoc.draft and controls.unpublish) %}
           <input type="hidden" name="draft" value="{{ 'false' if ddoc.draft else 'true' }}">
-          <button class="rounded button" name="operation" value="publish">{{ _('Publish') if ddoc.draft else _('Unpublish') }}</button>
+          <button class="rounded button" name="operation" value="publish">{{ (_('Submit for review') if publishRequiresReview else _('Publish')) if ddoc.draft else _('Unpublish') }}</button>
           {% endif %}
           {% if controls.pin %}
           <input type="hidden" name="pin" value="{{ 'false' if ddoc.pin else 'true' }}">
@@ -63,9 +67,11 @@
       {% if controls.star %}
         <li data-star="{{ star }}" data-star-action="" ></li>
       {% endif %}
-        <li><a href="{{ url('wiki_help', anchor='contact') }}">
-          <span class="icon icon-warning"></span> {{ _('Report') }}
-        </a></li>
+      {% if canReport %}
+        <li><a href="#" data-blog-report data-report-url="{{ url('blog_report', uid=udoc._id, did=ddoc.docId) }}" data-version="{{ reportVersion }}" data-return-url="{{ url('blog_list_home') }}"><span class="icon icon-warning"></span> {{ _('Report') }}</a></li>
+      {% endif %}
+      {% if canReview %}<li><a href="{{ url('blog_review_detail', did=ddoc.docId) }}">{{ _('Blog review') }}</a></li>{% endif %}
+      {% if canReset %}<li><a href="{{ url('blog_review_reset', did=ddoc.docId) }}">{{ _('Reset review counters') }}</a></li>{% endif %}
       </ul>
     </div>
     {% include "partials/blog_comments.html" %}
@@ -88,4 +94,12 @@
     </div>
   </div>
 </div>
+{% if canReport %}
+<div class="dialog__body--blog-report" style="display: none"><div>
+  <h2>{{ _('Report') }}</h2>
+  <label>{{ _('Report comments (optional)') }}
+    <textarea class="textbox" name="reportComments" maxlength="65535" rows="4"></textarea>
+  </label>
+</div></div>
+{% endif %}
 {% endblock %}

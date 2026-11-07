@@ -3,7 +3,9 @@ import { DocumentModel, ValidationError } from "hydrooj";
 
 import { BlogCommentModel } from "./comments.model";
 import { BlogMessages, SYSTEM_DOMAIN, TYPE_BLOG } from "./constants";
-import type { BlogDoc, BlogStatusDoc, BlogUpdate } from "./types";
+import { DEFAULT_REVIEW_SETTINGS, ReviewModes, ReviewReasons } from "./constants";
+import { BlogReviewModel, publicationUpdate } from "./review.model";
+import type { BlogDoc, BlogReviewSettings, BlogStatusDoc, BlogUpdate } from "./types";
 
 export { TYPE_BLOG } from "./constants";
 
@@ -28,6 +30,7 @@ export class BlogModel {
         draft: boolean,
         pin: boolean,
         ip: string,
+        settings: BlogReviewSettings = DEFAULT_REVIEW_SETTINGS,
     ): Promise<ObjectId> {
         const ddoc: Partial<BlogDoc> = {
             title,
@@ -39,7 +42,16 @@ export class BlogModel {
             views: 0,
         };
 
-        if (!draft) {
+        if (!draft && settings.mode === ReviewModes.Before) {
+            Object.assign(ddoc, {
+                draft: true,
+                requiresReview: true,
+                reviewPending: true,
+                reviewReason: ReviewReasons.Publication,
+                reviewGeneration: 1,
+                reviewQueuedAt: ddoc.updateAt,
+            });
+        } else if (!draft) {
             ddoc.firstPublishAt = ddoc.updateAt;
         }
 
@@ -66,30 +78,15 @@ export class BlogModel {
         return ddoc;
     }
 
-    static async edit(ddoc: BlogDoc, update: BlogUpdate, checked = false): Promise<BlogDoc> {
-        const $set: Partial<BlogDoc> = {
-            ...update,
-            updateAt: checked ? new Date(Math.max(Date.now(), ddoc.updateAt.getTime() + 1)) : new Date(),
-        };
-
-        if ("draft" in $set && !$set.draft && !ddoc.firstPublishAt) {
-            $set.firstPublishAt = $set.updateAt;
-        }
-
-        if (!checked) return await DocumentModel.set(SYSTEM_DOMAIN, TYPE_BLOG, ddoc.docId, $set);
-        const result: unknown = await DocumentModel.coll.findOneAndUpdate(
-            {
-                domainId: SYSTEM_DOMAIN,
-                docType: TYPE_BLOG,
-                docId: ddoc.docId,
-                updateAt: ddoc.updateAt,
-                draft: ddoc.draft ? true : { $ne: true },
-            },
-            { $set },
-            { returnDocument: "after" },
-        );
-        if (!result) throw new ValidationError("post", null, BlogMessages.ArticleChanged);
-        return result as BlogDoc;
+    static async edit(
+        ddoc: BlogDoc,
+        update: BlogUpdate,
+        _checked = true,
+        settings: BlogReviewSettings = DEFAULT_REVIEW_SETTINGS,
+        withdraw = false,
+    ): Promise<BlogDoc> {
+        ddoc = await BlogReviewModel.settle(ddoc);
+        return BlogReviewModel.change(ddoc, publicationUpdate(ddoc, update, settings, withdraw));
     }
 
     static async inc(did: ObjectId, key: NumberKeys<BlogDoc>, value: number): Promise<BlogDoc> {
@@ -97,25 +94,26 @@ export class BlogModel {
     }
 
     static async del(did: ObjectId): Promise<never> {
-        const removed = await DocumentModel.deleteOne(SYSTEM_DOMAIN, TYPE_BLOG, did);
+        const doc = await this.get(did);
+        if (doc) await this.deleteChecked(doc);
+        else await this.cleanup(did);
+        return undefined as never;
+    }
+
+    static async cleanup(did: ObjectId) {
         const cleanup = await Promise.all([
             DocumentModel.deleteMultiStatus(SYSTEM_DOMAIN, TYPE_BLOG, { docId: did }),
             BlogCommentModel.deleteForArticle(did),
+            BlogReviewModel.reports.deleteMany({ articleId: did }),
         ]);
-        return [removed, ...cleanup] as never;
+        return cleanup;
     }
 
     static async deleteChecked(ddoc: BlogDoc) {
-        const result = await DocumentModel.coll.deleteOne({
-            domainId: SYSTEM_DOMAIN,
-            docType: TYPE_BLOG,
-            docId: ddoc.docId,
-            updateAt: ddoc.updateAt,
-            draft: ddoc.draft ? true : { $ne: true },
-        });
+        ddoc = await BlogReviewModel.settle(ddoc);
+        const result = await DocumentModel.coll.deleteOne(BlogReviewModel.predicate(ddoc));
         if (!result.deletedCount) throw new ValidationError("post", null, BlogMessages.ArticleChanged);
-        await DocumentModel.deleteMultiStatus(SYSTEM_DOMAIN, TYPE_BLOG, { docId: ddoc.docId });
-        await BlogCommentModel.deleteForArticle(ddoc.docId);
+        await this.cleanup(ddoc.docId);
     }
 
     static async count(query: Filter<BlogDoc>) {
@@ -123,7 +121,9 @@ export class BlogModel {
     }
 
     static getMulti(query: Filter<BlogDoc> = {}) {
-        return DocumentModel.getMulti(SYSTEM_DOMAIN, TYPE_BLOG, query).sort({ _id: -1 });
+        return DocumentModel.getMulti(SYSTEM_DOMAIN, TYPE_BLOG, query)
+            .project<BlogDoc>({ pendingReportWrite: 0, lastReview: 0 })
+            .sort({ _id: -1 });
     }
 
     static async addReply(did: ObjectId, owner: number, content: string, ip: string): Promise<ObjectId> {

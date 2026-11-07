@@ -18,6 +18,7 @@ These guidelines apply to the entire repository. This project is a Hydro blog ad
 
 - [Project structure](docs/project-structure.md): repository layout and responsibilities.
 - [Development guidelines](docs/development.md): upstream references, implementation rules, and behavioral invariants.
+- [Handler lifecycle](docs/handler-lifecycle.md): native dispatch order, hook ownership, authorization placement, and test boundaries.
 - [Blog behavior](docs/blog-behavior.md): source-derived contracts, permissions, and implementation boundaries.
 - [Validation](docs/validation.md): environment setup, automated checks, and manual verification.
 - [Hydro smoke testing](docs/hydro-smoke-testing.md): runtime prerequisites, fixtures, and reproducible manual checks.

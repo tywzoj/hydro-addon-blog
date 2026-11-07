@@ -97,7 +97,6 @@ export class BlogCommentHandler extends BlogUserPostBaseHandler {
     }
 
     async deleteComment(drid: ObjectId, drrid?: ObjectId) {
-        this.post();
         const { target } = await BlogCommentModel.get(this.ddoc.docId, drid, drrid);
         this.blog.requireDeleteComment(this.ddoc, target.owner, !!drrid);
         const excerpt =

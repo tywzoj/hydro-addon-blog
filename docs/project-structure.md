@@ -13,6 +13,9 @@ This repository is a fork of the official Hydro blog addon. It runs within a Hyd
 | `features/settings.model.ts` | Global blog roles, revision-checked settings, user assignments and effective-role resolution. |
 | `features/settings.handler.ts` | Settings routes, matrix validation, role management, sudo and audit integration. |
 | `features/model.ts` | Blog persistence, document status, and database indexes. |
+| `features/review.model.ts` | Article review transitions, conditional-write predicates, independent report receipts, bounded pending-write recovery, and privacy projections. |
+| `features/review.handler.ts` | Restricted queue/decision/report/reset routes, author notices, and handler-aware Oplog records. |
+| `features/review.notifications.ts` | Login reminders, native maintenance/summary scheduling, persisted due/lease state, and effective-role recipient batches. |
 | `features/types.ts` | Blog document/status, role/settings, and shared update/visibility types. |
 | `features/constants.ts` | Shared routes/templates, roles, permission/action identifiers, messages, storage identifiers, and policy values. |
 | `features/i18n.ts` | Application translations. |
@@ -21,6 +24,7 @@ This repository is a fork of the official Hydro blog addon. It runs within a Hyd
 | `frontend/` | Browser-side integration with the Hydro UI. |
 | `frontend/blog-comments.page.ts` | Desired-state like/unlike controls for both comment levels, using native request and feedback helpers. |
 | `frontend/blog-settings.page.ts` | Native settings dialogs, selection/bulk actions, inline role feedback, and domain-aware active navigation. |
+| `frontend/blog-review.page.ts` | Native report dialog and review-counter reset confirmation. |
 | `templates/` | Page templates and reusable components. |
 | `templates/partials/blog_comments.html` | Blog-policy adapter for Hydro's native editor, reply, deletion, user, and pagination markup. |
 | `patches/` | Dependency patches applied by `patch-package` during installation. |

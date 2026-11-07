@@ -1,6 +1,14 @@
 import type { ObjectId } from "hydrooj";
 
-import type { BLOG_SETTINGS_ID, BLOG_SETTINGS_VERSION, TYPE_BLOG_COMMENT } from "./constants";
+import type {
+    BLOG_SETTINGS_ID,
+    BLOG_SETTINGS_VERSION,
+    REVIEW_RUNTIME_ID,
+    ReviewDecision,
+    ReviewMode,
+    ReviewReason,
+    TYPE_BLOG_COMMENT,
+} from "./constants";
 import type { TYPE_BLOG } from "./model";
 
 export interface BlogDoc {
@@ -15,6 +23,19 @@ export interface BlogDoc {
     draft?: boolean;
     firstPublishAt?: Date;
     pin?: boolean;
+    writeRevision?: number;
+    contentVersion?: number;
+    counterEpoch?: number;
+    reportCount?: number;
+    rejectionCount?: number;
+    requiresReview?: boolean;
+    reviewReason?: ReviewReason;
+    reviewPending?: boolean;
+    reviewGeneration?: number;
+    reviewQueuedAt?: Date;
+    reportApprovedVersion?: number;
+    pendingReportWrite?: BlogReport;
+    lastReview?: { decision: ReviewDecision; reviewer: number; comments: string; at: Date; version: number };
 
     // statistics
     nReply: number;
@@ -75,6 +96,38 @@ export interface BlogSettings {
     roles: BlogRole[];
     permissionRoleOrder?: string[];
     deletedRoles: string[];
+    review?: BlogReviewSettings;
+}
+
+export interface BlogReviewSettings {
+    mode: ReviewMode;
+    reportLimit: number;
+    rejectionLimit: number;
+    reminders: boolean;
+    intervalMinutes: number;
+    reminderRevision: number;
+    reminderChangedAt?: Date;
+}
+
+export interface BlogReport {
+    _id: string;
+    articleId: ObjectId;
+    reporter: number;
+    version: number;
+    comments: string;
+    acceptedAt: Date;
+    epoch: number;
+    operationId: string;
+    revision: number;
+}
+
+export interface BlogReviewRuntime {
+    _id: typeof REVIEW_RUNTIME_ID;
+    taskId: ObjectId;
+    configRevision: number;
+    nextSummaryAt: Date;
+    runId?: string;
+    leaseUntil?: Date;
 }
 
 export interface BlogAssignment {

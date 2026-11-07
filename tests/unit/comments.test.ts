@@ -1,8 +1,9 @@
+import type { Context } from "hydrooj";
 import { ObjectId } from "mongodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BlogCommentHandler } from "../../features/comments.handler";
-import { BlogCommentModel } from "../../features/comments.model";
+import { BlogCommentModel, ensureCommentIndexes } from "../../features/comments.model";
 import { BLOG_DEFAULT, BLOG_PERM, BlogPermissions } from "../../features/constants";
 import { BlogModel } from "../../features/model";
 import { BlogPolicy } from "../../features/permission";
@@ -123,6 +124,53 @@ describe("comment permissions", () => {
 });
 
 describe("comment persistence", () => {
+    it("does not load likes for anonymous readers even when comments are present", async () => {
+        expect(await BlogCommentModel.getLikes(article.docId, [id, tailId], 0)).toEqual({});
+        expect(DocumentModel.collStatus.find).not.toHaveBeenCalled();
+    });
+
+    it("rejects a reply whose parent disappears during the append", async () => {
+        DocumentModel.push.mockResolvedValue([null, tailId]);
+        await expect(BlogCommentModel.addTail(article.docId, id, 3, "text", "ip")).rejects.toBeInstanceOf(
+            DocumentNotFoundError,
+        );
+        expect(DocumentModel.deleteSub).not.toHaveBeenCalled();
+        expect(DocumentModel.collStatus.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it("does not compensate a no-op like when publication changes", async () => {
+        DocumentModel.collStatus.findOneAndUpdate.mockResolvedValue(null);
+        DocumentModel.get.mockResolvedValueOnce(article).mockResolvedValueOnce({ ...article, draft: true });
+        await expect(BlogCommentModel.like(article.docId, id, undefined, 2, true)).rejects.toBeInstanceOf(
+            ValidationError,
+        );
+        expect(DocumentModel.collStatus.updateOne).not.toHaveBeenCalled();
+        expect(DocumentModel.coll.updateOne).not.toHaveBeenCalled();
+    });
+
+    it("keeps comment and like indexes scoped within the shared collections", async () => {
+        const ensureIndexes = vi.fn();
+        await ensureCommentIndexes({ db: { ensureIndexes } } as unknown as Context);
+        expect(ensureIndexes.mock.calls).toEqual([
+            [
+                DocumentModel.coll,
+                {
+                    name: "blogCommentsByArticle",
+                    key: { parentId: 1, _id: -1 },
+                    partialFilterExpression: { domainId: "system", docType: 71, parentType: 70 },
+                },
+            ],
+            [
+                DocumentModel.collStatus,
+                {
+                    name: "blogCommentLikesByArticle",
+                    key: { parentId: 1, commentId: 1 },
+                    partialFilterExpression: { domainId: "system", docType: 71 },
+                },
+            ],
+        ]);
+    });
+
     it("scopes top-level insertion and updates only the reply count", async () => {
         await expect(BlogCommentModel.add(article.docId, 2, "text", "192.0.2.1")).resolves.toEqual(id);
         expect(DocumentModel.add).toHaveBeenCalledWith("system", "text", 2, 71, null, 70, article.docId, {
@@ -369,6 +417,94 @@ describe("comment persistence", () => {
 });
 
 describe("comment handler protocol", () => {
+    it("loads both comment levels with user-specific likes, deletion controls and legacy empty replies", async () => {
+        const h = handler(2);
+        const legacy = { ...comment(), _id: new ObjectId(), docId: new ObjectId(), owner: 3 };
+        delete legacy.reply;
+        const comments = [comment(), legacy];
+        const cursor = { sort: vi.fn(), project: vi.fn() };
+        cursor.sort.mockReturnValue(cursor);
+        cursor.project.mockReturnValue(cursor);
+        DocumentModel.getMulti.mockReturnValue(cursor);
+        const paginate = vi.fn().mockResolvedValue([comments, 2, 4]);
+        Object.assign(h, { paginate });
+        const statuses = { project: vi.fn(), toArray: vi.fn().mockResolvedValue([{ docId: tailId }]) };
+        statuses.project.mockReturnValue(statuses);
+        DocumentModel.collStatus.find.mockReturnValue(statuses);
+        const users = { 2: makeUser(2), 3: makeUser(3) };
+        UserModel.getList.mockResolvedValue(users);
+
+        const result = await h.loadComments(2);
+
+        expect(DocumentModel.getMulti).toHaveBeenCalledWith("system", 71, { parentType: 70, parentId: article.docId });
+        expect(cursor.sort).toHaveBeenCalledWith({ _id: -1 });
+        expect(cursor.project).toHaveBeenCalledWith({ ip: 0, "reply.ip": 0 });
+        expect(paginate).toHaveBeenCalledWith(cursor, 2, "reply");
+        expect(UserModel.getList).toHaveBeenCalledWith("system", [2, 3]);
+        expect(DocumentModel.collStatus.find).toHaveBeenCalledWith({
+            domainId: "system",
+            docType: 71,
+            parentId: article.docId,
+            docId: { $in: [id, tailId, legacy.docId] },
+            uid: 2,
+            liked: true,
+        });
+        expect(result).toMatchObject({
+            comments: [
+                { canDelete: true, reply: [{ canDelete: false }] },
+                { canDelete: false, reply: [] },
+            ],
+            commentUsers: users,
+            liked: { [tailId.toHexString()]: true },
+            page: 2,
+            pcount: 2,
+            drcount: 4,
+            canComment: true,
+        });
+        expect(comments[0]).not.toHaveProperty("canDelete");
+        expect(legacy).not.toHaveProperty("reply");
+    });
+
+    it.each(["postReply", "postTailReply"] as const)("returns the persisted ID after %s", async (operation) => {
+        const h = handler();
+        const post = vi.spyOn(h, "post");
+        const back = vi.spyOn(h, "back");
+        UserModel.getList.mockResolvedValue({});
+        DocumentModel.push.mockResolvedValue([comment(), tailId]);
+        const args = { domainId: "system", content: "  New comment  ", drid: id.toHexString() };
+        const call = h[operation].bind(h) as unknown as (args: Record<string, unknown>) => Promise<void>;
+        await dispatchHandler(h, "post", () => call(args));
+        expect(post).toHaveBeenCalledOnce();
+        expect(back).toHaveBeenCalledWith(operation === "postReply" ? { drid: id } : { drrid: tailId });
+        if (operation === "postTailReply") {
+            expect(DocumentModel.push).toHaveBeenCalledWith("system", 71, id, "reply", "New comment", 2, {
+                ip: "192.0.2.1",
+                nLike: 0,
+            });
+        } else {
+            expect(DocumentModel.add.mock.calls[0][1]).toBe("New comment");
+        }
+    });
+
+    it("notifies and audits nested moderation without truncating short content", async () => {
+        const h = handler(4, -1n);
+        const target = comment();
+        target.reply![0].content = "Short";
+        DocumentModel.coll.findOne.mockResolvedValue(target);
+        const back = vi.spyOn(h, "back");
+        await dispatchHandler(h, "post", () => h.postDeleteTailReply(undefined, id, tailId));
+        expect(DocumentModel.coll.updateOne).toHaveBeenCalledWith(
+            expect.objectContaining({ docId: id, "reply._id": tailId }),
+            { $pull: { reply: { _id: tailId } } },
+        );
+        expect(JSON.parse(MessageModel.send.mock.calls[0][2] as string)).toMatchObject({
+            params: ["user4", "Short", "Test post", "/blog_post_detail"],
+        });
+        expect(MessageModel.send.mock.calls[0][1]).toBe(3);
+        expect(OplogModel.log).toHaveBeenCalledWith(h, "blog.tailReply.delete", target.reply![0]);
+        expect(back).toHaveBeenCalledOnce();
+    });
+
     it.each([
         ["postReply", { content: "" }],
         ["postTailReply", { drid: "bad", content: "text" }],

@@ -1,4 +1,4 @@
-import type { Context } from "hydrooj";
+import type { Context, Handler as HydroHandler } from "hydrooj";
 import type { Collection } from "mongodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,9 +13,9 @@ import {
     resolveBlogPolicy,
 } from "../../features/settings.model";
 import { makeBlog } from "../helpers/fixtures";
-import type { Handler } from "../helpers/hydro";
 import {
     dispatchHandler,
+    Handler,
     makeUser,
     MessageModel,
     OplogModel,
@@ -42,6 +42,83 @@ beforeEach(() => {
 });
 
 describe("blog settings persistence", () => {
+    it("initializes settings without overwriting existing roles and indexes role assignments", async () => {
+        const collection = vi.fn().mockReturnValueOnce({ findOne, updateOne }).mockReturnValueOnce(assignments);
+        const ensureIndexes = vi.fn();
+        await BlogSettingsModel.init({ db: { collection, ensureIndexes } } as unknown as Context);
+        expect(updateOne).toHaveBeenCalledWith(
+            { _id: "global" },
+            { $setOnInsert: initialSettings() },
+            { upsert: true },
+        );
+        expect(ensureIndexes).toHaveBeenCalledWith(assignments, { key: { role: 1 }, name: "blogUserRole" });
+    });
+
+    it.each([null, { ...initialSettings(), version: -1 }])(
+        "rejects missing or unsupported settings %j",
+        async (stored) => {
+            findOne.mockResolvedValue(stored);
+            await expect(BlogSettingsModel.get()).rejects.toBeInstanceOf(ValidationError);
+            expect(updateOne).not.toHaveBeenCalled();
+        },
+    );
+
+    it("caches policy only within one request and skips anonymous assignments", async () => {
+        assignments.findOne.mockResolvedValue({ _id: 2, role: "root" });
+        const request = new Handler();
+        request.user = makeUser(2);
+        const first = BlogSettingsModel.forRequest(request as unknown as HydroHandler);
+        const second = BlogSettingsModel.forRequest(request as unknown as HydroHandler);
+        expect(first).toBe(second);
+        expect((await first).role).toBe("root");
+        expect(findOne).toHaveBeenCalledOnce();
+        expect(assignments.findOne).toHaveBeenCalledExactlyOnceWith({ _id: 2 });
+        assignments.findOne.mockResolvedValue(null);
+        expect((await BlogSettingsModel.policy(makeUser(2))).role).toBe("default");
+        expect((await BlogSettingsModel.policy(makeUser(0, 0))).role).toBe("guest");
+        expect(assignments.findOne).toHaveBeenCalledTimes(2);
+    });
+
+    it("rejects missing effective roles instead of granting fallback permissions", () => {
+        settings.roles = settings.roles.filter((role) => role.name !== "default");
+        expect(() => resolveBlogPolicy(makeUser(2), settings)).toThrow(ValidationError);
+    });
+
+    it("reports concurrent settings updates for review and permission saves", async () => {
+        updateOne.mockResolvedValue({ matchedCount: 0 });
+        await expect(BlogSettingsModel.setReview(settings.review!, 0)).rejects.toBeInstanceOf(ValidationError);
+        await expect(BlogSettingsModel.permissions({ default: 0n }, 0)).rejects.toBeInstanceOf(ValidationError);
+        expect(updateOne).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([{ names: [] }, { names: ["missing"] }])(
+        "rejects empty or unknown role deletion $names before persistence",
+        async ({ names }) => {
+            await expect(BlogSettingsModel.deleteRoles(names, 0)).rejects.toBeInstanceOf(ValidationError);
+            expect(updateOne).not.toHaveBeenCalled();
+        },
+    );
+
+    it("returns an empty user page when aggregation has no rows", async () => {
+        assignments.aggregate.mockReturnValue({ toArray: () => Promise.resolve([]) });
+        expect(await BlogSettingsModel.listUsers(1)).toEqual({ entries: [], count: 0 });
+        expect(UserModel.getList).toHaveBeenCalledWith("system", []);
+    });
+
+    it("records previous role identities when resetting assignments", async () => {
+        assignments.find.mockReturnValue({
+            toArray: () => Promise.resolve([{ _id: 2, role: "retired-role" }]),
+        });
+        expect(await BlogSettingsModel.assignMany([2, 3], "default")).toEqual([
+            { uid: 2, previous: "retired-role", role: "default" },
+            { uid: 3, previous: "default", role: "default" },
+        ]);
+        expect(assignments.bulkWrite).toHaveBeenCalledWith([
+            { deleteOne: { filter: { _id: 2 } } },
+            { deleteOne: { filter: { _id: 3 } } },
+        ]);
+    });
+
     it("saves moderation independently of roles and changes reminder revision only for cadence changes", async () => {
         const input = {
             mode: "before" as const,
@@ -263,6 +340,15 @@ describe("blog settings persistence", () => {
 });
 
 describe("permission matrix role ordering", () => {
+    it("ignores stale ordered identities and tolerates missing built-ins without inventing grants", () => {
+        settings.permissionRoleOrder = ["removed", "root", "custom"];
+        settings.roles = [
+            { id: "custom", name: "custom", permissions: "0" },
+            { id: "root", name: "root", permissions: "-1" },
+        ];
+        expect(permissionMatrixRoles(settings)).toEqual([settings.roles[0], settings.roles[1]]);
+    });
+
     it("uses Hydro dictionary enumeration and builtin fallback for legacy settings without changing masks", () => {
         delete settings.permissionRoleOrder;
         for (const name of ["zeta", "10", "2", "alpha"]) {
@@ -325,6 +411,9 @@ interface SettingsHandler extends Handler {
     get: (args?: Record<string, unknown>) => unknown;
     postAdd: (args: Record<string, unknown>) => Promise<void>;
     postDelete: (args: Record<string, unknown>) => unknown;
+    postDeleteRoles: (args: Record<string, unknown>) => Promise<void>;
+    post: (args?: Record<string, unknown>) => Promise<void>;
+    postAssign: (args: Record<string, unknown>) => Promise<void>;
     postSetUsers: (args: Record<string, unknown>) => Promise<void>;
     postReviewSettings: (args: Record<string, unknown>) => Promise<void>;
 }
@@ -355,6 +444,128 @@ describe("settings handler boundaries", () => {
         reminders: "true",
         intervalMinutes: "1440",
     };
+
+    it("uses the system domain only for sudo links", () => {
+        const baseUrl = vi.spyOn(Handler.prototype, "url");
+        const h = handler("blog_settings");
+        h.url("user_sudo", { domainId: "restricted", return: "/blog/settings" });
+        expect(baseUrl).toHaveBeenLastCalledWith(
+            "user_sudo",
+            { domainId: "restricted", return: "/blog/settings" },
+            { domainId: "system" },
+        );
+        h.url("blog_settings", { domainId: "restricted" });
+        expect(baseUrl).toHaveBeenLastCalledWith("blog_settings", { domainId: "restricted" });
+    });
+
+    it.each(["blog_settings", "blog_settings_roles", "blog_settings_permissions", "blog_settings_users"])(
+        "renders authorized %s with its settings and page-specific data",
+        async (name) => {
+            assignments.aggregate.mockReturnValue({
+                toArray: () => Promise.resolve([{ entries: [], count: [{ total: 21 }] }]),
+            });
+            const h = handler(name);
+            await dispatchHandler({ prepare: () => h.prepare() }, "get", () => h.get({ domainId: "system" }));
+            expect(h.response.template).toBe(`${name}.html`);
+            expect(h.response.body?.settings).toEqual(settings);
+            if (name === "blog_settings") {
+                expect(h.response.body).toMatchObject({ blog_role: "default", review: settings.review });
+            } else if (name === "blog_settings_permissions") {
+                expect(h.response.body?.roles).toEqual(
+                    permissionMatrixRoles(settings).map((role) => ({ ...role, perm: BigInt(role.permissions) })),
+                );
+            } else if (name === "blog_settings_users") {
+                expect(h.response.body).toMatchObject({ entries: [], count: 21, page: 1, dpcount: 2 });
+            }
+        },
+    );
+
+    it("saves enabled review settings without sweeping pending articles", async () => {
+        const approve = vi.spyOn(BlogReviewModel, "approvePending");
+        const h = handler("blog_settings");
+        await dispatchHandler({ prepare: () => h.prepare() }, "post", () =>
+            h.postReviewSettings({
+                ...disabled,
+                mode: "after",
+                reminders: undefined,
+            }),
+        );
+        expect(updateOne).toHaveBeenCalledWith(
+            { _id: "global", revision: 0 },
+            expect.objectContaining({
+                $set: expect.objectContaining({ "review.mode": "after", "review.reminders": false }) as unknown,
+            }),
+        );
+        expect(approve).not.toHaveBeenCalled();
+        expect(h.back).toHaveBeenCalledWith({ approved: 0 });
+    });
+
+    it.each(["postDelete", "postDeleteRoles"] as const)("audits successful %s after persistence", async (operation) => {
+        const role = { id: "custom", name: "reviewer", permissions: "1" };
+        settings.roles.push(role);
+        const h = handler("blog_settings_roles");
+        await dispatchHandler({ prepare: () => h.prepare() }, "post", () =>
+            h[operation]({
+                domainId: "system",
+                role: "reviewer",
+                roles: "reviewer",
+                revision: "0",
+            }),
+        );
+        expect(OplogModel.log).toHaveBeenCalledWith(
+            h,
+            "blog.role.delete",
+            operation === "postDelete" ? role : { roles: [role] },
+        );
+        expect(updateOne.mock.invocationCallOrder[0]).toBeLessThan(OplogModel.log.mock.invocationCallOrder[0]);
+        expect(h.back).toHaveBeenCalledOnce();
+    });
+
+    it("saves a parsed permission matrix with serializable before/after audit data", async () => {
+        const h = handler("blog_settings_permissions");
+        h.request.body.permissions = { default: ["1000", "0"], guest: "1000" };
+        await dispatchHandler({ prepare: () => h.prepare() }, "post", () =>
+            h.post({ domainId: "system", revision: "0" }),
+        );
+        expect(updateOne).toHaveBeenCalledOnce();
+        expect(OplogModel.log).toHaveBeenCalledWith(h, "blog.permissions", {
+            previous: settings.roles,
+            permissions: { default: "1", guest: "0" },
+        });
+        expect(h.back).toHaveBeenCalledOnce();
+    });
+
+    it.each(["2", "user2"])("resolves assignment target %s in the system domain", async (uid) => {
+        const h = handler("blog_settings_users");
+        UserModel.getByUname.mockResolvedValue(makeUser(2));
+        await dispatchHandler({ prepare: () => h.prepare() }, "post", () =>
+            h.postAssign({
+                domainId: "restricted",
+                uid,
+                role: "root",
+            }),
+        );
+        if (uid === "2") expect(UserModel.getById).toHaveBeenCalledWith("system", 2);
+        else expect(UserModel.getByUname).toHaveBeenCalledWith("system", "user2");
+        expect(assignments.bulkWrite).toHaveBeenCalledOnce();
+        expect(OplogModel.log).toHaveBeenCalledWith(h, "blog.role.assign", {
+            uid: 2,
+            previous: "default",
+            role: "root",
+        });
+        expect(h.back).toHaveBeenCalledOnce();
+    });
+
+    it("rejects a missing assignment target without writing or auditing", async () => {
+        const h = handler("blog_settings_users");
+        UserModel.getByUname.mockResolvedValue(null);
+        await expect(h.postAssign({ domainId: "system", uid: "missing", role: "root" })).rejects.toBeInstanceOf(
+            ValidationError,
+        );
+        expect(assignments.bulkWrite).not.toHaveBeenCalled();
+        expect(OplogModel.log).not.toHaveBeenCalled();
+        expect(h.back).not.toHaveBeenCalled();
+    });
 
     it("requires explicit disable confirmation and rejects stale settings before approving articles", async () => {
         const approve = vi.spyOn(BlogReviewModel, "approvePending").mockResolvedValue(0);

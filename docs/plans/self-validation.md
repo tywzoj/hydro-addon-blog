@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress: initial Vitest UT, a local development runtime, and real-browser E2E are delivered and verified locally and in [PR #8](https://github.com/tywzoj/hydro-addon-blog/pull/8). Project-scoped type checking is now delivered and verified locally; its new CI step, broader coverage, and cross-platform checks remain to be verified on future PR heads.
+In progress: initial Vitest UT, a local development runtime, and real-browser E2E are delivered and verified locally and in [PR #8](https://github.com/tywzoj/hydro-addon-blog/pull/8). Project-scoped type checking and the additional UT branch coverage recorded below are delivered and verified locally; current-head CI and cross-platform checks remain to be verified on future PR heads.
 
 The [investigation record](self-validation-investigation.md) retains experiments and limitations. The repository provides local Playwright MCP, project-scoped TypeScript checking, Vitest UT, managed local Hydro with disposable MongoDB, and Playwright E2E. The workflow includes lint, type checking, UT coverage, and E2E; recheck the actual PR head after every push rather than reusing earlier evidence.
 
@@ -153,3 +153,80 @@ Remote CI results for this step are tracked on the implementation PR and must
 identify the verified head commit; the local results above do not establish them.
 Broader E2E scenarios and cross-platform/version-matrix verification remain
 follow-up work; no full-runtime compatibility claim is made.
+
+### UT Branch-Coverage Extension
+
+On 2026-11-07, coverage was measured on baseline `284b911` and extended without
+changing production code, dependencies, Vitest discovery, coverage inclusions,
+or exclusions. Acceptance criteria were meaningful assertions for uncovered
+behavior and failure paths, improved coverage in the same scope, and passing
+coverage, lint and project-scoped type checks.
+
+| Metric | Baseline | Extended suite |
+| --- | --- | --- |
+| Passing UT | 249 | 328 |
+| Branches | 86.14% | 99.84% |
+| Statements | 85.36% | 99.18% |
+| Lines | 86.69% | 99.05% |
+| Functions | 82.71% | 99.06% |
+
+The 79 additional cases cover:
+
+- Review queue/detail pagination, private report hydration, independent authority,
+  accepted/duplicate/hidden reports, legacy reset counters, rejection notices,
+  receipt-integrity failures, counter overflow and bounded approval recovery.
+- Comment hydration with nested and legacy replies, user-specific likes, deletion
+  capabilities and notices, successful replies, parent disappearance, no-op like
+  compensation, scoped indexes and stale article-deletion protection.
+- Settings initialization and compatibility, request-local policy caching,
+  concurrent configuration writes, role deletion/assignment and audit payloads,
+  management-page rendering and system-domain sudo arguments.
+- Secondary-instance reminder registration, empty recovery, persisted cadence
+  changes, empty/nonreviewer recipient batches and ownership-safe early exits.
+- Draft-only lists, privacy projections, no-op and unchecked form submissions,
+  independent publication/withdrawal, unreadable-result redirects, report
+  eligibility and legacy author review controls.
+
+The only harness change replaces the instance-field URL mock with a spied
+prototype method. The former shadowed `BlogSettingsHandler.url`; the new fixture
+executes the real override and its `super.url` call while keeping URL generation
+an explicit service boundary. The installed framework's `HandlerCommon.url` in
+`node_modules/@hydrooj/framework/server.ts` is also a prototype method. Decorated
+requests continue using real installed Hydro conversion and simulated lifecycle
+ordering, not a second server implementation.
+
+Local checks use Node.js `24.22.1`, Yarn `1.22.22`, Vitest/coverage-v8 `4.0.18`:
+
+```sh
+yarn lint
+yarn typecheck
+yarn test:coverage
+```
+
+Lint and the 41-file scoped type check pass. All 328 UT pass. Two temporary
+production mutations (reversing the conditional-delete guard and omitting the
+receipt-comment integrity comparison) caused the corresponding new tests to
+fail with exit 1. Both mutations were removed before the final checks.
+
+The unrounded branch result is 663/664. The remaining `if` at
+`features/handler.ts:148` has V8 hit counts `[6, -4]` in the full report. A focused
+run of the existing sequential-view and anonymous-view tests also passes all
+three cases but reports `[1, -1]` for the same branch:
+
+```sh
+yarn test tests/unit/handler.test.ts --coverage \
+  --testNamePattern 'counts the first eligible view|does not track a view' \
+  --coverage.reporter=json --coverage.reportsDirectory=coverage/view-branch-probe
+```
+
+These assertions explicitly check one write across repeated authenticated reads
+and no writes for anonymous identities. The negative counter is a coverage
+measurement limitation in this environment; it was not hidden with exclusions,
+new provider settings, dependency upgrades or repetitive tests. Remaining
+unexecuted lines include the simple article count wrapper, review index
+initialization and notification dependency-injection registration. This is not
+a claim of exhaustive application or concurrency verification.
+
+E2E and MCP were not rerun for this test-only extension: no production handler,
+model, template or browser behavior changed. Existing real-Hydro coverage remains
+separate evidence. No current-head CI run or compatibility matrix is claimed.

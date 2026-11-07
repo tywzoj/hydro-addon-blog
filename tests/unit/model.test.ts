@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BlogCommentModel } from "../../features/comments.model";
 import { BlogModel, ensureIndexes } from "../../features/model";
 import { makeBlog } from "../helpers/fixtures";
-import { DocumentModel } from "../helpers/hydro";
+import { DocumentModel, ValidationError } from "../helpers/hydro";
 
 beforeEach(() => {
     vi.resetAllMocks();
@@ -126,6 +126,14 @@ describe("publication state", () => {
 });
 
 describe("persistence mutations", () => {
+    it("does not clean up an article tree when conditional deletion loses a race", async () => {
+        DocumentModel.coll.deleteOne.mockResolvedValue({ deletedCount: 0 });
+        const cleanup = vi.spyOn(BlogCommentModel, "deleteForArticle");
+        await expect(BlogModel.deleteChecked(makeBlog())).rejects.toBeInstanceOf(ValidationError);
+        expect(DocumentModel.deleteMultiStatus).not.toHaveBeenCalled();
+        expect(cleanup).not.toHaveBeenCalled();
+    });
+
     it("deletes both the post and all user statuses", async () => {
         const { docId } = makeBlog();
         DocumentModel.get.mockResolvedValue(makeBlog());

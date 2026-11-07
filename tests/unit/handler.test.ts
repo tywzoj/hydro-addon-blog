@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BlogConfirmMessages, DEFAULT_REVIEW_SETTINGS, ReviewMessages } from "../../features/constants";
 import { applyHandler } from "../../features/handler";
 import { BLOG_DEFAULT, BLOG_PERM, BlogPermissionError, BlogPolicy } from "../../features/permission";
+import { BlogReviewModel } from "../../features/review.model";
 import { BlogSettingsModel, initialSettings, resolveBlogPolicy } from "../../features/settings.model";
 import type { BlogStatusDoc } from "../../features/types";
 import { injectUI } from "../../features/ui";
@@ -74,6 +75,16 @@ beforeEach(() => {
 });
 
 describe("route and preparation contracts", () => {
+    it("loads home policy through base preparation before admitting access", async () => {
+        const handler = createHandler("/blog");
+        const forRequest = vi.spyOn(BlogSettingsModel, "forRequest");
+        await handler.__prepare({ domainId: "system" });
+        expect(forRequest).toHaveBeenCalledWith(handler);
+        expect(handler.blog.role).toBe("default");
+        forRequest.mockResolvedValue(new BlogPolicy(handler.user, "denied", 0n));
+        await expect(handler.__prepare({ domainId: "system" })).rejects.toBeInstanceOf(BlogPermissionError);
+    });
+
     it.each(["disabled", "before", "after"] as const)(
         "gates homepage and dropdown review entries in %s mode",
         async (mode) => {
@@ -171,6 +182,18 @@ describe("route and preparation contracts", () => {
 });
 
 describe("list query contracts", () => {
+    it("restricts a draft-only author's list and preserves private projection rules", async () => {
+        const handler = createHandler("/blog/:uid");
+        handler.blog = new BlogPolicy(handler.user, "draft-reader", BLOG_PERM.ACCESS | BLOG_PERM.VIEW_DRAFT_OWN);
+        const doc = makeBlog({ reportCount: 5, rejectionCount: 2 });
+        handler.ctx.db.paginate.mockResolvedValue([[doc], 1, 1]);
+        await handler.get({ domainId: "system" });
+        expect(DocumentModel.getMulti).toHaveBeenCalledWith("system", 70, { owner: 1, draft: true });
+        expect(sort).toHaveBeenLastCalledWith({ pin: -1, updateAt: -1 });
+        expect(handler.response.body?.ddocs).toEqual([expect.objectContaining({ rejectionCount: 2 })]);
+        expect((handler.response.body?.ddocs as unknown[])[0]).not.toHaveProperty("reportCount");
+    });
+
     it.each([true, false])(
         "shows My Blog based on authentication, not create/review grants (%s)",
         async (authenticated) => {
@@ -271,6 +294,81 @@ describe("write authorization contracts", () => {
 });
 
 describe("create, edit, and delete contracts", () => {
+    it("redirects an author without draft-read permission to their list after draft creation", async () => {
+        const handler = createHandler("/blog/:uid/create");
+        handler.blog = new BlogPolicy(handler.user, "creator", BLOG_DEFAULT & ~BLOG_PERM.VIEW_DRAFT_OWN);
+        DocumentModel.add.mockResolvedValue(handler.ddoc.docId);
+        await dispatchHandler(handler, "post", () => handler.postSubmit(submit));
+        expect(handler.response.redirect).toBe("/blog_list_user");
+        expect(OplogModel.log).toHaveBeenCalledOnce();
+    });
+
+    it("treats an unchanged submission as a redirect without writing or auditing", async () => {
+        const handler = createHandler("/blog/:uid/:did/edit");
+        await dispatchHandler(handler, "post", () => handler.postSubmit({ ...submit, draft: false }));
+        expect(handler.response.redirect).toBe("/blog_post_detail");
+        expect(DocumentModel.coll.findOneAndUpdate).not.toHaveBeenCalled();
+        expect(OplogModel.log).not.toHaveBeenCalled();
+    });
+
+    it("interprets visible unchecked edit controls as publication and unpinning", async () => {
+        const handler = createHandler("/blog/:uid/:did/edit");
+        handler.ddoc = makeBlog({ pin: true });
+        await dispatchHandler(handler, "post", () =>
+            handler.postSubmit({
+                domainId: "system",
+                title: handler.ddoc.title,
+                content: handler.ddoc.content,
+                draft_present: true,
+                pin_present: true,
+            }),
+        );
+        expect(DocumentModel.coll.findOneAndUpdate).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.objectContaining({ $set: expect.objectContaining({ draft: false, pin: false }) as unknown }),
+            { returnDocument: "after" },
+        );
+    });
+
+    it.each([true, false])("allows independent publication state draft=%s without edit permission", async (draft) => {
+        const handler = createHandler("/blog/:uid/:did/edit");
+        handler.blog = new BlogPolicy(handler.user, "publisher", BLOG_DEFAULT & ~BLOG_PERM.EDIT_OWN);
+        handler.ddoc = makeBlog({ draft: !draft, reviewPending: true });
+        await dispatchHandler(handler, "post", () => handler.postPublish({ domainId: "system", draft }));
+        expect(DocumentModel.coll.findOneAndUpdate).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.objectContaining({
+                $set: expect.objectContaining({ draft, ...(draft ? { reviewPending: false } : {}) }) as unknown,
+            }),
+            { returnDocument: "after" },
+        );
+        expect(OplogModel.log).toHaveBeenCalledOnce();
+    });
+
+    it("redirects to the author's list when a successful withdrawal removes read access", async () => {
+        const handler = createHandler("/blog/:uid/:did/edit");
+        handler.blog = new BlogPolicy(handler.user, "publisher", BLOG_DEFAULT & ~BLOG_PERM.VIEW_DRAFT_OWN);
+        DocumentModel.coll.findOneAndUpdate.mockResolvedValue(makeBlog({ draft: true }));
+        await dispatchHandler(handler, "post", () => handler.postPublish({ domainId: "system", draft: true }));
+        expect(handler.response.redirect).toBe("/blog_list_user");
+        expect(OplogModel.log).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+        { mode: "before", draft: false, requiresReview: false, expected: true },
+        { mode: "disabled", draft: true, requiresReview: true, expected: true },
+        { mode: "after", draft: true, requiresReview: false, expected: false },
+    ])(
+        "renders the editor's review requirement for $mode / hold=$requiresReview",
+        async ({ mode, draft, requiresReview, expected }) => {
+            const handler = createHandler("/blog/:uid/:did/edit");
+            handler.UiContext.blogReviewMode = mode;
+            handler.ddoc = makeBlog({ draft, requiresReview });
+            await dispatchHandler(handler, "get", () => handler.get());
+            expect(handler.response.body?.publishRequiresReview).toBe(expected);
+        },
+    );
+
     it("rejects system-editor creation for another user before rate limiting or writes", async () => {
         const handler = createHandler("/blog/:uid/create", 2, PRIV.PRIV_USER_PROFILE | PRIV.PRIV_EDIT_SYSTEM);
         await expect(dispatchHandler(handler, "post", () => handler.postSubmit(submit))).rejects.toBeInstanceOf(
@@ -516,6 +614,72 @@ describe("create, edit, and delete contracts", () => {
 });
 
 describe("views and star state", () => {
+    it("does not block a legacy author's draft when review counters are absent", async () => {
+        const handler = createHandler("/blog/:uid/:did");
+        handler.ddoc = makeBlog();
+        await handler.get();
+        expect(handler.response.body).toMatchObject({
+            reviewBlocked: false,
+            publishRequiresReview: false,
+            canReview: false,
+            canReset: false,
+        });
+        expect(handler.response.body?.ddoc).not.toHaveProperty("rejectionCount");
+    });
+
+    it.each([false, true])("exposes report controls only without an existing receipt (%s)", async (reported) => {
+        vi.spyOn(BlogSettingsModel, "review").mockResolvedValue({ ...DEFAULT_REVIEW_SETTINGS, mode: "after" });
+        const findReceipt = vi
+            .spyOn(BlogReviewModel.reports, "findOne")
+            .mockResolvedValue(reported ? { _id: "receipt" } : null);
+        const handler = createHandler("/blog/:uid/:did", 2);
+        handler.ddoc.contentVersion = 4;
+        DocumentModel.getStatus.mockResolvedValue({ docType: 70, docId: handler.ddoc.docId, view: true });
+        await handler.get({ domainId: "system" });
+        expect(findReceipt).toHaveBeenCalledWith({
+            _id: `system:70:${handler.ddoc.docId.toHexString()}:4:2`,
+        });
+        expect(handler.response.body).toMatchObject({ canReport: !reported, reportVersion: 4, star: false });
+        expect(DocumentModel.inc).not.toHaveBeenCalled();
+    });
+
+    it("hides reporting controls for an approved content version", async () => {
+        vi.spyOn(BlogSettingsModel, "review").mockResolvedValue({ ...DEFAULT_REVIEW_SETTINGS, mode: "after" });
+        const findReceipt = vi.spyOn(BlogReviewModel.reports, "findOne");
+        const handler = createHandler("/blog/:uid/:did", 2);
+        handler.ddoc.reportApprovedVersion = 0;
+        await handler.get();
+        expect(handler.response.body).toMatchObject({ canReport: false, reportVersion: undefined });
+        expect(findReceipt).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        { mode: "before" as const, requiresReview: false },
+        { mode: "after" as const, requiresReview: true },
+    ])(
+        "shows an owner's review hold, counters and independent reset controls in $mode mode",
+        async ({ mode, requiresReview }) => {
+            vi.spyOn(BlogSettingsModel, "review").mockResolvedValue({ ...DEFAULT_REVIEW_SETTINGS, mode });
+            const handler = createHandler("/blog/:uid/:did");
+            handler.blog = new BlogPolicy(
+                handler.user,
+                "reviewer",
+                BLOG_DEFAULT | BLOG_PERM.REVIEW | BLOG_PERM.RESET_REVIEW_COUNTERS,
+            );
+            handler.ddoc = makeBlog({ reviewPending: true, requiresReview, rejectionCount: 3, reportCount: 5 });
+            await handler.get();
+            expect(handler.response.body).toMatchObject({
+                canReview: true,
+                canReset: true,
+                canViewReportCount: true,
+                canWithdrawReview: true,
+                publishRequiresReview: true,
+                reviewBlocked: true,
+                ddoc: { reportCount: 5, rejectionCount: 3 },
+            });
+        },
+    );
+
     it.each([
         [BLOG_PERM.UNPUBLISH_OTHERS, true],
         [0n, false],

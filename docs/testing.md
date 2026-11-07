@@ -25,7 +25,7 @@ yarn test:watch
 yarn test tests/unit/model.test.ts
 ```
 
-`yarn test` and `yarn test:coverage` are non-watch commands. Coverage reports are generated under ignored `coverage/`, including HTML and a JSON summary. Coverage targets article models/handlers, the permission policy, and settings models/handlers; it is not a whole-project or E2E coverage claim. No percentage threshold is imposed as a substitute for meaningful assertions.
+`yarn test` and `yarn test:coverage` are non-watch commands. Coverage reports are generated under ignored `coverage/`, including HTML and a JSON summary. Coverage targets article, comment, review and settings models/handlers, review notifications, shared handler preparation, and the permission policy; it is not a whole-project or E2E coverage claim. No percentage threshold is imposed as a substitute for meaningful assertions.
 
 Vitest discovers `tests/unit/**/*.test.ts`, rejects empty discovery or empty suites, disallows focused `.only` tests, and applies five-second test/hook timeouts. CI additionally limits the UT step to five minutes. Ordinary tests are offline and need neither Docker nor a browser. Use the same non-watch command locally and in CI.
 
@@ -36,6 +36,10 @@ The test boundary is intentionally explicit:
 - The fixture loads installed real Hydro `param`, `Types`, and privilege constants through the official `@hydrooj/register` loader. Invalid-input tests invoke decorated methods with the framework-style raw object, including `domainId`; positional calls can bypass those validators.
 - Persistence, user lookup, pagination, rate limiting, routing capture, and audit services are test boundaries. Fixture users, ownership/privilege enforcement, and lookup errors are not the real Hydro authorization lifecycle.
 - Each test resets mocks; clocks return to real time after every test, the temporary Hydro global is restored after each file, and Vitest isolates files. Do not opt shared-state tests into concurrent execution.
+- The fixture's `url` is a prototype method with a per-instance spy, so subclass
+  overrides and `super.url(...)` remain executable. Its route-name result is not
+  real Hydro URL generation; URL-policy tests assert the arguments sent to the
+  base method, including the system-domain sudo override.
 - Authorization-boundary tests use `dispatchHandler` after fixture hydration to
   run preparation, generic POST and the operation in native order. Hook-count
   assertions reject accidental invocation from actions. This helper does not
@@ -53,6 +57,22 @@ Article regressions cover draft direct-link denial, public-edit publication righ
 omitted versus unchecked fields, independent metadata operations, and stale writes.
 
 Assertions about query construction are not MongoDB ordering tests. Fixture denial is not proof of real Hydro access control. A star-only update assertion does not establish database merge semantics. Sequential views do not establish concurrent exactly-once behavior. Preserve these distinctions when adding tests and use E2E for the actual runtime contracts.
+
+The [2026-11-07 branch-coverage extension](plans/self-validation.md#ut-branch-coverage-extension)
+records 328 passing UT and 99.84% branches in the unchanged coverage scope.
+It adds queue/report response and denial cases, receipt-integrity and overflow
+failures, comment hydration and moderation, settings rendering and writes,
+request-local policy caching, reminder scheduling/recipient boundaries, and
+article publication/control regressions. Temporary deletion and receipt-integrity
+mutations were both detected by the new tests.
+
+The remaining reported branch is the view-count skip path in
+`features/handler.ts`. Existing assertions verify both a previously viewed article
+and anonymous reads without additional count/status writes, but the installed
+V8 reporter gives this path a negative hit count, including in a focused run.
+Treat this as a measurement limitation in the recorded environment, not evidence
+that those assertions are missing or a reason to suppress coverage. Do not add
+duplicate cases, change the coverage scope, or round the result to 100%.
 
 The initial implementation verified nonzero exits for unmatched discovery, a discovered file containing no tests, and a temporary transform that reversed the creation publication branch. Both publication regressions failed under that mutation. Temporary probes were removed; application source was not modified.
 

@@ -44,6 +44,9 @@ Source: [constants](../features/constants.ts), [route handlers](../features/hand
 
 Supported `sort` values are `latest`, `latest_update`, and `views`, mapped to descending `firstPublishAt`, `updateAt`, and `views`. An explicit supported selection overrides the default.
 
+On user article lists, the Draft label precedes Pending review or Review required
+when both labels are visible.
+
 The home sidebar orders available actions as Create a Post, My Blog, Blog review,
 and Blog settings. My Blog is shown to authenticated readers independently of
 creation/review grants and targets the signed-in user. A user's blog sidebar
@@ -51,13 +54,45 @@ shows the owner's title and an authorized Create a Post button only; the three
 home navigation buttons are omitted even for reviewers/managers. Creation still
 requires the signed-in user's own list, including for root.
 When review is disabled, review links are also omitted from the home sidebar,
-native user dropdown and article footer; report and reset-entry controls are
+native user dropdown and article action sidebar; report and reset-entry controls are
 hidden. Direct authorized review/reset routes remain available for existing holds
 and recovery. Settings access remains visible to authorized managers.
 
 Handlers paginate ten posts at a time and validate the page as a positive integer. No additional equal-key tie breaker is explicitly specified in the handler sort objects; do not promise a particular tie order without verifying the query behavior.
 
 Source: [list handlers and sort map](../features/handler.ts), [model queries and indexes](../features/model.ts).
+
+## Article Detail Layout
+
+The right sidebar shows the author profile first, followed by a separate,
+permission-filtered Article actions section:
+edit, publish/submit/withdraw, pin/unpin, delete, review and counter reset.
+It is omitted when no action is available. Existing confirmation dialogs and
+independent action permissions remain unchanged. All action buttons are text-only,
+including Edit.
+
+Review status, reviewer-visible report counts
+and publication-blocking notices appear in the article footer alongside views,
+stars and reporting. Only the author sees their latest nonempty review comment
+in a separate section below the article, before discussion comments. Non-authors,
+including reviewers and root, do not receive that feedback in ordinary article
+responses. Empty feedback sections are omitted, and feedback remains escaped text.
+
+Article detail never loads or exposes report comments, including for reviewers.
+Reports remain on the authorized review detail page, with each entry explicitly
+labeling its reporter through a native user link, alongside content version,
+acceptance time and escaped comments. That page retains its existing pagination
+and `REVIEW` gate; ownership and reset permission alone do not grant access.
+
+Rejection counts are displayed only on authorized review queue/detail and counter
+reset pages. Ordinary lists, article detail and editor responses omit
+`rejectionCount` for everyone, including owners and reviewers, without changing
+stored counters or publication-limit enforcement. Authors still see review status,
+feedback and the publication-blocked notice.
+
+The review detail heading appends the localized review type after a middle dot:
+`Article title · Publication review` or `Article title · Report review`. There is
+no separate review-type paragraph in the article body.
 
 ## Article IP Privacy
 
@@ -80,7 +115,11 @@ No database migration or framework serialization patch is required.
 
 - Article deletion, explicit publication/withdrawal, saving published content or
   changing its publication state, review approval/rejection, and counter reset
-  require Hydro's native Yes/No confirmation in the browser. Declining preserves
+  require Hydro's native confirmation dialogs in the browser. Rejection opens an
+  action dialog with optional review comments and the rejection consequence
+  notice; cancellation preserves the draft comments without submitting.
+  Approval uses a Yes/No confirmation with no comment input and submits empty
+  comments, even after a cancelled rejection dialog. Declining preserves
   editor content and review comments and sends no mutation. Confirmation retains
   the selected submit button and hidden version fields, including keyboard
   submissions. Ordinary draft saves, pinning and stars do not add confirmation;
@@ -274,6 +313,30 @@ Source: [review model](../features/review.model.ts),
 [handlers](../features/review.handler.ts),
 [notifications](../features/review.notifications.ts), and the
 [review plan and evidence](plans/blog-review.md).
+
+## Notification Language
+
+New review decisions, report-hiding notices, automatic-approval notices, reviewer
+reminders, comment mentions and deletion notices select their message template
+using each recipient's persisted `viewLang`. An unset or empty preference falls
+back to `server.language`. The actor's request language is not used.
+
+The shared sender reads only recipient IDs and language preferences in one bulk
+query, deduplicates targets and groups delivery by language. Missing accounts and
+empty recipient lists do not create messages. Native system-sender identity,
+rich-text/unread flags, and awaited error propagation remain unchanged.
+
+Only the template is translated. Usernames, article titles, comments and links
+remain separate native rich-message parameters, preserving escaped display and
+clickable links rather than interpolating untrusted content into the template.
+Existing message records are not rewritten. Multiple language groups can be
+partially delivered if a later send fails; there is still no transaction or
+notification outbox.
+
+This follows Hydro's recipient-language selection in `MessageModel.sendNotification`,
+but uses `MessageModel.send` because the built-in notification helper selects its
+own system-privilege recipients and formats a flat string instead of this addon's
+explicit recipients and structured link parameters.
 
 ## Comments, Replies, and Likes
 

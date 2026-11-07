@@ -233,7 +233,7 @@ try {
         hydro.once("exit", serverExited);
         abort.signal.addEventListener("abort", cancel, { once: true });
         if (abort.signal.aborted) cancel();
-        const timeout = setTimeout(cancel, 630000);
+        const timeout = setTimeout(cancel, 930000);
         try {
             const [code] = await once(tests, "exit");
             if (process.exitCode !== 1) process.exitCode = code ?? 1;

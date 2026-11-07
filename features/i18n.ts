@@ -27,6 +27,9 @@ const NO_POST_YET = "No post yet...";
 const VIEWS = "Views: {0}";
 const DRAFT = "Draft";
 const reviewLabels: Record<string, [string, string, string]> = {
+    "Article actions": ["文章操作", "文章操作", "게시물 작업"],
+    "Review comments": ["审查意见", "審查意見", "심사 의견"],
+    Reporter: ["举报人", "檢舉人", "신고자"],
     [BlogConfirmMessages.Delete]: [
         "确认删除这篇文章及其全部评论？此操作无法撤销。",
         "確定刪除這篇文章及其全部評論？此操作無法復原。",

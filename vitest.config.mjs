@@ -29,6 +29,7 @@ export default defineConfig({
                 "features/review.model.ts",
                 "features/review.handler.ts",
                 "features/review.notifications.ts",
+                "features/notifications.ts",
             ],
             reporter: ["text", "html", "json-summary"],
         },

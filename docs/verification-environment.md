@@ -76,8 +76,8 @@ disabling rate limits, or directly inserting business data.
 Each run writes `test-results/<run-id>/`, ignored by Git: HTML report, failure screenshots/traces, a bounded Hydro log, and `runtime.json` listing the owned container, temporary directory, and driver PID. Authentication-state files are removed at teardown. Reports can contain synthetic sessions; do not commit them.
 
 MongoDB readiness is bounded to 30 seconds, Hydro startup to 90 seconds, browser
-tests to 600 seconds globally, and the parent test process to 630 seconds. CI
-bounds the complete E2E step to fifteen minutes, including startup and cleanup.
+tests to 900 seconds globally, and the parent test process to 930 seconds. CI
+bounds the complete E2E step to twenty minutes, including startup and cleanup.
 The global bounds accommodate the real periodic reminder, not retries or relaxed
 assertions. Ordinary single-test/action/navigation limits remain unchanged; the
 real-timer reminder case explicitly allows 170 seconds. Shutdown escalates from
@@ -104,7 +104,7 @@ On 2026-11-06, MCP initialization and blank-page navigation were first verified.
 
 ## Automated E2E and Agent Checks
 
-`yarn test:e2e` executes six real-login setup cases and forty business scenarios:
+`yarn test:e2e` executes six real-login setup cases and forty-one business scenarios:
 the original article/frontend regressions plus global role/settings management,
 fine-grained permissions, self-only creation even for root, guest access, domain
 independence, seven two-level comment/like/moderation scenarios, and ten article

@@ -1,0 +1,9 @@
+{% set reviewComments = ddoc.lastReview.comments if ddoc.lastReview else '' %}
+{% if handler.user._id == ddoc.owner and reviewComments %}
+<div class="section" id="blog-review-comments">
+  <div class="section__header"><h2 class="section__title">{{ _('Review comments') }}</h2></div>
+  <div class="section__body">
+    <div class="typo"><pre>{{ reviewComments }}</pre></div>
+  </div>
+</div>
+{% endif %}

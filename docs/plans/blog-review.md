@@ -19,6 +19,216 @@ and unrelated functionality.
 This document is the retained project source of truth. Operational task status
 is tracked separately.
 
+## Article Detail Layout Follow-up (2026-11-07)
+
+Implemented on `users/antares/blog-detail-sidebar`. Acceptance criteria:
+management actions occupy their own right-sidebar section; review status
+moves to the existing views footer; the author's nonempty review
+comments occupy a separate section below the article. Views remain visible,
+and existing action permissions, feedback privacy and confirmation flows remain
+intact. The author's profile appears above the actions, following the maintainer's
+layout follow-up. Report history remains exclusively on the authorized review
+page, with each reporter explicitly identified.
+
+The implementation changes addon-owned templates, not native template overrides.
+It reuses Hydro sections, expanded buttons and pager styles without custom CSS.
+The source basis is official Hydro commit
+`3bae56fe8edddff12346bcb1c8281269c94688d8`,
+`packages/ui-default/templates/discussion_detail.html` and the problem-sidebar
+partials, checked against installed `hydrooj` 5.0.7 and default UI 4.58.5.
+
+Local evidence (Node 24.22.1):
+
+- `yarn lint`, `yarn typecheck`, and
+  `yarn test tests/unit/handler.test.ts`: passed, including 118 handler tests.
+- `yarn test:e2e --grep 'draft publication|review before publication|review reports deduplicate|deletion removes|critical article'`:
+  review-before-publication, report privacy/escaping and deletion passed.
+  Draft layout initially exposed a decorative icon in the Edit link's accessible
+  name; marking the icon `aria-hidden` fixed it. The final selector matched no
+  critical-action scenario.
+- `yarn test:e2e --grep 'draft publication|critical action dialogs'`: all eight
+  cases passed, including six login setups, responsive article layout and
+  confirmation cancellation/hotkey submission.
+- Declared Playwright MCP against a separate isolated `yarn dev` runtime:
+  desktop sidebar geometry, pin/unpin, publication-dialog cancellation, Chinese
+  labels and a 390px mobile viewport with no horizontal overflow were verified.
+  The final article page had no console errors.
+- Profile-first follow-up: `yarn lint` and
+  `yarn test:e2e --grep 'draft publication'` passed (seven cases including login
+  setups). MCP also verified profile-first/actions-second ordering on the
+  already-running port-8888 server without restarting or replacing its data.
+- Earlier action-icon follow-up (superseded by the text-only decision below):
+  all sidebar actions used installed Hydro icon glyphs
+  with `aria-hidden="true"`, preserving accessible names and existing behavior.
+  `yarn lint` and
+  `yarn test:e2e --grep 'draft publication|review before publication|review reports deduplicate'`
+  passed (nine cases including login setups). MCP confirmed nonempty glyphs from
+  the `hydro-icons` font on the Chinese port-8888 article page.
+
+No full-suite or PR-head CI claim is made. Earlier detail-page report pagination
+and its query-boundary tests were removed by the feedback-scope revision below.
+
+### Text-only Actions and Review Metadata Follow-up
+
+The maintainer's final layout revision removes every sidebar action icon,
+including Edit. Rejection counts appear only on authorized review and reset
+pages; ordinary list/detail/editor responses omit the field even for owners and
+reviewers. Stored counters, rejection-limit enforcement and blocking notices are
+unchanged. Review detail headings append the localized publication/report review
+type after a middle dot rather than repeating it in a body paragraph.
+
+`yarn lint`, `yarn typecheck`, and
+`yarn test tests/unit/handler.test.ts tests/unit/review.test.ts` passed (185 tests).
+`yarn test:e2e --grep 'draft publication|review before publication|review reports deduplicate|review rejection limit'`
+passed draft-layout and rejection-limit/reset scenarios; two new title assertions
+initially used ambiguous multi-element locators. After narrowing those assertions,
+`yarn test:e2e --grep 'review before publication|review reports deduplicate'`
+passed all eight cases including login setups.
+
+MCP verified the existing port-8888 server's text-only actions, hidden counts on
+article/editor pages, review-type heading and retained review/reset counts. Its
+templates update live, but its already-loaded backend still exposes the old JSON
+field until restart. The fresh managed E2E runtime verified the new JSON filtering.
+The existing runtime was not restarted, to preserve the maintainer's current
+temporary test data.
+
+### Author Feedback and Review-only Reports Follow-up
+
+The detail page now renders only the author's own latest nonempty review comment.
+It does not load or return report comments for any reader, including reviewers
+and root. The temporary detail-report query, response fields, pagination parameter
+and unused headings were removed. The authorized review page retains paginated
+reports and adds an explicit localized Reporter label before each native user
+link. Existing escaping and reviewer-only admission remain unchanged.
+
+`yarn lint`, `yarn typecheck`, and `yarn test tests/unit/handler.test.ts` passed
+(119 tests). `yarn test:e2e --grep 'review before publication|review reports deduplicate'`
+passed all eight cases including login setups: author-only feedback, no report
+payload in detail HTML/JSON for authors/readers/root, escaped review-page reports,
+and per-entry reporter identity links. The existing port-8888 backend still needs
+a restart for response-field removal; its live templates already enforce the
+new display boundary. MCP confirmed that the existing article has no empty
+feedback section and that a non-author reviewer sees none; populated author
+feedback and report attribution were verified in the managed E2E fixtures.
+No test data was erased to reload that backend.
+
+### Rejection Comment Dialog Follow-up
+
+Review detail no longer has an inline comments textarea. Reject opens the same
+native `ActionDialog` pattern used by reporting, combining optional comments with
+the rejection consequence notice. Cancel does not submit and retains draft text;
+Ok submits the existing decision form with its generation/version tokens.
+Approve keeps its native Yes/No confirmation, has no comment input, and submits
+empty comments rather than a cancelled rejection draft.
+
+The source basis is
+`packages/ui-default/components/dialog/index.tsx` at the pinned Hydro commit
+above, checked against the installed default UI. No new dialog library, custom
+styles or server decision contract is introduced.
+
+`yarn lint`, `yarn typecheck`, and
+`yarn test tests/unit/confirmation.test.ts tests/unit/handler.test.ts` passed
+(124 tests). The focused browser run
+`yarn test:e2e --grep 'review before publication|review reports deduplicate|critical action dialogs'`
+passed both review scenarios, including rejection cancellation/retained text,
+accepted comment persistence and approval without comments. The existing editor
+hotkey case failed once while waiting for a cancelled dialog to close;
+`yarn test:e2e --grep 'critical action dialogs'` passed unchanged on an isolated
+rerun (seven cases including login setups). No assertions were relaxed.
+
+MCP found no pending article on the existing port-8888 runtime and confirmed that
+its served addon bundle still lacks the new dialog code after page reload.
+The new flow is verified in the fresh managed E2E runtime; the maintainer's
+existing server needs a restart to load both frontend and response-scope changes.
+It was left running to avoid deleting its disposable database.
+
+### List Labels and Final Handoff
+
+The user-list Draft label now precedes Pending review (or Review required).
+`yarn lint` and `yarn test:e2e --grep 'review before publication'` passed,
+including the explicit label-order assertion (seven cases with login setups).
+MCP confirmed the same ordering on port 8888.
+
+After the earlier runtime checks above, the maintainer explicitly requested a
+restart. The port-8888 server was restarted with fresh disposable data, and its
+served addon bundle was verified to include the new rejection dialog. The earlier
+notes about stale frontend/backend code describe pre-restart observations, not
+the current server state. The branch was renamed to follow repository conventions
+before the final commit and PR.
+Final commit-ready checks passed: `yarn lint`, `yarn typecheck`,
+`yarn test:coverage` (373 tests across eight files), and `git diff --check`.
+
+## Recipient-language Notification Follow-up (2026-11-07)
+
+New blog notices now resolve their template against the target user's persisted
+`viewLang`, falling back to `server.language` when unset/empty. The shared sender
+covers review results, report hiding, disabling-review approvals, login/periodic
+reminders, comment mentions and deletion notices. It projects only IDs/languages,
+deduplicates recipients and groups native sends by language. Missing accounts
+and empty batches produce no messages. Language groups retain existing awaited
+failure behavior, including the possibility of partial delivery.
+
+The localized template stays separate from unmodified message parameters so
+user-controlled text remains escaped and `:link` placeholders remain clickable
+in the native message UI. Existing stored messages are not migrated.
+
+Source basis:
+[Hydro MessageModel](https://github.com/hydro-dev/Hydro/blob/3bae56fe8edddff12346bcb1c8281269c94688d8/packages/hydrooj/src/model/message.ts),
+checked against installed Hydro 5.0.7. Its `sendNotification` establishes the
+recipient-language/server-language fallback, but cannot be reused directly because
+it selects system-privilege recipients and formats a flat string. The addon's
+shared helper keeps explicit recipients and native rich-message parameters using
+`MessageModel.send`. No frontend language catalog or framework patch is introduced.
+
+Evidence:
+
+- `yarn lint`, `yarn typecheck`, `yarn test` and `yarn test:coverage` passed:
+  378 tests across nine files; the new shared sender is included in coverage.
+- `yarn test:e2e --grep 'notifications use recipient|comments matrix|disabling review|review reminders use'`
+  passed comment moderation, automatic approval and real-worker/login reminders.
+  The new message-page assertion initially omitted native conversation selection.
+- After selecting the Hydro conversation explicitly,
+  `yarn test:e2e --grep 'notifications use recipient'` passed all seven cases
+  including authentication. It verifies opposite actor/recipient languages,
+  preference changes between review decisions, mixed-language mention recipients,
+  stored template language, escaped feedback and clickable message links.
+- Declared MCP against a separate isolated port-8893 runtime verified an English
+  actor's mention rendered in Chinese for a Chinese-preference recipient, with
+  the expected native article link. That temporary runtime is separate from the
+  maintainer's port-8888 server; existing test data was not replaced.
+
+These are focused E2E results, not a full-suite or PR-head CI claim. The maintainer
+subsequently requested a restart; port 8888 now runs the updated sender with fresh
+disposable test data.
+
+## PR #13 Review and CI Follow-up
+
+The review comment identified missing native autofocus on the rejection comments
+textarea. The template now supplies `data-autofocus`; the review E2E opens Reject
+with Enter and requires the textarea to be focused before typing, including after
+cancelling and reopening. The source basis is
+`packages/ui-default/components/dialog/DomDialog.ts` at the pinned Hydro commit
+above: `_show` focuses `[data-autofocus]` after the opening animation. No custom
+focus handler or timer is introduced.
+
+CI run `42383379945` on `8dab9a4` passed 46 cases before the 600-second global
+suite deadline interrupted the final native periodic-reminder scenario. No
+business assertion failed in that run. The full suite now has 47 cases, and the
+reminder scenario already has an explicit 170-second per-test allowance.
+
+The suite deadline is now 900 seconds, with a 930-second parent deadline to allow
+Playwright teardown and a 20-minute workflow step budget for startup and cleanup.
+The ordinary 30-second test timeout, action/navigation timeouts, one-worker
+isolation and zero retries remain unchanged. The change addresses aggregate
+runtime rather than weakening a failed assertion or extending individual cases.
+
+Local validation passed with `yarn lint`, `yarn typecheck`, `yarn test:coverage`
+(378 tests) and the full `yarn test:e2e` suite (47 cases, 7.1 minutes). The keyboard
+focus assertion passed, as did the final real-worker reminder scenario and owned
+runtime cleanup. The maintainer's port-8888 server had no pending article for an
+additional MCP rejection-dialog check, so its existing data was left unchanged.
+PR-head CI must verify the workflow budget on the remote runner separately.
+
 ## Current Baseline
 
 Repository revision: `2f0b6e2a4fe297bfb49df4573ba13e4794fff336`.

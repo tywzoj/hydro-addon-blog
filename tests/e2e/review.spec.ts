@@ -176,6 +176,76 @@ test.afterEach(async ({ editor }) => {
     }
 });
 
+test("notifications use recipient preferences for review decisions and mixed-language mentions", async ({
+    page,
+    viewer,
+    editor,
+    db,
+}) => {
+    async function setLanguage(target: Page, language: string) {
+        await target.goto("/home/settings/preference", navigation);
+        await target.locator('select[name="viewLang"]').selectOption(language);
+        await Promise.all([
+            target.waitForNavigation(navigation),
+            target.locator('input.primary[type="submit"]').click(),
+        ]);
+    }
+    async function latestNotice(uid: number, path: string) {
+        const notice = await db
+            .collection<{ content: string; to: number[] }>("message")
+            .findOne({ to: uid, content: { $regex: did(path).toHexString() } }, { sort: { _id: -1 } });
+        expect(notice).not.toBeNull();
+        return JSON.parse(notice!.content) as { message: string; params: (string | number)[] };
+    }
+
+    await configure(editor, "before", false);
+    try {
+        await setLanguage(page, "zh");
+        const path = await makePost(page, "Recipient language review");
+        const feedback = '<b data-notice-markup="true">Please revise</b>';
+        expect((await decide(editor, path, "reject", feedback)).ok()).toBe(true);
+        expect(await latestNotice(accounts.author.id, path)).toMatchObject({
+            message: "你的博客文章“{0}”（版本 {1}）未通过审查。{2}（{3:link}）。",
+            params: ["Recipient language review", 0, feedback, path],
+        });
+        await page.goto("/home/messages?uid=1", navigation);
+        await page.locator(".messagepad").getByRole("heading", { name: "Hydro", exact: true }).click();
+        await expect(page.locator(".messagepad__content")).toContainText("未通过审查");
+        await expect(page.locator(".messagepad__content")).toContainText(feedback);
+        await expect(page.locator(".messagepad__content [data-notice-markup]")).toHaveCount(0);
+
+        await setLanguage(page, "en");
+        await setLanguage(editor, "zh");
+        expect((await publication(page, path, false)).ok()).toBe(true);
+        expect((await decide(editor, path, "approve")).ok()).toBe(true);
+        expect(await latestNotice(accounts.author.id, path)).toMatchObject({
+            message: ReviewMessages.ApprovedNotice,
+        });
+
+        await viewer.goto(path, navigation);
+        const response = await viewer.request.post(path, {
+            headers: headers(viewer),
+            form: { operation: "reply", content: "@[](/user/2) @[](/user/4)" },
+        });
+        expect(response.ok()).toBe(true);
+        expect(await latestNotice(accounts.author.id, path)).toEqual({
+            message: "User {0} mentioned you in {1:link}",
+            params: [accounts.viewer.name, path],
+        });
+        expect(await latestNotice(accounts.editor.id, path)).toEqual({
+            message: "用户 {0} 在 {1:link} 中提到了你。",
+            params: [accounts.viewer.name, path],
+        });
+        await editor.goto("/home/messages?uid=1", navigation);
+        await editor.locator(".messagepad").getByRole("heading", { name: "Hydro", exact: true }).click();
+        await expect(editor.locator(".messagepad__content")).toContainText("提到了你");
+        await expect(editor.locator(`.messagepad__content a[href="${path}"]`)).toBeVisible();
+    } finally {
+        await setLanguage(page, "en");
+        await setLanguage(editor, "en");
+    }
+});
+
 test("review JSON responses omit IPs without losing decision tokens or stored addresses", async ({
     page,
     viewer,
@@ -272,28 +342,66 @@ test("review before publication enforces reviewer-only access, approval, comment
     const path = await makePost(page, "Review pre-publication");
     let doc = await postDoc(db, path);
     expect(doc).toMatchObject({ draft: true, reviewPending: true, requiresReview: true });
+    await expect(page.locator(".medium-3.columns [data-blog-actions]").getByRole("button")).toHaveText([
+        "Withdraw from review",
+        "Pin",
+        "Delete",
+    ]);
+    await expect(page.locator(".section__footer")).toContainText("Pending review");
+    await expect(page.locator("[data-blog-actions] .icon")).toHaveCount(0);
+    await page.goto("/blog/2", navigation);
+    const labels = page
+        .locator(".discussion__item")
+        .filter({ has: page.getByRole("link", { name: "Review pre-publication", exact: true }) })
+        .locator(".supplementary > li");
+    await expect(labels.nth(0)).toHaveText("Draft");
+    await expect(labels.nth(1)).toHaveText("Pending review");
     expect(doc.firstPublishAt).toBeUndefined();
     expect((await viewer.goto(path, navigation))?.status()).toBe(403);
     expect((await viewer.goto(`${path}/edit`, navigation))?.status()).toBe(403);
     expect((await reporters[0].goto("/blog/review", navigation))?.status()).toBe(403);
     const token = await tokens(viewer, path);
+    await expect(viewer.locator(".medium-9.columns").getByRole("heading", { level: 1 })).toHaveText(
+        "Review pre-publication · Publication review",
+    );
+    await expect(viewer.locator(".section__body").filter({ hasText: "Publication review" })).toHaveCount(0);
+    await expect(viewer.getByText("Rejections: 0", { exact: false })).toBeVisible();
     await expect(viewer.locator(".richmedia")).toContainText("Body for Review pre-publication");
-    await viewer.locator('textarea[name="comments"]').fill("Please clarify the article.");
-    await viewer.getByRole("button", { name: "Reject article", exact: true }).click();
+    await expect(viewer.locator("form[data-blog-confirm] textarea")).toHaveCount(0);
+    await viewer.getByRole("button", { name: "Reject article", exact: true }).press("Enter");
     await expect(viewer.locator(".dialog:visible")).toContainText("its rejection count will increase");
-    await viewer.locator('.dialog:visible [data-action="no"]').click();
+    await expect(viewer.locator('.dialog:visible textarea[name="reviewComments"]')).toBeFocused();
+    await viewer.locator('.dialog:visible textarea[name="reviewComments"]').fill("Please clarify the article.");
+    await viewer.locator('.dialog:visible [data-action="cancel"]').click();
     await expect(viewer.locator(".dialog:visible")).toHaveCount(0);
-    await expect(viewer.locator('textarea[name="comments"]')).toHaveValue("Please clarify the article.");
     const cancelled = await postDoc(db, path);
     expect(cancelled.reviewPending).toBe(true);
     expect(cancelled.rejectionCount ?? 0).toBe(0);
     expect(await db.collection("oplog").countDocuments({ type: "blog.review", did: did(path) })).toBe(0);
+    await viewer.getByRole("button", { name: "Reject article", exact: true }).click();
+    await expect(viewer.locator('.dialog:visible textarea[name="reviewComments"]')).toBeFocused();
+    await expect(viewer.locator('.dialog:visible textarea[name="reviewComments"]')).toHaveValue(
+        "Please clarify the article.",
+    );
     await Promise.all([
         viewer.waitForNavigation(navigation),
-        confirmAction(viewer, viewer.getByRole("button", { name: "Reject article", exact: true })),
+        viewer.locator('.dialog:visible [data-action="ok"]').click(),
     ]);
     await page.goto(path, navigation);
-    await expect(page.getByText("Please clarify the article.", { exact: true })).toBeVisible();
+    await expect(page.locator(".medium-9.columns > #blog-review-comments")).toContainText(
+        "Please clarify the article.",
+    );
+    await expect(page.locator("#blog-review-comments").getByRole("heading")).toHaveText("Review comments");
+    await editor.goto(path, navigation);
+    await expect(editor.locator("#blog-review-comments")).toHaveCount(0);
+    const nonAuthorDetail = await editor.request.get(path, { headers: { Accept: "application/json" } });
+    expect(await nonAuthorDetail.json()).not.toHaveProperty("ddoc.lastReview");
+    await expect(page.locator(".section__footer")).toContainText("Review rejected");
+    await expect(page.locator(".section__footer")).not.toContainText("Rejections:");
+    await expect(page.locator(".section__footer")).not.toContainText("Please clarify the article.");
+    await expect(
+        page.locator("[data-blog-actions]").getByRole("button", { name: "Submit for review", exact: true }),
+    ).toBeVisible();
     expect((await postDoc(db, path)).rejectionCount).toBe(1);
     expect(
         await db.collection("message").countDocuments({ to: 2, content: { $regex: "Please clarify the article" } }),
@@ -310,8 +418,12 @@ test("review before publication enforces reviewer-only access, approval, comment
     });
     expect(stale.status()).toBe(403);
     await tokens(viewer, path);
+    await viewer.getByRole("button", { name: "Reject article", exact: true }).click();
+    await viewer.locator('.dialog:visible textarea[name="reviewComments"]').fill("Do not include on approval");
+    await viewer.locator('.dialog:visible [data-action="cancel"]').click();
     await viewer.getByRole("button", { name: "Approve article" }).click();
     await expect(viewer.locator(".dialog:visible")).toContainText("its review counters will be reset");
+    await expect(viewer.locator(".dialog:visible textarea")).toHaveCount(0);
     await viewer.locator('.dialog:visible [data-action="no"]').click();
     await expect(viewer.locator(".dialog:visible")).toHaveCount(0);
     expect(await postDoc(db, path)).toMatchObject({ draft: true, reviewPending: true, rejectionCount: 1 });
@@ -326,6 +438,7 @@ test("review before publication enforces reviewer-only access, approval, comment
         rejectionCount: 0,
         reportCount: 0,
         requiresReview: false,
+        lastReview: { decision: "approve", comments: "" },
     });
     expect(doc.firstPublishAt).toBeInstanceOf(Date);
     expect(doc.reportApprovedVersion).toBeUndefined();
@@ -480,17 +593,55 @@ test("review reports deduplicate, cross the strict threshold, restore visibility
     expect(await db.collection("blog.report").countDocuments({ articleId: did(path), reporter: 3, version: 0 })).toBe(
         1,
     );
-    expect((await report(reporters[0], path, 0, "another report")).ok()).toBe(true);
+    const reportComments = '<b data-report-markup="true">another report</b>';
+    expect((await report(reporters[0], path, 0, reportComments)).ok()).toBe(true);
     expect((await postDoc(db, path)).reportCount).toBe(2);
     await page.goto(path, navigation);
-    await expect(page.locator(".section__body.supplementary")).not.toContainText("Reports:");
-    await expect(page.locator(".section__body.supplementary")).toContainText("Rejections:");
+    await expect(page.locator(".section__footer")).not.toContainText("Reports:");
+    await expect(page.locator(".section__footer")).not.toContainText("Rejections:");
+    await expect(page.locator("#blog-review-comments")).toHaveCount(0);
+    await viewer.goto(path, navigation);
+    await expect(viewer.locator("#blog-review-comments")).toHaveCount(0);
+    await editor.goto(path, navigation);
+    const feedback = editor.locator(".medium-9.columns > #blog-review-comments");
+    const actions = editor.locator("[data-blog-actions]");
+    await expect(actions.getByRole("link", { name: "Blog review", exact: true })).toBeVisible();
+    await expect(actions.getByRole("link", { name: "Reset review counters", exact: true })).toBeVisible();
+    await expect(actions.locator(".icon")).toHaveCount(0);
+    await expect(feedback).toHaveCount(0);
+    for (const reader of [page, viewer, editor]) {
+        const detailJSON = await reader.request.get(path, { headers: { Accept: "application/json" } });
+        expect(detailJSON.ok()).toBe(true);
+        const body: unknown = await detailJSON.json();
+        for (const field of ["reportComments", "reportPage", "reportPageCount"]) {
+            expect(body).not.toHaveProperty(field);
+        }
+        expect(await detailJSON.text()).not.toContain("private report");
+        expect(await detailJSON.text()).not.toContain("data-report-markup");
+    }
+    await expect(editor.locator(".section__footer")).toContainText("Reports: 2");
+    await expect(editor.locator(".section__footer")).not.toContainText("another report");
     for (const target of [path, `${path}/edit`, "/blog", "/blog/2"]) {
         const authorJSON = await page.request.get(target, { headers: { Accept: "application/json" } });
         expect(authorJSON.ok()).toBe(true);
         expect(await authorJSON.text()).not.toContain('"reportCount":');
     }
     await tokens(editor, path);
+    await expect(editor.locator(".medium-9.columns").getByRole("heading", { level: 1 })).toHaveText(
+        "Review reported publication · Report review",
+    );
+    await expect(editor.locator(".section__body").filter({ hasText: "Report review" })).toHaveCount(0);
+    const entries = editor.locator(".section__body > .section__body");
+    const reporterEntry = entries.filter({ hasText: reportComments });
+    await expect(reporterEntry).toContainText("Reporter:");
+    await expect(reporterEntry.getByRole("link", { name: accounts.reporterA.name, exact: true })).toHaveAttribute(
+        "href",
+        "/user/5",
+    );
+    await expect(
+        entries.filter({ hasText: "private report" }).getByRole("link", { name: accounts.viewer.name, exact: true }),
+    ).toHaveAttribute("href", "/user/3");
+    await expect(editor.locator("[data-report-markup]")).toHaveCount(0);
     const reviewerJSON = await editor.request.get(reviewPath(path), { headers: { Accept: "application/json" } });
     expect(await reviewerJSON.json()).toHaveProperty("ddoc.reportCount", 2);
     expect((await report(viewer, path, 0, "duplicate")).ok()).toBe(true);
@@ -570,6 +721,24 @@ test("review rejection limit and independent reset preserve holds through withdr
         expect((await postDoc(db, path)).rejectionCount).toBe(count);
         if (count < 3) expect((await publication(page, path, false)).ok()).toBe(true);
     }
+    for (const reader of [page, editor]) {
+        for (const target of [path, `${path}/edit`]) {
+            await reader.goto(target, navigation);
+            await expect(reader.getByText(/Rejections:/)).toHaveCount(0);
+            const response = await reader.request.get(target, { headers: { Accept: "application/json" } });
+            expect(response.ok()).toBe(true);
+            expect(await response.json()).not.toHaveProperty("ddoc.rejectionCount");
+        }
+        const response = await reader.request.get("/blog/2", { headers: { Accept: "application/json" } });
+        expect(response.ok()).toBe(true);
+        const body = (await response.json()) as { ddocs: BlogDoc[] };
+        expect(body.ddocs.find((doc) => doc.docId.toString() === did(path).toHexString())).toBeDefined();
+        for (const doc of body.ddocs) expect(doc).not.toHaveProperty("rejectionCount");
+    }
+    await page.goto(path, navigation);
+    await expect(page.locator(".section__footer")).toContainText(
+        "Publication is blocked by the review rejection limit.",
+    );
     expect((await publication(page, path, false)).status()).toBe(403);
     await configure(editor, "disabled");
     expect((await publication(page, path, false)).status()).toBe(403);
@@ -578,10 +747,13 @@ test("review rejection limit and independent reset preserve holds through withdr
     await viewer.goto(`${reviewPath(path)}/reset`, navigation);
     expect(await viewer.locator(".topic__content").count()).toBe(0);
     await expect(viewer.locator(".section__body")).not.toContainText("Reports:");
+    await expect(viewer.locator(".section__body")).toContainText("Rejections: 3");
     const resetJSON = await viewer.request.get(`${reviewPath(path)}/reset`, {
         headers: { Accept: "application/json" },
     });
-    expect(await resetJSON.json()).not.toHaveProperty("reportCount");
+    const resetBody: unknown = await resetJSON.json();
+    expect(resetBody).not.toHaveProperty("reportCount");
+    expect(resetBody).toHaveProperty("rejectionCount", 3);
     await viewer.getByRole("button", { name: "Reset review counters" }).click();
     await expect(viewer.locator(".dialog:visible")).toContainText("This does not publish or approve the article.");
     await viewer.locator('.dialog:visible [data-action="no"]').click();

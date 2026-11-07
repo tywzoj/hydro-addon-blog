@@ -4,13 +4,12 @@
 {% block content %}
 <div class="row"><div class="medium-9 columns">
   <div class="section">
-    <div class="section__header"><h1 class="section__title">{{ ddoc.title }}</h1></div>
+    <div class="section__header"><h1 class="section__title">{{ ddoc.title }} &middot; {{ _('Report review') if ddoc.reviewReason == 'report' else _('Publication review') }}</h1></div>
     <div class="section__body">
       <p>{{ user.render_inline(udict[ddoc.owner]) }} &middot;
         {{ _('Content version') }}: {{ ddoc.contentVersion|default(0) }} &middot;
         {{ _('Reports') }}: {{ ddoc.reportCount|default(0) }} &middot;
         {{ _('Rejections') }}: {{ ddoc.rejectionCount|default(0) }}</p>
-      <p>{{ _('Report review') if ddoc.reviewReason == 'report' else _('Publication review') }}</p>
       <div class="typo richmedia">{{ ddoc.content|markdown|safe }}</div>
     </div>
     <div class="section__body">
@@ -18,9 +17,7 @@
         <input type="hidden" name="operation" value="decide">
         <input type="hidden" name="generation" value="{{ ddoc.reviewGeneration|default(0) }}">
         <input type="hidden" name="version" value="{{ ddoc.contentVersion|default(0) }}">
-        <label>{{ _('Review comments (optional)') }}
-          <textarea class="textbox" name="comments" maxlength="65535" rows="4"></textarea>
-        </label>
+        <input type="hidden" name="comments" value="">
         <button class="rounded primary button" name="decision" value="approve">{{ _('Approve article') }}</button>
         <button class="rounded button" name="decision" value="reject">{{ _('Reject article') }}</button>
         {% if canReset %}<a class="rounded button" href="{{ url('blog_review_reset', did=ddoc.docId) }}">{{ _('Reset review counters') }}</a>{% endif %}
@@ -32,7 +29,7 @@
     <div class="section__body">
     {% for report in reports %}
       <div class="section__body">
-        <p>{{ user.render_inline(udict[report.reporter]) }} &middot;
+        <p>{{ _('Reporter') }}: {{ user.render_inline(udict[report.reporter]) }} &middot;
           {{ _('Content version') }}: {{ report.version }} &middot; {{ datetimeSpan(report.acceptedAt)|safe }}</p>
         <div class="typo"><pre>{{ report.comments }}</pre></div>
       </div>
@@ -41,4 +38,11 @@
     </div>
   </div>
 </div><div class="medium-3 columns"><a class="rounded button" href="{{ url('blog_review') }}">{{ _('Blog review') }}</a></div></div>
+<div class="dialog__body--blog-review" style="display: none"><div>
+  <h2>{{ _('Reject article') }}</h2>
+  <p>{{ _('Reject this article? It will be unpublished and its rejection count will increase.') }}</p>
+  <label>{{ _('Review comments (optional)') }}
+    <textarea class="textbox" name="reviewComments" maxlength="65535" rows="4" data-autofocus></textarea>
+  </label>
+</div></div>
 {% endblock %}

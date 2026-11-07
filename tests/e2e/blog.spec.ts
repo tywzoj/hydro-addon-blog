@@ -46,6 +46,17 @@ test("article JSON responses omit IPs for readers, authors and root while preser
 test("draft publication and edits persist across real author and viewer sessions", async ({ page, viewer, db }) => {
     const title = "E2E draft publication";
     const path = await createPost(page, title, true);
+    const actions = page.locator(".medium-3.columns [data-blog-actions]");
+    await expect(
+        page.locator(".medium-3.columns > .section.side").first().locator(".sidebar-user-profile"),
+    ).toBeVisible();
+    await expect(page.locator(".medium-3.columns > .section.side").nth(1)).toHaveAttribute("data-blog-actions", "");
+    await expect(actions.getByRole("button")).toHaveText(["Publish", "Pin", "Delete"]);
+    await expect(actions.locator(".icon")).toHaveCount(0);
+    await expect(actions.getByRole("link", { name: "Edit", exact: true })).toBeVisible();
+    await expect(page.locator(".medium-9.columns button[name='operation']")).toHaveCount(0);
+    await expect(page.locator("#blog-review-comments")).toHaveCount(0);
+    await expect(page.locator(".section__footer")).not.toContainText("Rejections:");
     const docId = new ObjectId(path.split("/").pop()!);
     const posts = db.collection<BlogDoc>("document");
     expect(await posts.findOne({ docId })).not.toHaveProperty("firstPublishAt");
@@ -63,6 +74,9 @@ test("draft publication and edits persist across real author and viewer sessions
     expect(published?.firstPublishAt).toBeInstanceOf(Date);
     await viewer.goto("/blog/2", { waitUntil: "domcontentloaded" });
     await expect(viewer.getByRole("link", { name: title, exact: true })).toBeVisible();
+    await viewer.goto(path, { waitUntil: "domcontentloaded" });
+    await expect(viewer.locator("[data-blog-actions]")).toHaveCount(0);
+    await expect(viewer.locator(".section__footer")).not.toContainText("Rejections:");
 
     await page.goto(`${path}/edit`, { waitUntil: "domcontentloaded" });
     await fillPost(page, `${title} edited`, "Persisted edited content", false);
@@ -70,6 +84,11 @@ test("draft publication and edits persist across real author and viewer sessions
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: `${title} edited`, exact: true })).toBeVisible();
     await expect(page.locator(".topic__content")).toContainText("Persisted edited content");
+    await expect(actions.getByRole("button")).toHaveText(["Unpublish", "Pin", "Delete"]);
+    await expect(actions.getByRole("button", { name: "Unpublish", exact: true })).toBeVisible();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(actions.getByRole("button", { name: "Delete", exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
     expect((await posts.findOne({ docId }))?.firstPublishAt).toEqual(published?.firstPublishAt);
 });
 

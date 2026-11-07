@@ -16,6 +16,7 @@ This repository is a fork of the official Hydro blog addon. It runs within a Hyd
 | `features/review.model.ts` | Article review transitions, conditional-write predicates, independent report receipts, bounded pending-write recovery, and privacy projections. |
 | `features/review.handler.ts` | Restricted queue/decision/report/reset routes, author notices, and handler-aware Oplog records. |
 | `features/review.notifications.ts` | Login reminders, native maintenance/summary scheduling, persisted due/lease state, and effective-role recipient batches. |
+| `features/notifications.ts` | Shared rich-message delivery localized by recipient preference, with bulk language lookup and per-language recipient groups. |
 | `features/types.ts` | Blog document/status, role/settings, and shared update/visibility types. |
 | `features/constants.ts` | Shared routes/templates, roles, permission/action identifiers, messages, storage identifiers, and policy values. |
 | `features/i18n.ts` | Application translations. |

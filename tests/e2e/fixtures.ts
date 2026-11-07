@@ -1,6 +1,6 @@
 import { join } from "node:path";
 
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect, test as base } from "@playwright/test";
 import type { Db } from "mongodb";
 import { MongoClient } from "mongodb";
@@ -53,15 +53,27 @@ export async function fillPost(page: Page, title: string, content: string, draft
 }
 
 export async function submitPost(page: Page) {
+    const form = page.locator("form[data-initial-draft]");
+    const wasDraft = (await form.getAttribute("data-initial-draft")) === "true";
+    const draftInput = form.locator('input[name="draft"]');
+    const draft = (await draftInput.count()) ? await draftInput.isChecked() : wasDraft;
+    const button = page.locator('button[name="operation"][value="submit"]');
     await Promise.all([
         page.waitForURL(/\/blog\/\d+\/[a-f0-9]{24}$/, { waitUntil: "domcontentloaded" }),
-        page.locator('button[name="operation"][value="submit"]').click(),
+        !draft || !wasDraft ? confirmAction(page, button) : button.click(),
     ]);
     return new URL(page.url()).pathname;
 }
 
+export async function confirmAction(page: Page, button: Locator) {
+    await button.click();
+    const dialog = page.locator(".dialog:visible");
+    await expect(dialog).toHaveCount(1);
+    await dialog.locator('[data-action="yes"]').click();
+}
+
 export async function createPost(page: Page, title: string, draft = false) {
-    await page.goto("/blog/2/create");
+    await page.goto("/blog/2/create", { waitUntil: "domcontentloaded" });
     await fillPost(page, title, `Body for ${title}`, draft);
     return await submitPost(page);
 }

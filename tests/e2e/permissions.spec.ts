@@ -4,14 +4,14 @@ import type { Udoc } from "hydrooj/src/interface";
 import type { BlogPermission } from "../../features/permission";
 import type { BlogAssignment, BlogDoc, BlogSettings } from "../../features/types";
 import { accounts } from "./accounts";
-import { createPost, expect, fillPost, test } from "./fixtures";
+import { confirmAction, createPost, expect, fillPost, test } from "./fixtures";
 
 async function settingsPage(page: Page, path: string, password = accounts.editor.password) {
-    await page.goto(path);
+    await page.goto(path, { waitUntil: "domcontentloaded" });
     if (new URL(page.url()).pathname.endsWith("/user/sudo")) {
         await page.locator('.immersive--content input[name="password"]').fill(password);
         await Promise.all([
-            page.waitForURL((url) => !url.pathname.endsWith("/user/sudo")),
+            page.waitForURL((url) => !url.pathname.endsWith("/user/sudo"), { waitUntil: "domcontentloaded" }),
             page.locator('input[name="confirm"]').click(),
         ]);
     }
@@ -23,7 +23,10 @@ async function createRole(page: Page, name: string) {
     await page.getByRole("button", { name: "Create Role", exact: true }).click();
     const dialog = page.locator(".dialog:visible");
     await dialog.locator('input[type="text"]').fill(name);
-    await Promise.all([page.waitForNavigation(), dialog.locator('[data-action="ok"]').click()]);
+    await Promise.all([
+        page.waitForNavigation({ waitUntil: "domcontentloaded" }),
+        dialog.locator('[data-action="ok"]').click(),
+    ]);
     await expect(page.locator(`.domain-roles tr[data-role="${name}"]`)).toBeVisible();
 }
 
@@ -37,7 +40,10 @@ async function setPermissions(page: Page, role: string, permissions: BlogPermiss
             .locator(`[data-permission="${name}"] input[data-role="${role}"]`)
             .setChecked(permissions.includes(name as BlogPermission));
     }
-    await Promise.all([page.waitForNavigation(), page.getByRole("button", { name: "Update Permission" }).click()]);
+    await Promise.all([
+        page.waitForNavigation({ waitUntil: "domcontentloaded" }),
+        page.getByRole("button", { name: "Update Permission" }).click(),
+    ]);
     await expect(page.locator("html")).toHaveAttribute("data-page", "blog_settings_permissions");
 }
 
@@ -48,14 +54,20 @@ async function assignRole(page: Page, name: string, role: string) {
     await dialog.locator(".autocomplete-wrapper input").fill(name.slice(0, -1));
     await dialog.locator(".user-select__uname").filter({ hasText: name }).click();
     await dialog.locator("select").selectOption(role);
-    await Promise.all([page.waitForNavigation(), dialog.locator('[data-action="ok"]').click()]);
+    await Promise.all([
+        page.waitForNavigation({ waitUntil: "domcontentloaded" }),
+        dialog.locator('[data-action="ok"]').click(),
+    ]);
     await expect(page.locator("html")).toHaveAttribute("data-page", "blog_settings_users");
 }
 
 async function resetUser(page: Page, uid: number) {
     await settingsPage(page, "/blog/settings/users");
     const row = page.locator(`tr[data-uid="${uid}"]`);
-    await Promise.all([page.waitForNavigation(), row.locator('select[name="role"]').selectOption("default")]);
+    await Promise.all([
+        page.waitForNavigation({ waitUntil: "domcontentloaded" }),
+        row.locator('select[name="role"]').selectOption("default"),
+    ]);
     await expect(page.locator(`tr[data-uid="${uid}"]`)).toHaveCount(0);
 }
 
@@ -91,7 +103,7 @@ test("global settings role assignment and delegation follow Hydro management sem
         .filter((name) => name !== "root");
     await createRole(editor, "blogmanager");
     await settingsPage(editor, "/blog/settings/permissions");
-    await expect(editor.locator("[data-permission]")).toHaveCount(21);
+    await expect(editor.locator("[data-permission]")).toHaveCount(23);
     await expect(editor.locator('[data-permission="CREATE_OTHERS"]')).toHaveCount(0);
     await expect(editor.locator("thead th.col--p")).toHaveText([
         ...configured,
@@ -125,7 +137,7 @@ test("global settings role assignment and delegation follow Hydro management sem
     expect(await db.collection<BlogAssignment>("blog.user").findOne({ _id: 2 })).toMatchObject({ role: "root" });
     await resetUser(viewer, 2);
     await resetUser(editor, 3);
-    expect((await viewer.goto("/blog/settings"))?.status()).toBe(403);
+    expect((await viewer.goto("/blog/settings", { waitUntil: "domcontentloaded" }))?.status()).toBe(403);
     await settingsPage(editor, "/blog/settings/users");
     const before = await db
         .collection<BlogAssignment>("blog.user")
@@ -160,7 +172,7 @@ test("article policy denies private drafts and live edits while allowing indepen
 }) => {
     const publicPath = await createPost(page, "Permission public content");
     const draftPath = await createPost(page, "Permission private draft", true);
-    expect((await viewer.goto(draftPath))?.status()).toBe(403);
+    expect((await viewer.goto(draftPath, { waitUntil: "domcontentloaded" }))?.status()).toBe(403);
     const deniedJSON = await viewer.request.get(draftPath, { headers: { Accept: "application/json" } });
     expect(deniedJSON.status()).toBe(403);
     expect(await deniedJSON.text()).not.toContain("Body for Permission private draft");
@@ -175,28 +187,34 @@ test("article policy denies private drafts and live edits while allowing indepen
         "DELETE_OTHERS",
     ]);
     await assignRole(editor, accounts.viewer.name, "articlemanager");
-    await viewer.goto(`${publicPath}/edit`);
+    await viewer.goto(`${publicPath}/edit`, { waitUntil: "domcontentloaded" });
     const rejected = await viewer.request.post(`${publicPath}/edit`, {
         headers: { Referer: viewer.url() },
         form: { operation: "submit", title: "Rejected public edit", content: "No publish permission", draft: "false" },
     });
     expect(rejected.status()).toBe(403);
-    await viewer.goto(`${draftPath}/edit`);
+    await viewer.goto(`${draftPath}/edit`, { waitUntil: "domcontentloaded" });
     await viewer.locator('input[name="title"]').fill("Edited third-party draft");
-    await Promise.all([viewer.waitForURL(draftPath), viewer.getByRole("button", { name: /^Update/ }).click()]);
+    await Promise.all([
+        viewer.waitForURL(draftPath, { waitUntil: "domcontentloaded" }),
+        viewer.getByRole("button", { name: /^Update/ }).click(),
+    ]);
     await expect(viewer.getByRole("heading", { name: "Edited third-party draft" })).toBeVisible();
     await setPermissions(editor, "articlemanager", ["ACCESS", "VIEW_PUBLISHED", "PIN_OTHERS", "DELETE_OTHERS"]);
-    await viewer.goto(publicPath);
+    await viewer.goto(publicPath, { waitUntil: "domcontentloaded" });
     await expect(viewer.getByRole("link", { name: "Edit", exact: true })).toHaveCount(0);
-    await Promise.all([viewer.waitForNavigation(), viewer.getByRole("button", { name: "Pin", exact: true }).click()]);
+    await Promise.all([
+        viewer.waitForNavigation({ waitUntil: "domcontentloaded" }),
+        viewer.getByRole("button", { name: "Pin", exact: true }).click(),
+    ]);
     await expect(viewer.getByRole("button", { name: "Unpin", exact: true })).toBeVisible();
     expect(await db.collection("document").countDocuments({ title: "Rejected public edit" })).toBe(0);
     await setPermissions(editor, "articlemanager", ["ACCESS", "VIEW_PUBLISHED", "DELETE_OTHERS"]);
-    await viewer.goto(publicPath);
+    await viewer.goto(publicPath, { waitUntil: "domcontentloaded" });
     await expect(viewer.getByRole("link", { name: "Edit", exact: true })).toHaveCount(0);
     await Promise.all([
-        viewer.waitForURL("/blog/2"),
-        viewer.getByRole("button", { name: "Delete", exact: true }).click(),
+        viewer.waitForURL("/blog/2", { waitUntil: "domcontentloaded" }),
+        confirmAction(viewer, viewer.getByRole("button", { name: "Delete", exact: true })),
     ]);
     await resetUser(editor, 3);
 });
@@ -216,10 +234,10 @@ test("own permissions stay revoked with others grants and role deletion does not
         "VIEW_DRAFT_OTHERS",
     ]);
     await assignRole(editor, accounts.author.name, "ownrestricted");
-    expect((await page.goto(draft))?.status()).toBe(403);
-    await page.goto(path);
+    expect((await page.goto(draft, { waitUntil: "domcontentloaded" }))?.status()).toBe(403);
+    await page.goto(path, { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("link", { name: "Edit", exact: true })).toHaveCount(0);
-    expect((await page.goto(`${path}/edit`))?.status()).toBe(403);
+    expect((await page.goto(`${path}/edit`, { waitUntil: "domcontentloaded" }))?.status()).toBe(403);
     const deleted = await page.request.post(`${path}/edit`, {
         headers: { Referer: page.url() },
         form: { operation: "delete" },
@@ -229,10 +247,13 @@ test("own permissions stay revoked with others grants and role deletion does not
     const row = editor.locator('.domain-roles tr[data-role="ownrestricted"]');
     await row.locator('input[type="checkbox"]').check();
     await editor.getByRole("button", { name: "Delete Selected Roles" }).click();
-    await Promise.all([editor.waitForNavigation(), editor.locator('.dialog:visible [data-action="yes"]').click()]);
+    await Promise.all([
+        editor.waitForNavigation({ waitUntil: "domcontentloaded" }),
+        editor.locator('.dialog:visible [data-action="yes"]').click(),
+    ]);
     await createRole(editor, "ownrestricted");
     await setPermissions(editor, "ownrestricted", []);
-    expect((await page.goto(`${path}/edit`))?.status()).toBe(200);
+    expect((await page.goto(`${path}/edit`, { waitUntil: "domcontentloaded" }))?.status()).toBe(200);
     await settingsPage(editor, "/blog/settings/users");
     await expect(editor.locator('tr[data-uid="2"]')).toHaveCount(0);
 });
@@ -248,20 +269,20 @@ test("guest policy and domain independence preserve authenticated mutation requi
     const context = await browser.newContext({ baseURL, storageState: { cookies: [], origins: [] } });
     const guest = await context.newPage();
     try {
-        await guest.goto("/blog");
+        await guest.goto("/blog", { waitUntil: "domcontentloaded" });
         await expect(guest).toHaveURL(/\/login/);
         await setPermissions(editor, "guest", ["ACCESS", "VIEW_PUBLISHED", "STAR", "MANAGE_SETTINGS"]);
-        await guest.goto(path);
+        await guest.goto(path, { waitUntil: "domcontentloaded" });
         await expect(guest.getByRole("heading", { name: "Global blog across domains" })).toBeVisible();
         await expect(guest.locator("[data-star]")).toHaveCount(0);
-        await guest.goto("/blog/settings");
+        await guest.goto("/blog/settings", { waitUntil: "domcontentloaded" });
         await expect(guest).toHaveURL(/\/login/);
-        await viewer.goto(`/d/blogrestricted${path}`);
+        await viewer.goto(`/d/blogrestricted${path}`, { waitUntil: "domcontentloaded" });
         await expect(viewer.getByRole("heading", { name: "Global blog across domains" })).toBeVisible();
-        await viewer.goto("/d/blogrestricted/p");
+        await viewer.goto("/d/blogrestricted/p", { waitUntil: "domcontentloaded" });
         await expect(viewer).not.toHaveURL(/\/blog/);
         await expect(viewer.locator("html")).not.toHaveAttribute("data-page", "problem_main");
-        await editor.goto("/d/blogrestricted/blog/settings");
+        await editor.goto("/d/blogrestricted/blog/settings", { waitUntil: "domcontentloaded" });
         await expect(editor.locator("html")).toHaveAttribute("data-page", "blog_settings");
         await expect(editor.locator("#menu-item-blog_settings .menu__link")).toHaveAttribute("aria-current", "page");
     } finally {
@@ -281,16 +302,16 @@ test("publishing and unpublishing do not require content-edit permission", async
         "UNPUBLISH_OTHERS",
     ]);
     await assignRole(editor, accounts.viewer.name, "publisher");
-    await viewer.goto(path);
+    await viewer.goto(path, { waitUntil: "domcontentloaded" });
     await expect(viewer.getByRole("link", { name: "Edit", exact: true })).toHaveCount(0);
     await Promise.all([
-        viewer.waitForNavigation(),
-        viewer.getByRole("button", { name: "Publish", exact: true }).click(),
+        viewer.waitForNavigation({ waitUntil: "domcontentloaded" }),
+        confirmAction(viewer, viewer.getByRole("button", { name: "Publish", exact: true })),
     ]);
     await expect(viewer.getByRole("button", { name: "Unpublish", exact: true })).toBeVisible();
     await Promise.all([
-        viewer.waitForNavigation(),
-        viewer.getByRole("button", { name: "Unpublish", exact: true }).click(),
+        viewer.waitForNavigation({ waitUntil: "domcontentloaded" }),
+        confirmAction(viewer, viewer.getByRole("button", { name: "Unpublish", exact: true })),
     ]);
     await expect(viewer.getByRole("button", { name: "Publish", exact: true })).toBeVisible();
     await resetUser(editor, 3);
@@ -298,16 +319,19 @@ test("publishing and unpublishing do not require content-edit permission", async
 
 test("visible unchecked controls submit false without changing omitted field semantics", async ({ page }) => {
     const path = await createPost(page, "Explicit unchecked draft", true);
-    await page.goto(`${path}/edit`);
+    await page.goto(`${path}/edit`, { waitUntil: "domcontentloaded" });
     await fillPost(page, "Published by unchecked draft", "Explicit checkbox update", false);
-    await Promise.all([page.waitForURL(path), page.getByRole("button", { name: /^Update/ }).click()]);
+    await Promise.all([
+        page.waitForURL(path, { waitUntil: "domcontentloaded" }),
+        confirmAction(page, page.getByRole("button", { name: /^Update/ })),
+    ]);
     await expect(page.getByRole("button", { name: "Unpublish", exact: true })).toBeVisible();
 });
 
 test("JSON false and zero publish and unpin while omitted fields remain unchanged", async ({ page, db }) => {
     const posts = db.collection<BlogDoc>("document");
     for (const value of [false, 0]) {
-        await page.goto("/blog/2");
+        await page.goto("/blog/2", { waitUntil: "domcontentloaded" });
         const title = `JSON public creation ${value}`;
         const created = await page.request.post("/blog/2/create", {
             headers: { Referer: page.url() },
@@ -375,7 +399,10 @@ test("delegated managers search global users from restricted domains and role li
     await dialog.locator(".autocomplete-wrapper input").fill(accounts.author.name);
     await dialog.locator(".user-select__uname").filter({ hasText: accounts.author.name }).click();
     await dialog.locator("select").selectOption("lookupmanager");
-    await Promise.all([viewer.waitForNavigation(), dialog.locator('[data-action="ok"]').click()]);
+    await Promise.all([
+        viewer.waitForNavigation({ waitUntil: "domcontentloaded" }),
+        dialog.locator('[data-action="ok"]').click(),
+    ]);
     await expect(viewer).toHaveURL(/\/d\/blogrestricted\/blog\/settings\/users$/);
     await expect(viewer.locator("#menu-item-blog_settings_users .menu__link")).toHaveAttribute("aria-current", "page");
     await expect(viewer.locator(".domain-users tbody tr[data-uid]")).toHaveCount(3);
@@ -385,7 +412,7 @@ test("delegated managers search global users from restricted domains and role li
     expect(lookups.some((lookup) => lookup.args.auto?.includes(String(accounts.author.id)))).toBe(true);
     expect(lookups.every((lookup) => lookup.path === "/d/system/api/users")).toBe(true);
     expect(await db.collection<BlogAssignment>("blog.user").countDocuments({ _id: accounts.editor.id })).toBe(1);
-    await viewer.goto("/d/blogrestricted/blog/settings/users?page=2");
+    await viewer.goto("/d/blogrestricted/blog/settings/users?page=2", { waitUntil: "domcontentloaded" });
     await expect(viewer.locator(".domain-users tbody tr[data-uid]")).toHaveCount(0);
     await resetUser(editor, accounts.author.id);
     await resetUser(editor, accounts.viewer.id);
@@ -423,14 +450,17 @@ test("native role controls exclude guest and reset assignments without a remove-
         await dialog.locator(".user-select__uname").filter({ hasText: name }).click();
     }
     await dialog.locator("select").selectOption("ux_first");
-    await Promise.all([editor.waitForNavigation(), dialog.locator('[data-action="ok"]').click()]);
+    await Promise.all([
+        editor.waitForNavigation({ waitUntil: "domcontentloaded" }),
+        dialog.locator('[data-action="ok"]').click(),
+    ]);
     await expect(editor.locator('tr[data-uid="2"] select')).toHaveValue("ux_first");
     await expect(editor.locator('tr[data-uid="3"] select')).toHaveValue("ux_first");
     await expect(editor.locator('.domain-users select option[value="guest"]')).toHaveCount(0);
 
     await editor.locator('tr[data-uid="2"] select').selectOption("ux_second");
     await expect(editor.locator('tr[data-uid="2"]')).toHaveAttribute("data-role", "ux_second");
-    await editor.reload();
+    await editor.reload({ waitUntil: "domcontentloaded" });
     await expect(editor.locator('tr[data-uid="2"] select')).toHaveValue("ux_second");
     await editor.locator('input[data-checkbox-toggle="user"]').check();
     await expect(editor.locator('tr[data-uid="4"] input[type="checkbox"]')).not.toBeChecked();
@@ -438,7 +468,10 @@ test("native role controls exclude guest and reset assignments without a remove-
     dialog = editor.locator(".dialog:visible");
     await expect(dialog.locator('select option[value="guest"]')).toHaveCount(0);
     await dialog.locator("select").selectOption("ux_second");
-    await Promise.all([editor.waitForNavigation(), dialog.locator('[data-action="ok"]').click()]);
+    await Promise.all([
+        editor.waitForNavigation({ waitUntil: "domcontentloaded" }),
+        dialog.locator('[data-action="ok"]').click(),
+    ]);
     await expect(editor.locator('tr[data-uid="3"] select')).toHaveValue("ux_second");
 
     await editor.locator('input[data-checkbox-toggle="user"]').check();
@@ -448,7 +481,10 @@ test("native role controls exclude guest and reset assignments without a remove-
     await editor.locator('button[name="set_roles"]').click();
     dialog = editor.locator(".dialog:visible");
     await dialog.locator("select").selectOption("default");
-    await Promise.all([editor.waitForNavigation(), dialog.locator('[data-action="ok"]').click()]);
+    await Promise.all([
+        editor.waitForNavigation({ waitUntil: "domcontentloaded" }),
+        dialog.locator('[data-action="ok"]').click(),
+    ]);
     await expect(editor.locator('tr[data-uid="2"], tr[data-uid="3"]')).toHaveCount(0);
     expect(await db.collection<Udoc>("user").countDocuments({ _id: { $in: [2, 3] } })).toBe(2);
 });
@@ -460,18 +496,18 @@ test("fresh sudo from a restricted domain uses the global authentication entry a
     const context = await browser.newContext({ baseURL, storageState: { cookies: [], origins: [] } });
     try {
         const page = await context.newPage();
-        await page.goto("/login");
+        await page.goto("/login", { waitUntil: "domcontentloaded" });
         await page.locator('.immersive--content input[name="uname"]').fill(accounts.editor.name);
         await page.locator('.immersive--content input[name="password"]').fill(accounts.editor.password);
         await Promise.all([
-            page.waitForURL("/"),
+            page.waitForURL("/", { waitUntil: "domcontentloaded" }),
             page.locator('.immersive--content input[name="login_submit"]').click(),
         ]);
-        await page.goto("/d/blogrestricted/blog/settings/users");
+        await page.goto("/d/blogrestricted/blog/settings/users", { waitUntil: "domcontentloaded" });
         await expect(page).toHaveURL(`${baseURL}/user/sudo`);
         await page.locator('.immersive--content input[name="password"]').fill(accounts.editor.password);
         await Promise.all([
-            page.waitForURL("/d/blogrestricted/blog/settings/users"),
+            page.waitForURL("/d/blogrestricted/blog/settings/users", { waitUntil: "domcontentloaded" }),
             page.locator('input[name="confirm"]').click(),
         ]);
         await expect(page.locator("html")).toHaveAttribute("data-page", "blog_settings_users");

@@ -1,0 +1,17 @@
+{% extends "layout/basic.html" %}
+{% block content %}
+<div class="row"><div class="columns">
+  <div class="section">
+    <div class="section__header"><h1 class="section__title">{{ _('Reset review counters') }}</h1></div>
+    <div class="section__body">
+      <p>{% if canViewReportCount %}{{ _('Reports') }}: {{ reportCount }} &middot;{% endif %} {{ _('Rejections') }}: {{ rejectionCount }}</p>
+      <form method="post" data-review-reset data-blog-confirm>
+        <input type="hidden" name="operation" value="reset_review">
+        <input type="hidden" name="revision" value="{{ revision }}">
+        <p>{{ _('Reset both counters? This does not publish or approve the article.') }}</p>
+        <button class="rounded primary button" type="submit">{{ _('Reset review counters') }}</button>
+      </form>
+    </div>
+  </div>
+</div></div>
+{% endblock %}

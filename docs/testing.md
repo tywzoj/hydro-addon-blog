@@ -36,6 +36,11 @@ The test boundary is intentionally explicit:
 - The fixture loads installed real Hydro `param`, `Types`, and privilege constants through the official `@hydrooj/register` loader. Invalid-input tests invoke decorated methods with the framework-style raw object, including `domainId`; positional calls can bypass those validators.
 - Persistence, user lookup, pagination, rate limiting, routing capture, and audit services are test boundaries. Fixture users, ownership/privilege enforcement, and lookup errors are not the real Hydro authorization lifecycle.
 - Each test resets mocks; clocks return to real time after every test, the temporary Hydro global is restored after each file, and Vitest isolates files. Do not opt shared-state tests into concurrent execution.
+- Authorization-boundary tests use `dispatchHandler` after fixture hydration to
+  run preparation, generic POST and the operation in native order. Hook-count
+  assertions reject accidental invocation from actions. This helper does not
+  replace real routing/events/control-flow or native E2E; see the
+  [lifecycle guide](handler-lifecycle.md#testing-boundary).
 
 Model cases cover publication transitions, legacy reads, reply/counter updates, deletion/status cleanup, per-user star-only updates, index scoping, and propagated persistence failures. Handler cases cover route ordering/gates, target-user/post preparation, list filters/sorts/pagination, permission delegation, input rejection, write/rate-limit/audit behavior, sequential views, star conversion, and success/failure responses.
 
@@ -62,7 +67,9 @@ yarn test:e2e --grep "publication"
 
 The [verification-environment guide](verification-environment.md#local-runtime-boundary) documents Node/Docker/browser prerequisites, local development, writable paths, timeouts, evidence, and cleanup. The launcher owns a local Hydro child and only containerizes MongoDB. It never accepts a production or shared database.
 
-Playwright runs three real-form authentication setup cases and twenty-four business tests with independent author, viewer, and system-editor sessions. The original six scenarios are:
+Playwright runs six real-form authentication setup cases and thirty-six business
+tests with independent author, viewer, system-editor, and reporter sessions.
+The original six scenarios are:
 
 | Scenario | Evidence | Related smoke cases |
 | --- | --- | --- |
@@ -72,6 +79,28 @@ Playwright runs three real-form authentication setup cases and twenty-four busin
 | Sequential views and stars | First viewer read increments once; reload does not; star/unstar persists after reload without changing the author's state. | M7 |
 | Delete | UI deletion removes the post and all of its persisted user statuses. | M8 |
 | Profile frontend | The addon frontend adds a working blog link on the actual Hydro profile page. | M1 |
+
+An additional article scenario verifies native confirmation cancellation, zero
+mutation requests before acceptance, exactly one accepted hotkey submission,
+retained editor content, and editor-based withdrawal. Existing deletion,
+publication, review-decision and reset cases also exercise the dialogs, including
+immediate retries after cancellation and retention of rejection comments/tokens.
+Focused UT covers which actions/publication transitions require confirmation.
+The keyboard case exercises both Control+Enter and Meta+Enter without relaxing
+the exact content-preservation assertion. The article form intercepts submission
+in the capture phase before the editor can handle its platform-specific
+Mod-Enter newline shortcut, then uses the normal submit button and confirmation.
+Three locale cases select Simplified Chinese, Traditional Chinese and Korean
+through native preferences, then remove the confirmation keys from the browser's
+catalog to simulate an older cached language file. Actual publication/deletion
+dialogs must still use the selected language and cancellation must preserve the
+draft. This is client-catalog fault injection, not a browser cache-expiry test;
+authentication, preference changes, requests and persistence remain real.
+The disabled-review scenario verifies warning cancellation, automatic approval
+of publication/report queues, retained nonpending rejection holds, normal
+notifications/audit, report-version immunity, hidden navigation/report controls
+and accurate publication wording. Unit cases cover configuration acknowledgement,
+revision conflicts, competing decisions, bounded retries and partial failures.
 
 Use the real Markdown editor and controls; do not inject session cookies, bypass decorators, stub routes, or mock persistence to make E2E green. Direct authenticated denial requests preserve the same-origin Referer expected by Hydro's CSRF handling. MongoDB access is read-only assertion evidence against the run-owned database; fixture accounts are created through Hydro's user model.
 
@@ -86,8 +115,9 @@ requests, including after failures; it does not write test outcomes into MongoDB
 Self-only creation coverage rejects root GET/POST requests for another author,
 including through a restricted domain, verifies no create entry or persisted
 article, and confirms root can still create its own articles. Policy UT also
-covers missing creation/access grants and anonymous identities. The settings matrix exposes 21 permissions: the original 17 article/settings
-grants plus four comment grants, with a single article-creation grant.
+covers missing creation/access grants and anonymous identities. The settings
+matrix exposes 23 permissions: the original 17 article/settings grants, four
+comment grants, and independent review/reset grants.
 
 Native-UX regressions cover dialog cancellation, initial focus, single/multi-user
 selection, inline updates, empty selection feedback, bulk changes, protected
@@ -108,6 +138,11 @@ page remains empty. UT checks candidate filtering before joins, union
 deduplication before pagination, and page-only profile hydration.
 
 The suite uses one worker, no automatic retries, isolated browser contexts, focused-test rejection, and explicit timeouts. Empty selections and real assertion failures return nonzero exits. Keep fixtures unique within the run and promote new relevant failures into the suite. It does not establish every sorting/pagination outcome, all locales, or concurrent view deduplication. MCP checks supplement automated coverage for localized and narrow-screen settings UI.
+
+Navigation waits for DOM readiness and then asserts actual page controls/content.
+It does not wait for third-party avatars or unrelated resources to finish before
+testing application behavior. This avoids observed `load` stalls without mocking
+requests or relaxing permission/persistence assertions.
 
 ## Comment Regression Inventory
 
@@ -147,6 +182,46 @@ authenticated requests create all business fixtures.
 Run the focused browser cases with `yarn test:e2e --grep comments`.
 These checks do not establish atomicity across documents/messages or crash-safe
 exactly-once delivery. MCP supplements them for translated and narrow-screen UI.
+
+## Article Review Regression Inventory
+
+`tests/unit/review.test.ts` exercises publication modes, threshold boundaries,
+approval-only holds, independent report receipts and pending-slot recovery,
+duplicate/stale requests, counter epochs, privacy projections, permissions,
+native notice/audit failure boundaries, and parent-deletion compensation.
+`tests/unit/review.notifications.test.ts` covers login failure isolation,
+default/retired/forced-root recipients across multiple pages, summary ownership,
+lease loss before dispatch, configuration changes, and maintenance while
+reminders are disabled. Existing model/settings tests cover conditional writes,
+timestamp preservation, compatible defaults and review-setting validation.
+
+`tests/e2e/review.spec.ts` adds eight real-Hydro cases:
+
+- Pre-publication privacy, reviewer-only authority, native approval/rejection,
+  last-rejection feedback, obsolete decisions, sudo before editing settings,
+  sidebar order/current-user links, and the separate review permission family.
+- Concurrent duplicate reports, strict report threshold, private report history,
+  pending edits, restoration/immunity, renewed reporting through the dialog,
+  and reviewer-only counts in author list/detail/editor JSON and HTML.
+- Rejection limit, reset-only permission/count privacy, withdrawal and
+  disabled-mode holds.
+- Confirmed disabling, automatic publication/report approval, notifications,
+  audit, unchanged nonpending rejections, and disabled-mode controls/text.
+- Delegated and root withdrawal of another author's pending draft, preserving
+  private-data projection and independent unpublish permission.
+- Concurrent reviewer decisions with one notice/audit, including restricted domains.
+- Anonymous report denial and native article/comment/status/report cascade.
+- Login and actual periodic worker reminders, default-role recipients, switch
+  semantics, and author notifications remaining enabled.
+
+The automated isolated runtime now enables the native worker. Periodic reminder
+tests wait for the real schedule and do not mutate database fixtures or expose
+test-only production endpoints. The suite does not establish process-kill/restart
+recovery, every multi-process scheduler race, or crash-safe exactly-once messages.
+Fault-injection UT and normal concurrent E2E are distinct evidence.
+
+Run focused cases with `yarn test:e2e --grep review`. Follow the
+[review plan](plans/blog-review.md) for delivery records and remaining limits.
 
 ## Required Coverage Layers
 

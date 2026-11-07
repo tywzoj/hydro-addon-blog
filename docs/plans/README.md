@@ -6,6 +6,7 @@ This directory retains project direction, implementation plans, and consequentia
 
 | Plan | Status | Scope |
 | --- | --- | --- |
+| [Blog article review](blog-review.md) | Completed locally; [PR #11](https://github.com/tywzoj/hydro-addon-blog/pull/11) | Three review modes, recoverable reports, review/reset permissions, native reminders/audit, confirmed disabling, localized dialogs, and lifecycle documentation. Local evidence and crash limits are retained; PR checks record commit-specific CI. |
 | [Blog comments and permission matrix](blog-comments.md) | Completed locally | Immutable two-level comments, likes/unlikes, four global permission grants, native deletion/notification behavior, and local UT/E2E/MCP evidence. |
 | [Global blog settings and permissions](blog-permissions.md) | Completed locally | Domain-independent roles, 17 permissions, self-only article creation, native UX audit/fixes, and local UT/E2E/MCP evidence. Review workflows remain deferred. |
 | [Self-validation capabilities](self-validation.md) | In progress | UT/E2E verified locally and in PR #8 CI; local MCP and project-scoped type checking verified. New type-check CI execution, broader coverage, and version-matrix checks remain pending. |

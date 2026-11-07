@@ -1,0 +1,29 @@
+{% import "components/paginator.html" as paginator with context %}
+{% import "components/user.html" as user with context %}
+{% extends "layout/basic.html" %}
+{% block content %}
+<div class="row"><div class="columns">
+  <div class="section">
+    <div class="section__header"><h1 class="section__title">{{ _('Blog review') }} ({{ pendingCount }})</h1></div>
+    <div class="section__body">
+      {% if not ddocs.length %}<p>{{ _('No articles awaiting review.') }}</p>{% endif %}
+      <ol class="section__list discussion__list">
+      {% for doc in ddocs %}
+        <li class="section__list__item">
+          <h2><a href="{{ url('blog_review_detail', did=doc.docId) }}">{{ doc.title }}</a></h2>
+          <ul class="supplementary list">
+            <li>{{ user.render_inline(udict[doc.owner]) }}</li>
+            <li>{{ _('Report review') if doc.reviewReason == 'report' else _('Publication review') }}</li>
+            <li>{{ _('Content version') }}: {{ doc.contentVersion|default(0) }}</li>
+            <li>{{ _('Reports') }}: {{ doc.reportCount|default(0) }}</li>
+            <li>{{ _('Rejections') }}: {{ doc.rejectionCount|default(0) }}</li>
+            <li>{{ datetimeSpan(doc.reviewQueuedAt)|safe }}</li>
+          </ul>
+        </li>
+      {% endfor %}
+      </ol>
+      {% if dpcount %}{{ paginator.render(page, dpcount) }}{% endif %}
+    </div>
+  </div>
+</div></div>
+{% endblock %}

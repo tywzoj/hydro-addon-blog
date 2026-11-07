@@ -1,3 +1,4 @@
+{% import "components/form.html" as form with context %}
 {% extends "blog_settings_base.html" %}
 {% block blog_settings_content %}
 <div class="section">
@@ -7,6 +8,34 @@
     <p>{{ _('Your blog role') }}: <strong>{{ blog_role }}</strong></p>
     <p>{{ _('Own and others permissions are separate. Access and authentication requirements still apply.') }}</p>
     <p>{{ _('Unassigned users use default. Anonymous users use guest. System editors always use root.') }}</p>
+  </div>
+  <div class="section__body">
+    <h2>{{ _('Article review') }}</h2>
+    <form method="post" data-blog-confirm>
+      <input type="hidden" name="operation" value="review_settings">
+      <input type="hidden" name="confirmDisable" value="false">
+      <input type="hidden" name="revision" value="{{ settings.revision }}">
+      <label>{{ _('Review mode') }}
+        <select name="mode" class="select">
+          {% for value, label in [['disabled', 'Review disabled'], ['before', 'Review before publication'], ['after', 'Review after publication']] %}
+          <option value="{{ value }}" {% if review.mode == value %}selected{% endif %}>{{ _(label) }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <p class="supplementary">{{ _('Disabling review approves all currently pending articles. Previously rejected articles outside the queue are unchanged.') }}</p>
+      <label>{{ _('Hide when reports exceed') }}
+        <input class="textbox" type="number" min="0" name="reportLimit" value="{{ review.reportLimit }}" required>
+      </label>
+      <label>{{ _('Maximum review rejections') }}
+        <input class="textbox" type="number" min="1" name="rejectionLimit" value="{{ review.rejectionLimit }}" required>
+      </label>
+      {{ form.form_checkbox({label:'Enable reviewer reminders', name:'reminders', value:review.reminders}) }}
+      <label>{{ _('Summary interval (minutes)') }}
+        <input class="textbox" type="number" min="1" name="intervalMinutes" value="{{ review.intervalMinutes }}" required>
+      </label>
+      <p class="supplementary">{{ _('Reviewer reminders do not affect author decision notifications.') }}</p>
+      <button class="rounded primary button" type="submit">{{ _('Save') }}</button>
+    </form>
   </div>
 </div>
 {% endblock %}

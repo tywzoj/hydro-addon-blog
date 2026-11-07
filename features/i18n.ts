@@ -3,9 +3,14 @@ import type { Context } from "hydrooj";
 import {
     BLOG_PERMISSION_LABELS,
     BLOG_SETTINGS_PAGES,
+    BlogConfirmMessages,
     BlogMessages,
+    ReviewMessages,
     ROUTE_BLOG_LIST_HOME,
     ROUTE_BLOG_LIST_USER,
+    ROUTE_BLOG_REVIEW,
+    ROUTE_BLOG_REVIEW_DETAIL,
+    ROUTE_BLOG_REVIEW_RESET,
     SortKeys,
     TEMPLATE_BLOG_DETAIL,
     TEMPLATE_BLOG_EDIT,
@@ -21,9 +26,152 @@ const PUBLISHED_AT = "Published at: {0}";
 const NO_POST_YET = "No post yet...";
 const VIEWS = "Views: {0}";
 const DRAFT = "Draft";
+const reviewLabels: Record<string, [string, string, string]> = {
+    [BlogConfirmMessages.Delete]: [
+        "确认删除这篇文章及其全部评论？此操作无法撤销。",
+        "確定刪除這篇文章及其全部評論？此操作無法復原。",
+        "이 게시물과 모든 댓글을 삭제할까요? 이 작업은 되돌릴 수 없습니다.",
+    ],
+    [BlogConfirmMessages.Publish]: ["确认发布这篇文章？", "確定發布這篇文章？", "이 게시물을 게시할까요?"],
+    [BlogConfirmMessages.SubmitReview]: [
+        "确认提交这篇文章进行审查？通过前文章不会发布。",
+        "確定提交這篇文章進行審查？通過前文章不會發布。",
+        "이 게시물을 심사에 제출할까요? 승인 전에는 공개되지 않습니다.",
+    ],
+    [BlogConfirmMessages.Unpublish]: [
+        "确认撤回发布这篇文章？",
+        "確定撤回發布這篇文章？",
+        "이 게시물을 비공개로 전환할까요?",
+    ],
+    [BlogConfirmMessages.Withdraw]: [
+        "确认撤回这篇文章？文章将变为未发布，待处理的审查也会取消。",
+        "確定撤回這篇文章？文章將變為未發布，待處理的審查也會取消。",
+        "이 게시물을 철회할까요? 비공개로 전환되고 대기 중인 심사가 취소됩니다.",
+    ],
+    [BlogConfirmMessages.UpdatePublished]: [
+        "确认保存对已发布文章的修改？",
+        "確定儲存對已發布文章的修改？",
+        "게시된 글의 변경 사항을 저장할까요?",
+    ],
+    [BlogConfirmMessages.UpdateReviewed]: [
+        "确认保存对已发布文章的修改？修改内容后文章将下架并提交审查。",
+        "確定儲存對已發布文章的修改？修改內容後文章將下架並提交審查。",
+        "게시된 글의 변경 사항을 저장할까요? 내용을 수정하면 비공개로 전환되고 심사에 제출됩니다.",
+    ],
+    [BlogConfirmMessages.DisableReview]: [
+        "确认关闭文章审查？当前所有待审文章（包括被举报的文章）都将通过审查并发布，审查计数将清零，并通知作者。此操作无法撤销。",
+        "確定關閉文章審查？目前所有待審文章（包括被檢舉的文章）都將通過審查並發布，審查計數將清零，並通知作者。此操作無法復原。",
+        "게시물 심사를 끌까요? 신고된 글을 포함한 모든 심사 대기 게시물이 승인되어 공개됩니다. 심사 횟수가 초기화되고 작성자에게 알림이 전송됩니다. 이 작업은 되돌릴 수 없습니다.",
+    ],
+    [BlogConfirmMessages.Approve]: [
+        "确认通过文章审查？文章将发布，审查计数也会清零。",
+        "確定通過文章審查？文章將發布，審查計數也會清零。",
+        "이 게시물을 승인할까요? 게시물이 공개되고 심사 횟수가 초기화됩니다.",
+    ],
+    [BlogConfirmMessages.Reject]: [
+        "确认拒绝这篇文章？文章将变为未发布，拒绝次数会增加。",
+        "確定拒絕這篇文章？文章將變為未發布，拒絕次數會增加。",
+        "이 게시물을 거부할까요? 비공개로 전환되고 거부 횟수가 증가합니다.",
+    ],
+    [ReviewMessages.Title]: ["博客审查", "部落格審查", "블로그 심사"],
+    [ReviewMessages.Settings]: ["文章审查", "文章審查", "게시물 심사"],
+    [ReviewMessages.Mode]: ["审查模式", "審查模式", "심사 방식"],
+    [ReviewMessages.Disabled]: ["关闭审查", "關閉審查", "심사 사용 안 함"],
+    [ReviewMessages.Submit]: ["提交审查", "提交審查", "심사에 제출"],
+    [ReviewMessages.DisableScope]: [
+        "关闭审查会通过当前所有待审文章。不在待审队列中的已拒绝文章不受影响。",
+        "關閉審查會通過目前所有待審文章。不在待審佇列中的已拒絕文章不受影響。",
+        "심사를 끄면 현재 대기 중인 모든 게시물이 승인됩니다. 대기열에 없는 거부된 게시물은 변경되지 않습니다.",
+    ],
+    [ReviewMessages.Before]: ["发布前审查", "發布前審查", "게시 전 심사"],
+    [ReviewMessages.After]: ["发布后审查", "發布後審查", "게시 후 심사"],
+    [ReviewMessages.ReportLimit]: ["举报数超过此值后下架", "檢舉數超過此值後下架", "비공개 처리 신고 초과 기준"],
+    [ReviewMessages.RejectionLimit]: ["审查拒绝次数上限", "審查拒絕次數上限", "최대 심사 거부 횟수"],
+    [ReviewMessages.Reminders]: ["启用审查员提醒", "啟用審查員提醒", "심사자 알림 활성화"],
+    [ReviewMessages.Interval]: ["汇总周期（分钟）", "彙總週期（分鐘）", "요약 주기 (분)"],
+    [ReviewMessages.ReminderScope]: [
+        "审查员提醒开关不影响作者的审核结果通知。",
+        "審查員提醒開關不影響作者的審核結果通知。",
+        "심사자 알림 설정은 작성자의 심사 결과 알림에 영향을 주지 않습니다.",
+    ],
+    [ReviewMessages.Pending]: ["待审查", "待審查", "심사 대기"],
+    [ReviewMessages.Required]: ["需要审查", "需要審查", "심사 필요"],
+    [ReviewMessages.Rejected]: ["审查未通过", "審查未通過", "심사 거부됨"],
+    [ReviewMessages.Blocked]: [
+        "审查拒绝次数已达上限，禁止发布。",
+        "審查拒絕次數已達上限，禁止發布。",
+        "심사 거부 횟수 제한으로 게시할 수 없습니다.",
+    ],
+    [ReviewMessages.Unavailable]: ["当前文章不能举报。", "目前文章無法檢舉。", "이 게시물은 신고할 수 없습니다."],
+    [ReviewMessages.AlreadyReported]: [
+        "你已举报过此内容版本。",
+        "你已檢舉過此內容版本。",
+        "이미 이 버전을 신고했습니다.",
+    ],
+    [ReviewMessages.ReportAccepted]: ["举报已受理。", "檢舉已受理。", "신고가 접수되었습니다."],
+    [ReviewMessages.Changed]: [
+        "审查状态已变更，请刷新后重试。",
+        "審查狀態已變更，請重新整理後再試。",
+        "심사 상태가 변경되었습니다. 새로고침 후 다시 시도하세요.",
+    ],
+    [ReviewMessages.Integrity]: [
+        "举报记录暂时无法完成，请稍后重试。",
+        "檢舉紀錄暫時無法完成，請稍後再試。",
+        "신고 처리를 완료할 수 없습니다. 나중에 다시 시도하세요.",
+    ],
+    [ReviewMessages.Approve]: ["通过文章审查", "通過文章審查", "게시물 승인"],
+    [ReviewMessages.Reject]: ["拒绝文章", "拒絕文章", "게시물 거부"],
+    [ReviewMessages.Reset]: ["清零审查计数", "清零審查計數", "심사 횟수 초기화"],
+    [ReviewMessages.ResetConfirm]: [
+        "清零两个计数器？这不会发布文章或通过审查。",
+        "清零兩個計數器？這不會發布文章或通過審查。",
+        "두 횟수를 초기화할까요? 게시하거나 승인하지는 않습니다.",
+    ],
+    [ReviewMessages.Withdraw]: ["撤回审查", "撤回審查", "심사 철회"],
+    [ReviewMessages.Comments]: ["拒绝意见（可选）", "拒絕意見（選填）", "심사 의견 (선택)"],
+    [ReviewMessages.ReportComments]: ["举报说明（可选）", "檢舉說明（選填）", "신고 설명 (선택)"],
+    [ReviewMessages.Reports]: ["举报", "檢舉", "신고"],
+    [ReviewMessages.Rejections]: ["拒绝次数", "拒絕次數", "거부 횟수"],
+    [ReviewMessages.Version]: ["内容版本", "內容版本", "내용 버전"],
+    [ReviewMessages.Publication]: ["发布审查", "發布審查", "게시 심사"],
+    [ReviewMessages.Report]: ["举报审查", "檢舉審查", "신고 심사"],
+    [ReviewMessages.Empty]: ["没有待审查文章。", "沒有待審查文章。", "심사 대기 게시물이 없습니다."],
+    [ReviewMessages.ApprovedNotice]: [
+        "你的博客文章“{0}”（版本 {1}）已通过审查（{2:link}）。",
+        "你的部落格文章「{0}」（版本 {1}）已通過審查（{2:link}）。",
+        '블로그 게시물 "{0}" (버전 {1})이 승인되었습니다 ({2:link}).',
+    ],
+    [ReviewMessages.RejectedNotice]: [
+        "你的博客文章“{0}”（版本 {1}）未通过审查。{2}（{3:link}）。",
+        "你的部落格文章「{0}」（版本 {1}）未通過審查。{2}（{3:link}）。",
+        '블로그 게시물 "{0}" (버전 {1})이 거부되었습니다. {2} ({3:link}).',
+    ],
+    [ReviewMessages.HiddenNotice]: [
+        "你的博客文章“{0}”（版本 {1}）因举报已下架（{2:link}）。",
+        "你的部落格文章「{0}」（版本 {1}）因檢舉已下架（{2:link}）。",
+        '블로그 게시물 "{0}" (버전 {1})이 신고로 비공개 처리되었습니다 ({2:link}).',
+    ],
+    [ReviewMessages.SummaryNotice]: [
+        "当前有 {0} 篇博客文章待审查（{1:link}）。",
+        "目前有 {0} 篇部落格文章待審查（{1:link}）。",
+        "심사 대기 중인 블로그 게시물이 {0}개 있습니다 ({1:link}).",
+    ],
+};
 
 export function applyI18n(ctx: Context) {
     const labels: Record<string, [string, string, string, string]> = {
+        [BLOG_PERMISSION_LABELS.REVIEW]: [
+            "Review blog articles",
+            "审查博客文章",
+            "審查部落格文章",
+            "블로그 게시물 심사",
+        ],
+        [BLOG_PERMISSION_LABELS.RESET_REVIEW_COUNTERS]: [
+            "Reset article review counters",
+            "清零文章审查计数",
+            "清零文章審查計數",
+            "게시물 심사 횟수 초기화",
+        ],
         [BLOG_PERMISSION_LABELS.ACCESS]: ["Access blogs", "访问博客", "存取部落格", "블로그 접근"],
         [BLOG_PERMISSION_LABELS.VIEW_PUBLISHED]: [
             "Read published articles",
@@ -240,6 +388,21 @@ export function applyI18n(ctx: Context) {
         ],
     };
     for (const [index, language] of ["en", "zh", "zh_TW", "ko"].entries()) {
+        ctx.i18n.load(
+            language,
+            Object.fromEntries(
+                Object.entries(reviewLabels).map(([key, values]) => [key, index ? values[index - 1] : key]),
+            ),
+        );
+        ctx.i18n.load(
+            language,
+            Object.fromEntries(
+                [ROUTE_BLOG_REVIEW, ROUTE_BLOG_REVIEW_DETAIL, ROUTE_BLOG_REVIEW_RESET].map((route) => [
+                    route,
+                    index ? reviewLabels[ReviewMessages.Title][index - 1] : ReviewMessages.Title,
+                ]),
+            ),
+        );
         ctx.i18n.load(
             language,
             Object.fromEntries(Object.entries(labels).map(([key, values]) => [key, values[index]])),

@@ -1,14 +1,17 @@
 import type { Context } from "hydrooj";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { BlogConfirmMessages, DEFAULT_REVIEW_SETTINGS, ReviewMessages } from "../../features/constants";
 import { applyHandler } from "../../features/handler";
 import { BLOG_DEFAULT, BLOG_PERM, BlogPermissionError, BlogPolicy } from "../../features/permission";
 import { BlogSettingsModel, initialSettings, resolveBlogPolicy } from "../../features/settings.model";
 import type { BlogStatusDoc } from "../../features/types";
+import { injectUI } from "../../features/ui";
 import { makeBlog } from "../helpers/fixtures";
 import type { Handler } from "../helpers/hydro";
 import {
     DiscussionNotFoundError,
+    dispatchHandler,
     DocumentModel,
     ForbiddenError,
     makeUser,
@@ -57,6 +60,7 @@ const submit = { domainId: "system", title: "Test post", content: "Test content"
 
 beforeEach(() => {
     vi.resetAllMocks();
+    vi.spyOn(BlogSettingsModel, "review").mockResolvedValue({ ...DEFAULT_REVIEW_SETTINGS });
     sort.mockReturnValue(cursor);
     project.mockReturnValue(cursor);
     DocumentModel.getMulti.mockReturnValue(cursor);
@@ -70,6 +74,40 @@ beforeEach(() => {
 });
 
 describe("route and preparation contracts", () => {
+    it.each(["disabled", "before", "after"] as const)(
+        "gates homepage and dropdown review entries in %s mode",
+        async (mode) => {
+            vi.spyOn(BlogSettingsModel, "review").mockResolvedValue({ ...DEFAULT_REVIEW_SETTINGS, mode });
+            const on = vi.fn<(event: string, listener: (h: UnitHandler) => Promise<void>) => void>();
+            const inject = vi.fn();
+            injectUI({ on, injectUI: inject } as unknown as Context);
+            const handler = createHandler("/blog", 2, PRIV.PRIV_USER_PROFILE | PRIV.PRIV_EDIT_SYSTEM);
+            await on.mock.calls[0][1](handler);
+            await handler.get({ domainId: "system" });
+            expect(handler.response.body?.can_review).toBe(mode !== "disabled");
+            const condition = inject.mock.calls.find((args) => args[1] === "blog_review")![3] as (
+                h: Handler,
+            ) => boolean;
+            expect(condition(handler)).toBe(mode !== "disabled");
+        },
+    );
+
+    it("supplies confirmation translations from each request instead of a shared client catalog", async () => {
+        for (const language of ["zh", "ko"]) {
+            const handler = createHandler("/blog/:uid");
+            vi.spyOn(handler, "translate").mockImplementation((key) => `${language}:${key}`);
+            await handler.__prepare({ domainId: "system", uid: "1" });
+            expect(handler.UiContext.blogConfirmations).toEqual(
+                Object.fromEntries(
+                    [...Object.values(BlogConfirmMessages), ReviewMessages.ResetConfirm].map((key) => [
+                        key,
+                        `${language}:${key}`,
+                    ]),
+                ),
+            );
+        }
+    });
+
     it("registers create before detail and leaves read admission to blog policy", () => {
         expect([...routes.keys()]).toEqual([
             "/blog",
@@ -133,6 +171,20 @@ describe("route and preparation contracts", () => {
 });
 
 describe("list query contracts", () => {
+    it.each([true, false])(
+        "shows My Blog based on authentication, not create/review grants (%s)",
+        async (authenticated) => {
+            const handler = createHandler("/blog", authenticated ? 2 : 0, authenticated ? PRIV.PRIV_USER_PROFILE : 0);
+            handler.blog = new BlogPolicy(handler.user, "reader", BLOG_PERM.ACCESS | BLOG_PERM.VIEW_PUBLISHED);
+            await handler.get({ domainId: "system" });
+            expect(handler.response.body).toMatchObject({
+                can_my_blog: authenticated,
+                can_create: false,
+                can_review: false,
+            });
+        },
+    );
+
     it("excludes drafts on home even for a system editor, with no pin precedence", async () => {
         const handler = createHandler("/blog", 1, PRIV.PRIV_USER_PROFILE | PRIV.PRIV_EDIT_SYSTEM);
         const doc = makeBlog({ draft: false });
@@ -221,7 +273,9 @@ describe("write authorization contracts", () => {
 describe("create, edit, and delete contracts", () => {
     it("rejects system-editor creation for another user before rate limiting or writes", async () => {
         const handler = createHandler("/blog/:uid/create", 2, PRIV.PRIV_USER_PROFILE | PRIV.PRIV_EDIT_SYSTEM);
-        await expect(handler.postSubmit(submit)).rejects.toBeInstanceOf(ForbiddenError);
+        await expect(dispatchHandler(handler, "post", () => handler.postSubmit(submit))).rejects.toBeInstanceOf(
+            ForbiddenError,
+        );
         expect(handler.limitRate).not.toHaveBeenCalled();
         expect(DocumentModel.add).not.toHaveBeenCalled();
         expect(OplogModel.log).not.toHaveBeenCalled();
@@ -229,8 +283,10 @@ describe("create, edit, and delete contracts", () => {
 
     it("creates with converted fields, limits before writing, and logs before redirecting", async () => {
         const handler = createHandler("/blog/:uid/create");
+        const prepare = vi.spyOn(handler, "prepare");
         DocumentModel.add.mockResolvedValue(handler.ddoc.docId);
-        await handler.postSubmit({ ...submit, pin: "true" });
+        await dispatchHandler(handler, "post", () => handler.postSubmit({ ...submit, pin: "true" }));
+        expect(prepare).toHaveBeenCalledOnce();
 
         expect(handler.limitRate).toHaveBeenCalledWith("add_blog", 3600, 60);
         expect(DocumentModel.add).toHaveBeenCalledWith(
@@ -392,8 +448,10 @@ describe("create, edit, and delete contracts", () => {
 
     it("updates the post, records the edit, and redirects to its detail page", async () => {
         const handler = createHandler("/blog/:uid/:did/edit");
+        const prepare = vi.spyOn(handler, "prepare");
         DocumentModel.coll.findOneAndUpdate.mockResolvedValue(handler.ddoc);
-        await handler.postSubmit({ ...submit, draft: "false", pin: "true" });
+        await dispatchHandler(handler, "post", () => handler.postSubmit({ ...submit, draft: "false", pin: "true" }));
+        expect(prepare).toHaveBeenCalledOnce();
         expect(DocumentModel.coll.findOneAndUpdate).toHaveBeenCalledWith(
             expect.objectContaining({
                 domainId: "system",
@@ -418,7 +476,9 @@ describe("create, edit, and delete contracts", () => {
 
     it("deletes the post and statuses, logs the operation, and redirects to the author's list", async () => {
         const handler = createHandler("/blog/:uid/:did/edit");
-        await handler.postDelete();
+        const prepare = vi.spyOn(handler, "prepare");
+        await dispatchHandler(handler, "post", () => handler.postDelete());
+        expect(prepare).toHaveBeenCalledOnce();
         expect(DocumentModel.coll.deleteOne).toHaveBeenCalledWith(
             expect.objectContaining({ domainId: "system", docType: 70, docId: handler.ddoc.docId }),
         );
@@ -456,6 +516,24 @@ describe("create, edit, and delete contracts", () => {
 });
 
 describe("views and star state", () => {
+    it.each([
+        [BLOG_PERM.UNPUBLISH_OTHERS, true],
+        [0n, false],
+        [-1n, true],
+    ] as const)("derives withdrawal capability without exposing pending metadata (%s)", async (grants, allowed) => {
+        const handler = createHandler("/blog/:uid/:did", 2);
+        handler.ddoc = makeBlog({ draft: true, reviewPending: true, requiresReview: true });
+        handler.blog = new BlogPolicy(
+            handler.user,
+            "delegate",
+            BLOG_PERM.ACCESS | BLOG_PERM.VIEW_DRAFT_OTHERS | grants,
+        );
+        DocumentModel.getStatus.mockResolvedValue({ docType: 70, docId: handler.ddoc.docId, view: true });
+        await dispatchHandler(handler, "get", () => handler.get());
+        expect(handler.response.body).toHaveProperty("canWithdrawReview", allowed);
+        expect(handler.response.body?.ddoc).not.toHaveProperty("reviewPending");
+    });
+
     it("counts the first eligible view, but not a later sequential view with recorded status", async () => {
         const handler = createHandler("/blog/:uid/:did", 2);
         const status: BlogStatusDoc = { docType: 70, docId: handler.ddoc.docId, view: true, star: true };
@@ -505,8 +583,9 @@ describe("views and star state", () => {
         ["0", false],
     ])("converts star=%s and updates only the current user's star field", async (value, expected) => {
         const handler = createHandler("/blog/:uid/:did", 2);
-        handler.post();
-        await handler.postStar({ domainId: "system", star: value });
+        const post = vi.spyOn(handler, "post");
+        await dispatchHandler(handler, "post", () => handler.postStar({ domainId: "system", star: value }));
+        expect(post).toHaveBeenCalledOnce();
         expect(DocumentModel.setStatus).toHaveBeenCalledWith("system", 70, handler.ddoc.docId, 2, { star: expected });
         expect(handler.back).toHaveBeenCalledWith({ star: expected });
     });

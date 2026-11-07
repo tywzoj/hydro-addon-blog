@@ -13,6 +13,8 @@ Run from the repository root after installing dependencies. Prerequisites are No
 ```sh
 # Disposable development server at http://127.0.0.1:8888:
 yarn dev
+# Enable native review maintenance/reminders during manual investigation:
+HYDRO_E2E_WORKER=1 yarn dev
 # Fully managed browser run with a dynamically allocated HTTP port:
 yarn test:e2e
 # Forward a Playwright filter:
@@ -52,9 +54,18 @@ The launcher sets these only in the Hydro child's environment:
 
 `CI` is removed only from the Hydro child: Hydro otherwise bypasses the configured MongoDB and tries `mongodb-memory-server`, and its storage default bypasses `DEFAULT_STORE_PATH`. Playwright still inherits the original CI environment. Inherited `HYDRO_CLI` is also removed so the web server is not silently disabled.
 
-The launcher uses `--host 127.0.0.1`, an explicit port, and `--disableWorker`; no judge or scheduled-task consumer is needed. The installed default UI already supplies built assets; normal Hydro startup compiles this addon's frontend and loads its templates. No full Hydro monorepo build is required.
+The launcher uses `--host 127.0.0.1` and an explicit port. Automated E2E enables
+the native schedule consumer to verify periodic review reminders; ordinary
+`yarn dev` still uses `--disableWorker` unless `HYDRO_E2E_WORKER=1` is set.
+No judge is needed. The installed default UI already supplies built assets;
+normal startup compiles this addon's frontend and loads its templates.
+No full Hydro monorepo build is required.
 
-The bootstrap listens for `app/ready`, accesses storage through Cordis injection, verifies the loaded blog model and actual storage path, and creates synthetic author/viewer/system-editor users through Hydro's user model. Browser authentication then uses the real login form. Readiness also requires a rendered login page and an existing blog route, not merely an open TCP port; authentication tests then verify the rendered addon page.
+The bootstrap listens for `app/ready`, accesses storage through Cordis injection,
+verifies the loaded blog model and actual storage path, and creates synthetic
+author/viewer/system-editor users plus three reporters through Hydro's user
+model. Browser authentication uses the real login form. Readiness also requires
+a rendered login page and an existing blog route, not merely an open TCP port.
 
 The disposable profile sets the existing Hydro `pagination.reply` setting to 3.
 This keeps comment pagination fixtures small without changing production defaults,
@@ -64,7 +75,14 @@ disabling rate limits, or directly inserting business data.
 
 Each run writes `test-results/<run-id>/`, ignored by Git: HTML report, failure screenshots/traces, a bounded Hydro log, and `runtime.json` listing the owned container, temporary directory, and driver PID. Authentication-state files are removed at teardown. Reports can contain synthetic sessions; do not commit them.
 
-MongoDB readiness is bounded to 30 seconds, Hydro startup to 90 seconds, browser tests to 300 seconds globally, and the parent test process to 330 seconds. CI bounds the complete E2E step to eight minutes, including startup and cleanup. Single-test, action and navigation timeouts remain unchanged, with no retries. Shutdown escalates from SIGTERM to SIGKILL for owned child processes. Ordinary success, test failure, invalid configuration, empty test selection, and SIGINT/SIGTERM trigger cleanup of the owned services and temporary files.
+MongoDB readiness is bounded to 30 seconds, Hydro startup to 90 seconds, browser
+tests to 600 seconds globally, and the parent test process to 630 seconds. CI
+bounds the complete E2E step to fifteen minutes, including startup and cleanup.
+The global bounds accommodate the real periodic reminder, not retries or relaxed
+assertions. Ordinary single-test/action/navigation limits remain unchanged; the
+real-timer reminder case explicitly allows 170 seconds. Shutdown escalates from
+SIGTERM to SIGKILL for owned child processes. Normal success/failure, empty
+selection, invalid configuration, and SIGINT/SIGTERM trigger owned-resource cleanup.
 
 An uncatchable kill or a tool that forcefully terminates the whole process tree can prevent `finally` cleanup. Use that run's `runtime.json` to inspect its exact resources; verify the container's `hydro-addon-blog.e2e` label before removing it and verify ownership before deleting the listed temporary directory. Never use name-wide process killing, global Docker prune, shared-database deletion, or unrelated-home cleanup.
 
@@ -86,10 +104,12 @@ On 2026-11-06, MCP initialization and blank-page navigation were first verified.
 
 ## Automated E2E and Agent Checks
 
-`yarn test:e2e` executes three real-login setup cases and twenty-four business scenarios:
+`yarn test:e2e` executes six real-login setup cases and thirty-six business scenarios:
 the original article/frontend regressions plus global role/settings management,
 fine-grained permissions, self-only creation even for root, guest access, domain
-independence, and seven two-level comment/like/moderation scenarios. The launcher also
+independence, seven two-level comment/like/moderation scenarios, and eight article
+review/report/reminder cases, plus critical-action confirmation and stale-catalog
+localization coverage. The launcher also
 creates a synthetic domain whose guest/default domain permissions are zero, to
 verify that blog access is independent without changing ordinary domain routes.
 The suite uses normal sessions, real sudo and same-origin requests, with independent

@@ -146,7 +146,13 @@ try {
     delete environment.HYDRO_CLI;
     hydro = fork(
         join(root, "scripts/hydro-entry.cjs"),
-        ["--host", "127.0.0.1", "--port", String(port), "--disableWorker"],
+        [
+            "--host",
+            "127.0.0.1",
+            "--port",
+            String(port),
+            ...(!serve || process.env.HYDRO_E2E_WORKER === "1" ? [] : ["--disableWorker"]),
+        ],
         {
             cwd: root,
             env: environment,
@@ -227,7 +233,7 @@ try {
         hydro.once("exit", serverExited);
         abort.signal.addEventListener("abort", cancel, { once: true });
         if (abort.signal.aborted) cancel();
-        const timeout = setTimeout(cancel, 330000);
+        const timeout = setTimeout(cancel, 630000);
         try {
             const [code] = await once(tests, "exit");
             if (process.exitCode !== 1) process.exitCode = code ?? 1;

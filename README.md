@@ -9,9 +9,17 @@ This is a fork of [Hydro Official Blog Addon](https://github.com/hydro-dev/Hydro
 - Per-user view tracking and star state.
 - Immutable two-level comments with Markdown, likes/unlikes, native notifications, and role-based deletion.
 - Global blog roles and a permission matrix independent of Hydro domain roles.
+- Configurable pre-/post-publication review, reports, rejection limits, independent reviewer/reset permissions, and native audit records.
+- Author outcome notifications and optional reviewer login/periodic reminders.
 - Integration with Hydro navigation, user profiles, templates, and localization.
 
 See the [behavior reference](docs/blog-behavior.md) for precise rules and implementation boundaries.
+
+Article review is disabled by default. Blog managers configure its mode, limits,
+and reviewer reminders in `/blog/settings`; reviewers use `/blog/review`.
+Existing non-root role masks are unchanged until the new permissions are
+explicitly granted. Disabling reminders does not disable author notifications
+or report recovery.
 
 ## Installation
 
@@ -44,6 +52,7 @@ With Docker and local Chrome available, use `yarn dev` for a disposable local Hy
 
 - [Project structure](docs/project-structure.md)
 - [Development guidelines and official Hydro references](docs/development.md)
+- [Hydro handler lifecycle and hook ownership](docs/handler-lifecycle.md)
 - [Validation commands and dependency troubleshooting](docs/validation.md)
 - [Testing requirements](docs/testing.md)
 - [Isolated verification environment and Playwright MCP](docs/verification-environment.md)

@@ -1,0 +1,18 @@
+{% if ddoc.reviewPending or ddoc.requiresReview or ddoc.lastReview or (canViewReportCount and ddoc.reportCount is defined) %}
+<div class="section__body supplementary">
+  {% if ddoc.reviewPending %}<p>{{ _('Pending review') }}</p>
+  {% elif ddoc.requiresReview %}<p>{{ _('Review required') }}</p>{% endif %}
+  {% if ddoc.lastReview and ddoc.lastReview.decision == 'reject' %}
+    <p>{{ _('Review rejected') }}</p>
+    <pre>{{ ddoc.lastReview.comments }}</pre>
+  {% endif %}
+  <p>
+    {% if canViewReportCount %}{{ _('Reports') }}: {{ ddoc.reportCount|default(0) }}{% endif %}
+    {% if handler.user._id == ddoc.owner %}
+      {% if canViewReportCount %}&middot;{% endif %}
+      {{ _('Rejections') }}: {{ ddoc.rejectionCount|default(0) }}
+    {% endif %}
+  </p>
+  {% if reviewBlocked %}<p>{{ _('Publication is blocked by the review rejection limit.') }}</p>{% endif %}
+</div>
+{% endif %}

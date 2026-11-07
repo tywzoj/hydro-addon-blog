@@ -8,6 +8,7 @@ import {
     BlogActions,
     BlogMessages,
     BlogPermissions,
+    ReviewMessages,
 } from "./constants";
 import type { BlogVisibility } from "./types";
 
@@ -20,11 +21,13 @@ export const BLOG_PERMISSIONS = Object.entries(BLOG_PERM).map(([name, bit], inde
     index,
     label: BLOG_PERMISSION_LABELS[name as BlogPermission],
     family:
-        name === BlogPermissions.MANAGE_SETTINGS
-            ? BlogMessages.Settings
-            : name.includes("COMMENT")
-              ? BlogMessages.Comments
-              : BlogMessages.Articles,
+        name === BlogPermissions.REVIEW || name === BlogPermissions.RESET_REVIEW_COUNTERS
+            ? ReviewMessages.Title
+            : name === BlogPermissions.MANAGE_SETTINGS
+              ? BlogMessages.Settings
+              : name.includes("COMMENT")
+                ? BlogMessages.Comments
+                : BlogMessages.Articles,
 }));
 
 export const BlogPermissionError = CreateError("BlogPermissionError", ForbiddenError, BlogMessages.PermissionDenied);
@@ -65,6 +68,16 @@ export class BlogPolicy {
             owner === this.user._id &&
             this.has(BlogPermissions.ACCESS) &&
             this.has(BlogPermissions.CREATE)
+        );
+    }
+
+    canReview() {
+        return this.authenticated && this.has(BlogPermissions.ACCESS) && this.has(BlogPermissions.REVIEW);
+    }
+
+    canResetReview() {
+        return (
+            this.authenticated && this.has(BlogPermissions.ACCESS) && this.has(BlogPermissions.RESET_REVIEW_COUNTERS)
         );
     }
 

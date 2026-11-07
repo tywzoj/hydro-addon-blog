@@ -52,11 +52,11 @@ const commentGrants = ["CREATE_COMMENT", "DELETE_COMMENT_OWN", "DELETE_COMMENT",
 const defaultGrants = ["CREATE_COMMENT", "DELETE_COMMENT_OWN", "DELETE_COMMENT_IN_OWN_POST"];
 
 async function setCommentGrants(editor: Page, grants: string[], role = "default") {
-    await editor.goto("/blog/settings/permissions");
+    await editor.goto("/blog/settings/permissions", { waitUntil: "domcontentloaded" });
     if (new URL(editor.url()).pathname.endsWith("/user/sudo")) {
         await editor.locator('.immersive--content input[name="password"]').fill(accounts.editor.password);
         await Promise.all([
-            editor.waitForURL((url) => !url.pathname.endsWith("/user/sudo")),
+            editor.waitForURL((url) => !url.pathname.endsWith("/user/sudo"), { waitUntil: "domcontentloaded" }),
             editor.locator('input[name="confirm"]').click(),
         ]);
     }
@@ -65,7 +65,10 @@ async function setCommentGrants(editor: Page, grants: string[], role = "default"
             .locator(`[data-permission="${grant}"] input[data-role="${role}"]`)
             .setChecked(grants.includes(grant));
     }
-    await Promise.all([editor.waitForNavigation(), editor.getByRole("button", { name: "Update Permission" }).click()]);
+    await Promise.all([
+        editor.waitForNavigation({ waitUntil: "domcontentloaded" }),
+        editor.getByRole("button", { name: "Update Permission" }).click(),
+    ]);
 }
 
 test("comments use the native editor and both levels support reversible likes after replies", async ({
@@ -77,7 +80,7 @@ test("comments use the native editor and both levels support reversible likes af
     const path = await createPost(page, "Comments native interaction");
     const did = new ObjectId(path.split("/").pop()!);
     const before = await db.collection<BlogDoc>("document").findOne({ docId: did });
-    await viewer.goto(path);
+    await viewer.goto(path, { waitUntil: "domcontentloaded" });
     await viewer.locator('[name="dczcomments__dummy-box"]').click();
     await submitComment(viewer, "**Comment Markdown** @[](/user/2)");
     const stored = await db.collection<BlogCommentDoc>("document").findOne({ parentId: did, docType: 71 });
@@ -96,7 +99,7 @@ test("comments use the native editor and both levels support reversible likes af
         await expect(control).toHaveAttribute("aria-pressed", "true");
         await expect(control.locator("[data-like-count]")).toHaveText("1");
     }
-    await viewer.reload();
+    await viewer.reload({ waitUntil: "domcontentloaded" });
     await expect(topLike).toHaveAttribute("aria-pressed", "true");
     await expect(tailLike).toHaveAttribute("aria-pressed", "true");
     await tailLike.click();
@@ -122,7 +125,7 @@ test("comments use the native editor and both levels support reversible likes af
         viewer.locator('#blog-comments [data-op="edit"], #blog-comments [data-op="react"], [data-discussion-history]'),
     ).toHaveCount(0);
 
-    await editor.goto(path);
+    await editor.goto(path, { waitUntil: "domcontentloaded" });
     const remove = editor.locator(`[data-reply-id="${drrid}"] [data-op="delete"]`);
     await deleteWithConfirmation(editor, remove, false);
     expect((await db.collection<BlogCommentDoc>("document").findOne({ docId: stored!.docId }))?.reply).toHaveLength(2);
@@ -140,7 +143,7 @@ test("comments validate target chains and remain immutable with draft likes disa
     db,
 }) => {
     const path = await createPost(page, "Comments target binding");
-    await viewer.goto(path);
+    await viewer.goto(path, { waitUntil: "domcontentloaded" });
     const { drid } = await addComment(viewer, path, "Original comment");
     const { drrid } = await addComment(viewer, path, "Original reply", drid);
     const other = await createPost(page, "Other comments article");
@@ -172,17 +175,17 @@ test("comments validate target chains and remain immutable with draft likes disa
     }
     expect((await editor.request.get(`${path}/${drid}/raw`)).ok()).toBe(false);
     expect((await post(page, `${path}/edit`, { operation: "publish", draft: true })).ok()).toBe(true);
-    expect((await viewer.goto(path))?.status()).toBe(403);
+    expect((await viewer.goto(path, { waitUntil: "domcontentloaded" }))?.status()).toBe(403);
     for (const liked of [true, false]) {
         expect((await post(editor, path, { operation: "like", drid: drid!, drrid: drrid!, liked })).status()).toBe(403);
     }
     expect((await post(editor, path, { operation: "reply", content: "Draft comment" })).status()).toBe(403);
-    await editor.goto(path);
+    await editor.goto(path, { waitUntil: "domcontentloaded" });
     await expect(editor.locator("[data-blog-like]")).toHaveCount(0);
     await expect(editor.locator("#blog-comments")).toContainText("Original comment");
     expect((await post(editor, path, { operation: "delete_tail_reply", drid: drid!, drrid: drrid! })).ok()).toBe(true);
     expect((await post(page, `${path}/edit`, { operation: "publish", draft: false })).ok()).toBe(true);
-    await viewer.goto(path);
+    await viewer.goto(path, { waitUntil: "domcontentloaded" });
     await expect(viewer.locator("#blog-comments")).toContainText("Original comment");
     expect(
         (await db.collection<BlogCommentDoc>("document").findOne({ docId: new ObjectId(drid) }))?.reply,
@@ -195,12 +198,12 @@ test("comments matrix preserves the official asymmetric deletion branches and sh
     editor,
 }) => {
     const path = await createPost(page, "Comments matrix grants");
-    await viewer.goto(path);
+    await viewer.goto(path, { waitUntil: "domcontentloaded" });
     const { drid } = await addComment(viewer, path, "Viewer top");
     const { drrid } = await addComment(viewer, path, "Viewer nested", drid);
     try {
         await setCommentGrants(editor, ["DELETE_COMMENT"]);
-        await viewer.goto(path);
+        await viewer.goto(path, { waitUntil: "domcontentloaded" });
         await expect(viewer.locator('[name="dczcomments__dummy-box"], [data-blog-like]')).toHaveCount(0);
         expect((await post(viewer, path, { operation: "like", drid: drid!, liked: true })).status()).toBe(403);
         expect((await post(viewer, path, { operation: "reply", content: "Denied" })).status()).toBe(403);
@@ -227,16 +230,16 @@ test("comments matrix preserves the official asymmetric deletion branches and sh
 
 test("comments honor native pagination settings and domain-independent reads", async ({ page, viewer }) => {
     const path = await createPost(page, "Comments pagination");
-    await viewer.goto(path);
+    await viewer.goto(path, { waitUntil: "domcontentloaded" });
     for (let i = 1; i <= 4; i++) await addComment(viewer, path, `Pagination comment ${i}`);
-    await viewer.goto(`/d/blogrestricted${path}`);
+    await viewer.goto(`/d/blogrestricted${path}`, { waitUntil: "domcontentloaded" });
     await expect(viewer.locator("[data-comment-id]")).toHaveCount(3);
     await expect(viewer.locator("[data-comment-id]").first()).toContainText("Pagination comment 4");
     await expect(viewer.locator("[data-comment-id]").last()).toContainText("Pagination comment 2");
-    await viewer.goto(`/d/blogrestricted${path}?page=2`);
+    await viewer.goto(`/d/blogrestricted${path}?page=2`, { waitUntil: "domcontentloaded" });
     await expect(viewer.locator("[data-comment-id]")).toHaveCount(1);
     await expect(viewer.locator("[data-comment-id]")).toContainText("Pagination comment 1");
-    expect((await viewer.goto(`${path}?page=0`))?.status()).toBe(403);
+    expect((await viewer.goto(`${path}?page=0`, { waitUntil: "domcontentloaded" }))?.status()).toBe(403);
 });
 
 test("comments handle concurrent likes and repeated deletes and clean the entire article tree", async ({
@@ -247,7 +250,7 @@ test("comments handle concurrent likes and repeated deletes and clean the entire
 }) => {
     const path = await createPost(page, "Comments concurrency and cleanup");
     const did = new ObjectId(path.split("/").pop()!);
-    await viewer.goto(path);
+    await viewer.goto(path, { waitUntil: "domcontentloaded" });
     const { drid } = await addComment(viewer, path, "Concurrent top");
     const { drrid } = await addComment(viewer, path, "Concurrent nested", drid);
     for (const target of [{}, { drrid: drrid! }]) {
@@ -279,7 +282,7 @@ test("comments inherit anonymous article reading but never allow guest mutations
     db,
 }) => {
     const path = await createPost(page, "Comments anonymous reading");
-    await viewer.goto(path);
+    await viewer.goto(path, { waitUntil: "domcontentloaded" });
     const { drid } = await addComment(viewer, path, "Guest-readable comment");
     const context = await browser.newContext({
         baseURL: process.env.HYDRO_E2E_URL,
@@ -288,7 +291,7 @@ test("comments inherit anonymous article reading but never allow guest mutations
     const guest = await context.newPage();
     try {
         await setCommentGrants(editor, ["ACCESS", "VIEW_PUBLISHED", ...commentGrants], "guest");
-        await guest.goto(path);
+        await guest.goto(path, { waitUntil: "domcontentloaded" });
         await expect(guest.locator("#blog-comments")).toContainText("Guest-readable comment");
         await expect(
             guest.locator('[name="dczcomments__dummy-box"], [data-blog-like], #blog-comments [data-op="delete"]'),
@@ -328,7 +331,7 @@ test("comments leave no orphan trees or statuses during article deletion races",
 }) => {
     const path = await createPost(page, "Comments parent deletion race");
     const did = new ObjectId(path.split("/").pop()!);
-    await viewer.goto(path);
+    await viewer.goto(path, { waitUntil: "domcontentloaded" });
     const { drid } = await addComment(viewer, path, "Race parent");
     const results = await Promise.all([
         post(viewer, path, { operation: "reply", content: "Racing top" }),

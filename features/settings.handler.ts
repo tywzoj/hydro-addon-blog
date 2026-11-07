@@ -1,14 +1,20 @@
 import type { Context } from "hydrooj";
 import { OplogModel, param, requireSudo, Types, UserModel, ValidationError } from "hydrooj";
 
+import type { ReviewMode } from "./constants";
 import {
     BLOG_FIRST_PAGE,
     BLOG_NONE,
     BLOG_PERMISSION_PLACEHOLDER,
     BLOG_USERS_PER_PAGE,
     BlogAuditEvents,
+    BlogConfirmMessages,
     BlogPermissions,
     BlogRoles,
+    ReviewDecisions,
+    ReviewMessages,
+    ReviewModes,
+    ROUTE_BLOG_POST_DETAIL,
     ROUTE_BLOG_SETTINGS,
     ROUTE_BLOG_SETTINGS_PERMISSIONS,
     ROUTE_BLOG_SETTINGS_ROLES,
@@ -21,6 +27,8 @@ import {
 } from "./constants";
 import { BlogBaseHandler } from "./handler.base";
 import { BLOG_PERMISSIONS } from "./permission";
+import { BlogReviewModel } from "./review.model";
+import { sendReviewMessage } from "./review.notifications";
 import { BlogSettingsModel, permissionMatrixRoles } from "./settings.model";
 import type { BlogRole } from "./types";
 import { toTemplate } from "./utils";
@@ -56,9 +64,68 @@ class BlogSettingsHandler extends BlogBaseHandler {
         this.blog.require(BlogPermissions.MANAGE_SETTINGS);
     }
 
-    get(_?: unknown, _page?: number): void | Promise<void> {
+    @requireSudo
+    async get(_?: unknown, _page?: number): Promise<void> {
         this.response.template = toTemplate(TEMPLATE_BLOG_SETTINGS);
-        this.response.body = { blog_role: this.blog.role };
+        this.response.body = {
+            blog_role: this.blog.role,
+            settings: await BlogSettingsModel.get(),
+            review: await BlogSettingsModel.review(),
+        };
+    }
+
+    @requireSudo
+    @param("revision", Types.UnsignedInt)
+    @param("mode", Types.Range(Object.values(ReviewModes)))
+    @param("reportLimit", Types.UnsignedInt)
+    @param("rejectionLimit", Types.PositiveInt)
+    @param("reminders", Types.Boolean, true)
+    @param("intervalMinutes", Types.PositiveInt)
+    @param("confirmDisable", Types.Boolean, true)
+    async postReviewSettings(
+        _,
+        revision: number,
+        mode: ReviewMode,
+        reportLimit: number,
+        rejectionLimit: number,
+        reminders = false,
+        intervalMinutes: number,
+        confirmDisable = false,
+    ) {
+        if (mode === ReviewModes.Disabled && !confirmDisable) {
+            throw new ValidationError("confirmDisable", null, BlogConfirmMessages.DisableReview);
+        }
+        const queueCutoff = new Date();
+        const change = await BlogSettingsModel.setReview(
+            { mode, reportLimit, rejectionLimit, reminders, intervalMinutes },
+            revision,
+        );
+        await OplogModel.log(this, BlogAuditEvents.ReviewSettings, change);
+        const approved =
+            mode === ReviewModes.Disabled
+                ? await BlogReviewModel.approvePending(this.user._id, queueCutoff, async (previous, next) => {
+                      await OplogModel.log(this, BlogAuditEvents.Review, {
+                          ...BlogReviewModel.audit(next),
+                          previous: BlogReviewModel.audit(previous),
+                          decision: ReviewDecisions.Approve,
+                          comments: "",
+                          automatic: true,
+                          settingsMode: ReviewModes.Disabled,
+                          settingsRevision: revision + 1,
+                      });
+                      const link = this.url(ROUTE_BLOG_POST_DETAIL, {
+                          uid: next.owner,
+                          did: next.docId,
+                          domainId: SYSTEM_DOMAIN,
+                      });
+                      await sendReviewMessage(next.owner, ReviewMessages.ApprovedNotice, [
+                          next.title,
+                          next.contentVersion ?? 0,
+                          link,
+                      ]);
+                  })
+                : 0;
+        this.back({ approved });
     }
 }
 

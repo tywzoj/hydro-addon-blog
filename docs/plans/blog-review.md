@@ -7,6 +7,10 @@ the maintainer against pinned official Hydro source and implemented on
 `users/antares/blog-post-review`. Local verification and its explicit limits are
 recorded below; this does not claim CI or exhaustive crash/deployment coverage.
 
+Delivery PR: [#11](https://github.com/tywzoj/hydro-addon-blog/pull/11).
+Its Checks tab and validation summary record commit-specific CI results;
+the local verification records below describe evidence available at each stage.
+
 Add global disabled, pre-publication, and post-publication review modes, reports,
 independent review/reset permissions, native notifications, and Oplog records.
 Preserve global blog roles, domain independence, existing article permissions,
@@ -587,7 +591,8 @@ container, and temporary directory were cleaned up.
 - Multi-process native scheduler bootstrap/reinsert races, exhaustive lease
   expiry/in-flight delivery scenarios, and the full supported deployment/version
   matrix were not exercised end to end.
-- A current-PR-head CI run has not been performed; changes remain local.
+- The initial local delivery predates PR CI; consult PR #11 for commit-specific
+  CI results rather than treating local results as GitHub-run evidence.
 - Native message/Oplog delivery and cross-collection deletion retain their
   documented partial-failure semantics. No crash-safe exactly-once delivery or
   global orphan cleanup is claimed.

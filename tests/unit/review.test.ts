@@ -521,7 +521,8 @@ describe("review decisions and visibility", () => {
         const visible = articleForReader(doc, uid, canReview);
         if (canReview) expect(visible.reportCount).toBe(5);
         else expect(visible).not.toHaveProperty("reportCount");
-        if (uid === doc.owner) expect(visible.rejectionCount).toBe(2);
+        expect(visible).not.toHaveProperty("rejectionCount");
+        expect(doc.rejectionCount).toBe(2);
         expect(doc.reportCount).toBe(5);
     });
 });

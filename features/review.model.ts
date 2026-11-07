@@ -52,11 +52,11 @@ export function articleForResponse(doc: BlogDoc): BlogDoc {
 export function articleForReader(doc: BlogDoc, uid: number, canReview = false): BlogDoc {
     const result = { ...doc };
     delete result.pendingReportWrite;
+    delete result.rejectionCount;
     if (doc.owner !== uid) {
         delete result.writeRevision;
         delete result.contentVersion;
         delete result.counterEpoch;
-        delete result.rejectionCount;
         delete result.requiresReview;
         delete result.reviewReason;
         delete result.reviewPending;

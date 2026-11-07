@@ -58,6 +58,7 @@ function createHandler(path: string, viewer = 1, privileges = PRIV.PRIV_USER_PRO
 const sort = vi.fn();
 const project = vi.fn();
 const cursor = { sort, project };
+const findReports = vi.fn();
 const submit = { domainId: "system", title: "Test post", content: "Test content", draft: "true", pin: "false" };
 
 beforeEach(() => {
@@ -65,6 +66,8 @@ beforeEach(() => {
     vi.spyOn(BlogSettingsModel, "review").mockResolvedValue({ ...DEFAULT_REVIEW_SETTINGS });
     sort.mockReturnValue(cursor);
     project.mockReturnValue(cursor);
+    findReports.mockReturnValue(cursor);
+    BlogReviewModel.reports.find = findReports;
     DocumentModel.getMulti.mockReturnValue(cursor);
     UserModel.getList.mockResolvedValue({});
     UserModel.getById.mockResolvedValue(makeUser());
@@ -192,12 +195,13 @@ describe("list query contracts", () => {
         ["/blog/:uid/:did", 2, PRIV.PRIV_USER_PROFILE],
         ["/blog/:uid/:did/edit", 1, PRIV.PRIV_USER_PROFILE],
         ["/blog/:uid/:did/edit", 2, PRIV.PRIV_USER_PROFILE | PRIV.PRIV_EDIT_SYSTEM],
-    ] as const)("omits article and legacy reply IPs at %s for reader %s", async (path, uid, privileges) => {
+    ] as const)("omits article IPs and rejection counts at %s for reader %s", async (path, uid, privileges) => {
         const handler = createHandler(path, uid, privileges);
         if (!uid) handler.blog = new BlogPolicy(handler.user, "guest", BLOG_PERM.ACCESS | BLOG_PERM.VIEW_PUBLISHED);
         const doc = makeBlog({
             draft: false,
             ip: "192.0.2.10",
+            rejectionCount: 2,
             reply: [{ _id: handler.ddoc.docId, owner: 3, content: "Legacy reply", ip: "192.0.2.11" }],
         });
         handler.ddoc = doc;
@@ -207,9 +211,11 @@ describe("list query contracts", () => {
         const body = handler.response.body as { ddoc?: BlogDoc; ddocs?: BlogDoc[] };
         const exposed = list ? body.ddocs![0] : body.ddoc!;
         expect(exposed).not.toHaveProperty("ip");
+        expect(exposed).not.toHaveProperty("rejectionCount");
         expect(exposed.reply[0]).not.toHaveProperty("ip");
         expect(exposed).toMatchObject({ title: doc.title, reply: [{ content: "Legacy reply", owner: 3 }] });
         expect(doc.ip).toBe("192.0.2.10");
+        expect(doc.rejectionCount).toBe(2);
         expect(doc.reply[0].ip).toBe("192.0.2.11");
     });
 
@@ -230,7 +236,7 @@ describe("list query contracts", () => {
         await handler.get({ domainId: "system" });
         expect(DocumentModel.getMulti).toHaveBeenCalledWith("system", 70, { owner: 1, draft: true });
         expect(sort).toHaveBeenLastCalledWith({ pin: -1, updateAt: -1 });
-        expect(handler.response.body?.ddocs).toEqual([expect.objectContaining({ rejectionCount: 2 })]);
+        expect((handler.response.body?.ddocs as unknown[])[0]).not.toHaveProperty("rejectionCount");
         expect((handler.response.body?.ddocs as unknown[])[0]).not.toHaveProperty("reportCount");
     });
 
@@ -800,6 +806,35 @@ describe("views and star state", () => {
     });
 
     it.each([
+        { viewer: 1, grants: BLOG_DEFAULT },
+        { viewer: 2, grants: BLOG_DEFAULT },
+        { viewer: 2, grants: BLOG_DEFAULT | BLOG_PERM.RESET_REVIEW_COUNTERS },
+        { viewer: 1, grants: BLOG_DEFAULT | BLOG_PERM.REVIEW },
+        { viewer: 2, grants: BLOG_DEFAULT | BLOG_PERM.REVIEW },
+        { viewer: 2, grants: -1n },
+    ])("keeps reports out of article detail even for reviewers ($viewer / $grants)", async ({ viewer, grants }) => {
+        const handler = createHandler("/blog/:uid/:did", viewer);
+        handler.blog = new BlogPolicy(handler.user, "reader", grants);
+        handler.ddoc.lastReview = {
+            decision: "reject",
+            reviewer: 3,
+            comments: "Author-only feedback",
+            at: new Date(),
+            version: 0,
+        };
+        await handler.get();
+        expect(findReports).not.toHaveBeenCalled();
+        for (const field of ["reportComments", "reportPage", "reportPageCount"]) {
+            expect(handler.response.body).not.toHaveProperty(field);
+        }
+        if (viewer === handler.ddoc.owner) {
+            expect(handler.response.body?.ddoc).toHaveProperty("lastReview.comments", "Author-only feedback");
+        } else {
+            expect(handler.response.body?.ddoc).not.toHaveProperty("lastReview");
+        }
+    });
+
+    it.each([
         { mode: "before" as const, requiresReview: false },
         { mode: "after" as const, requiresReview: true },
     ])(
@@ -821,8 +856,9 @@ describe("views and star state", () => {
                 canWithdrawReview: true,
                 publishRequiresReview: true,
                 reviewBlocked: true,
-                ddoc: { reportCount: 5, rejectionCount: 3 },
+                ddoc: { reportCount: 5 },
             });
+            expect(handler.response.body?.ddoc).not.toHaveProperty("rejectionCount");
         },
     );
 

@@ -79,6 +79,8 @@ addPage(
         () => {
             const pending = new WeakSet<HTMLFormElement>();
             const approved = new WeakSet<HTMLFormElement>();
+            const $reviewBody = $(".dialog__body--blog-review > div");
+            const reviewDialog = $reviewBody.length ? new ActionDialog({ $body: $reviewBody }) : null;
             for (const form of document.querySelectorAll<HTMLFormElement>("form[data-initial-draft]")) {
                 // Stop the editor's Mod-Enter newline before Hydro's bubbling submit hotkey.
                 form.addEventListener(
@@ -118,7 +120,15 @@ addPage(
                     try {
                         // The cached native language asset can predate newly added addon messages.
                         const translations = UiContext.blogConfirmations as Record<string, string> | undefined;
-                        if (message && !(await confirm(translations?.[message] ?? i18n(message)))) return;
+                        if (message === BlogConfirmMessages.Reject && reviewDialog) {
+                            if ((await reviewDialog.open()) !== "ok") return;
+                            form.querySelector<HTMLInputElement>('[name="comments"]')!.value = String(
+                                reviewDialog.$dom.find('[name="reviewComments"]').val() ?? "",
+                            );
+                        } else if (message && !(await confirm(translations?.[message] ?? i18n(message)))) return;
+                        if (message === BlogConfirmMessages.Approve) {
+                            form.querySelector<HTMLInputElement>('[name="comments"]')!.value = "";
+                        }
                         if (message === BlogConfirmMessages.DisableReview) {
                             form.querySelector<HTMLInputElement>('[name="confirmDisable"]')!.value = "true";
                         }

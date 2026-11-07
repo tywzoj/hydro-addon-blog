@@ -6,13 +6,7 @@
     <p>{{ _('Review rejected') }}</p>
     <pre>{{ ddoc.lastReview.comments }}</pre>
   {% endif %}
-  <p>
-    {% if canViewReportCount %}{{ _('Reports') }}: {{ ddoc.reportCount|default(0) }}{% endif %}
-    {% if handler.user._id == ddoc.owner %}
-      {% if canViewReportCount %}&middot;{% endif %}
-      {{ _('Rejections') }}: {{ ddoc.rejectionCount|default(0) }}
-    {% endif %}
-  </p>
+  {% if canViewReportCount %}<p>{{ _('Reports') }}: {{ ddoc.reportCount|default(0) }}</p>{% endif %}
   {% if reviewBlocked %}<p>{{ _('Publication is blocked by the review rejection limit.') }}</p>{% endif %}
 </div>
 {% endif %}

@@ -160,12 +160,14 @@ test("critical action dialogs cancel writes and preserve editor hotkey submissio
 
     await page.goto(`${path}/edit`, { waitUntil: "domcontentloaded" });
     await fillPost(page, "Confirmed hotkey publication", "Content retained after cancellation", false);
-    await page.locator(".cm-content[contenteditable=true]").press("Control+Enter");
-    await expect(page.locator(".dialog:visible")).toContainText("Publish this article?");
-    await page.locator('.dialog:visible [data-action="no"]').click();
-    await expect(page.locator(".dialog:visible")).toHaveCount(0);
-    expect(writes).toHaveLength(0);
-    await expect(page.locator('textarea[name="content"]')).toHaveValue("Content retained after cancellation");
+    for (const shortcut of ["Control+Enter", "Meta+Enter"]) {
+        await page.locator(".cm-content[contenteditable=true]").press(shortcut);
+        await expect(page.locator(".dialog:visible")).toContainText("Publish this article?");
+        await page.locator('.dialog:visible [data-action="no"]').click();
+        await expect(page.locator(".dialog:visible")).toHaveCount(0);
+        expect(writes).toHaveLength(0);
+        await expect(page.locator('textarea[name="content"]')).toHaveValue("Content retained after cancellation");
+    }
     await page.locator(".cm-content[contenteditable=true]").press("Control+Enter");
     await Promise.all([
         page.waitForURL(path, { waitUntil: "domcontentloaded" }),

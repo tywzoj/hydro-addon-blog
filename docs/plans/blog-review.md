@@ -809,6 +809,36 @@ were verified removed. Documentation links and whitespace checks passed.
 Current-head CI was not run; prior crash/multi-process limits remain unchanged.
 The existing port-8888 development instance and its data are unchanged.
 
+### PR CI Follow-up
+
+PR #11 head `7babffc4fd1f77309afda3a763119fb409d5d12a` failed
+[PR Validation run 42363548192](https://github.com/tywzoj/hydro-addon-blog/actions/runs/42363548192).
+Lint, type checking and coverage passed. E2E reported 39 passed, one failed
+keyboard case and one incomplete timer case at the 480-second global deadline.
+
+The keyboard failure was a real cancellation bug: the editor inserted a newline
+for Mod-Enter before Hydro's document-level bubbling hotkey opened confirmation.
+The installed CodeMirror bundle maps Mod-Enter to `insertBlankLine`; Hydro's
+compatible official hotkey source handles submission at document bubbling.
+The same failure was reproduced locally with Meta+Enter in
+`hydro-blog-91456-2f1aeae2`, without weakening the assertion.
+The article form now captures Control/Meta+Enter before editor handling and
+clicks its existing default submit button. Other modifier combinations and
+composition remain outside this handler; repeated keydowns do not resubmit.
+No native editor dependency or global hotkey handler is patched.
+
+The hosted run used approximately 420 seconds before its last scheduled-reminder
+case, leaving only one minute for a case with a 170-second bound. Suite/parent
+limits are now 600/630 seconds and the CI E2E step is fifteen minutes. Individual
+test/action/navigation limits, the timer assertion and zero retries are unchanged.
+These supersede the earlier 480/510-second delivery bounds.
+
+After the fix, lint/type checks and `yarn test:coverage` passed (245 tests).
+`yarn test:e2e --grep 'critical action dialogs|draft publication'` passed eight
+cases in `hydro-blog-92933-65a3d80d`, exercising both modifiers, exact text
+preservation, cancellation, single submission and ordinary publication.
+A new exact-head CI run is required before recording successful PR validation.
+
 ## Source Evidence and Compatibility
 
 Baseline package APIs inspected: Hydro `5.0.7`, default UI `4.58.5`, MongoDB

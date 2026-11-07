@@ -10,7 +10,7 @@ import {
     TEMPLATE_BLOG_EDIT,
     TEMPLATE_BLOG_SETTINGS,
 } from "../features/constants";
-import { confirmationMessage } from "./blog-confirmation";
+import { confirmationMessage, isSubmitShortcut } from "./blog-confirmation";
 
 function formConfirmation(form: HTMLFormElement, submitter: HTMLElement | null) {
     const data = new FormData(form);
@@ -79,6 +79,19 @@ addPage(
         () => {
             const pending = new WeakSet<HTMLFormElement>();
             const approved = new WeakSet<HTMLFormElement>();
+            for (const form of document.querySelectorAll<HTMLFormElement>("form[data-initial-draft]")) {
+                // Stop the editor's Mod-Enter newline before Hydro's bubbling submit hotkey.
+                form.addEventListener(
+                    "keydown",
+                    (event) => {
+                        if (!isSubmitShortcut(event)) return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        if (!event.repeat) form.querySelector<HTMLButtonElement>("[data-default-submit]")?.click();
+                    },
+                    true,
+                );
+            }
             $("form[data-blog-confirm]").on("click", ":submit", (event) => {
                 // Hydro's document-level click throttle also consumes cancelled submissions.
                 if (formConfirmation(event.delegateTarget as HTMLFormElement, event.currentTarget as HTMLElement)) {

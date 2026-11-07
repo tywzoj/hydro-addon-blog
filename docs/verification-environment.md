@@ -76,8 +76,8 @@ disabling rate limits, or directly inserting business data.
 Each run writes `test-results/<run-id>/`, ignored by Git: HTML report, failure screenshots/traces, a bounded Hydro log, and `runtime.json` listing the owned container, temporary directory, and driver PID. Authentication-state files are removed at teardown. Reports can contain synthetic sessions; do not commit them.
 
 MongoDB readiness is bounded to 30 seconds, Hydro startup to 90 seconds, browser
-tests to 480 seconds globally, and the parent test process to 510 seconds. CI
-bounds the complete E2E step to twelve minutes, including startup and cleanup.
+tests to 600 seconds globally, and the parent test process to 630 seconds. CI
+bounds the complete E2E step to fifteen minutes, including startup and cleanup.
 The global bounds accommodate the real periodic reminder, not retries or relaxed
 assertions. Ordinary single-test/action/navigation limits remain unchanged; the
 real-timer reminder case explicitly allows 170 seconds. Shutdown escalates from

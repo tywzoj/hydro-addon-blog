@@ -1,7 +1,20 @@
 import { describe, expect, it } from "vitest";
 
 import { BlogConfirmMessages, BlogOperations, ReviewMessages } from "../../features/constants";
-import { confirmationMessage } from "../../frontend/blog-confirmation";
+import { confirmationMessage, isSubmitShortcut } from "../../frontend/blog-confirmation";
+
+describe("article submission shortcuts", () => {
+    const key = { key: "Enter", ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, isComposing: false };
+
+    it("accepts either native submit modifier without capturing other editor shortcuts", () => {
+        expect(isSubmitShortcut({ ...key, ctrlKey: true })).toBe(true);
+        expect(isSubmitShortcut({ ...key, metaKey: true })).toBe(true);
+        expect(isSubmitShortcut(key)).toBe(false);
+        for (const change of [{ key: "s" }, { altKey: true }, { shiftKey: true }, { isComposing: true }]) {
+            expect(isSubmitShortcut({ ...key, ctrlKey: true, ...change })).toBe(false);
+        }
+    });
+});
 
 describe("critical action confirmations", () => {
     it("distinguishes publication, live edits, and withdrawal from ordinary draft saves", () => {

@@ -86,6 +86,10 @@ retained editor content, and editor-based withdrawal. Existing deletion,
 publication, review-decision and reset cases also exercise the dialogs, including
 immediate retries after cancellation and retention of rejection comments/tokens.
 Focused UT covers which actions/publication transitions require confirmation.
+The keyboard case exercises both Control+Enter and Meta+Enter without relaxing
+the exact content-preservation assertion. The article form intercepts submission
+in the capture phase before the editor can handle its platform-specific
+Mod-Enter newline shortcut, then uses the normal submit button and confirmation.
 Three locale cases select Simplified Chinese, Traditional Chinese and Korean
 through native preferences, then remove the confirmation keys from the browser's
 catalog to simulate an older cached language file. Actual publication/deletion

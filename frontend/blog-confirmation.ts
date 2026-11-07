@@ -6,6 +6,18 @@ import {
     ReviewModes,
 } from "../features/constants";
 
+export function isSubmitShortcut(
+    event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey" | "isComposing">,
+) {
+    return (
+        event.key === "Enter" &&
+        (event.ctrlKey || event.metaKey) &&
+        !event.altKey &&
+        !event.shiftKey &&
+        !event.isComposing
+    );
+}
+
 export function confirmationMessage({
     operation,
     decision,

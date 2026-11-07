@@ -26,7 +26,7 @@ import {
 } from "./constants";
 import { BlogBaseHandler, BlogUserBaseHandler, BlogUserPostBaseHandler } from "./handler.base";
 import { BlogModel } from "./model";
-import { articleForReader, BlogReviewModel } from "./review.model";
+import { articleForReader, articleForResponse, BlogReviewModel } from "./review.model";
 import { BlogSettingsModel } from "./settings.model";
 import type { BlogContentUpdate, BlogDoc } from "./types";
 import { toTemplate } from "./utils";
@@ -65,7 +65,7 @@ class BlogListHandler extends BlogBaseHandler {
         this.response.template = toTemplate(TEMPLATE_BLOG_LIST);
         this.response.body = {
             scenario: ListPageScenario.Home,
-            ddocs: ddocs.map((doc) => articleForReader(doc, this.user._id, this.blog.canReview())),
+            ddocs: ddocs.map((doc) => articleForResponse(articleForReader(doc, this.user._id, this.blog.canReview()))),
             dpcount,
             page,
             sort,
@@ -108,7 +108,7 @@ class BlogListUserHandler extends BlogUserBaseHandler {
         this.response.template = toTemplate(TEMPLATE_BLOG_LIST);
         this.response.body = {
             scenario: ListPageScenario.User,
-            ddocs: ddocs.map((doc) => articleForReader(doc, this.user._id, this.blog.canReview())),
+            ddocs: ddocs.map((doc) => articleForResponse(articleForReader(doc, this.user._id, this.blog.canReview()))),
             dpcount,
             page,
             sort,
@@ -156,7 +156,7 @@ class BlogUserPostDetailHandler extends BlogCommentHandler {
         const controls = this.blog.controls(this.ddoc);
         this.response.template = toTemplate(TEMPLATE_BLOG_DETAIL);
         this.response.body = {
-            ddoc: articleForReader(this.ddoc, this.user._id, this.blog.canReview()),
+            ddoc: articleForResponse(articleForReader(this.ddoc, this.user._id, this.blog.canReview())),
             dsdoc,
             udoc,
             star: dsdoc?.star ?? false,
@@ -243,7 +243,7 @@ class BlogUserPostEditHandler extends BlogUserPostBaseHandler {
         this.blog.requireAction(BlogActions.Edit, this.ddoc.owner);
         this.response.template = toTemplate(TEMPLATE_BLOG_EDIT);
         this.response.body = {
-            ddoc: articleForReader(this.ddoc, this.user._id, this.blog.canReview()),
+            ddoc: articleForResponse(articleForReader(this.ddoc, this.user._id, this.blog.canReview())),
             controls: this.blog.controls(this.ddoc),
             canViewReportCount: this.blog.canReview(),
             publishRequiresReview:

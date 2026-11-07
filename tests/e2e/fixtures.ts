@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
 import { expect, test as base } from "@playwright/test";
 import type { Db } from "mongodb";
-import { MongoClient } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
 
 export const test = base.extend<{ viewer: Page; editor: Page; db: Db }>({
     viewer: async ({ browser, baseURL }, use) => {
@@ -44,6 +44,55 @@ export const test = base.extend<{ viewer: Page; editor: Page; db: Db }>({
 });
 
 export { expect };
+
+export async function blogState(db: Db, paths: string[]) {
+    const ids = paths.map((path) => new ObjectId(path.split("/").pop()!));
+    const [documents, statuses, reports, messages, audits] = await Promise.all([
+        db
+            .collection("document")
+            .find({
+                domainId: "system",
+                $or: [
+                    { docType: 70, docId: { $in: ids } },
+                    { docType: 71, parentId: { $in: ids } },
+                ],
+            })
+            .sort({ _id: 1 })
+            .toArray(),
+        db
+            .collection("document.status")
+            .find({
+                domainId: "system",
+                $or: [
+                    { docType: 70, docId: { $in: ids } },
+                    { docType: 71, parentId: { $in: ids } },
+                ],
+            })
+            .sort({ _id: 1 })
+            .toArray(),
+        db
+            .collection("blog.report")
+            .find({ articleId: { $in: ids } })
+            .sort({ _id: 1 })
+            .toArray(),
+        db
+            .collection("message")
+            .find({
+                content: { $regex: ids.map((id) => id.toHexString()).join("|") },
+            })
+            .sort({ _id: 1 })
+            .toArray(),
+        db
+            .collection("oplog")
+            .find({
+                type: { $regex: "^blog\\." },
+                $or: [{ did: { $in: ids } }, { "args.did": { $in: ids.map((id) => id.toHexString()) } }],
+            })
+            .sort({ _id: 1 })
+            .toArray(),
+    ]);
+    return { documents, statuses, reports, messages, audits };
+}
 
 export async function fillPost(page: Page, title: string, content: string, draft: boolean) {
     await page.locator('input[name="title"]').fill(title);

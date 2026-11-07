@@ -18,7 +18,7 @@ import {
     SYSTEM_DOMAIN,
 } from "./constants";
 import { BlogBaseHandler, BlogUserPostBaseHandler } from "./handler.base";
-import { BlogReviewModel, OptionalReviewComment } from "./review.model";
+import { articleForResponse, BlogReviewModel, OptionalReviewComment } from "./review.model";
 import { sendReviewMessage } from "./review.notifications";
 import { BlogSettingsModel } from "./settings.model";
 import type { BlogDoc } from "./types";
@@ -38,7 +38,13 @@ class BlogReviewListHandler extends BlogBaseHandler {
             ddocs.map((doc) => doc.owner),
         );
         this.response.template = toTemplate(ROUTE_BLOG_REVIEW);
-        this.response.body = { ddocs, dpcount, page, udict, pendingCount: await BlogReviewModel.count() };
+        this.response.body = {
+            ddocs: ddocs.map(articleForResponse),
+            dpcount,
+            page,
+            udict,
+            pendingCount: await BlogReviewModel.count(),
+        };
     }
 }
 
@@ -74,7 +80,7 @@ class BlogReviewDetailHandler extends BlogReviewTargetHandler {
         );
         this.response.template = toTemplate(ROUTE_BLOG_REVIEW_DETAIL);
         this.response.body = {
-            ddoc: doc,
+            ddoc: articleForResponse(doc),
             reports,
             page,
             dpcount,

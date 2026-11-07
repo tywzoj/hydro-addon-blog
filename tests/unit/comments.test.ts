@@ -6,7 +6,7 @@ import { BlogCommentHandler } from "../../features/comments.handler";
 import { BlogCommentModel, ensureCommentIndexes } from "../../features/comments.model";
 import { BLOG_DEFAULT, BLOG_PERM, BlogPermissions } from "../../features/constants";
 import { BlogModel } from "../../features/model";
-import { BlogPolicy } from "../../features/permission";
+import { BlogPermissionError, BlogPolicy } from "../../features/permission";
 import { initialSettings, resolveBlogPolicy } from "../../features/settings.model";
 import type { BlogCommentDoc } from "../../features/types";
 import { makeBlog } from "../helpers/fixtures";
@@ -417,6 +417,35 @@ describe("comment persistence", () => {
 });
 
 describe("comment handler protocol", () => {
+    it.each([
+        ["postReply", { content: "@[](/user/1) denied mention" }],
+        ["postTailReply", { drid: id.toHexString(), content: "@[](/user/1) denied mention" }],
+        ["postLike", { drid: id.toHexString(), liked: true }],
+        ["postLike", { drid: id.toHexString(), drrid: tailId.toHexString(), liked: false }],
+        ["postDeleteReply", { drid: id.toHexString() }],
+        ["postDeleteTailReply", { drid: id.toHexString(), drrid: tailId.toHexString() }],
+    ] as const)("rejects %s on an unreadable draft before target lookup or side effects", async (operation, args) => {
+        const h = handler(2);
+        h.ddoc = { ...article, draft: true };
+        const call = h[operation].bind(h) as unknown as (args: Record<string, unknown>) => Promise<void>;
+        await expect(dispatchHandler(h, "post", () => call({ domainId: "system", ...args }))).rejects.toBeInstanceOf(
+            BlogPermissionError,
+        );
+        expect(DocumentModel.coll.findOne).not.toHaveBeenCalled();
+        for (const effect of [
+            DocumentModel.add,
+            DocumentModel.push,
+            DocumentModel.coll.updateOne,
+            DocumentModel.coll.findOneAndDelete,
+            DocumentModel.collStatus.findOneAndUpdate,
+            UserModel.getList,
+            MessageModel.send,
+            OplogModel.log,
+        ]) {
+            expect(effect).not.toHaveBeenCalled();
+        }
+    });
+
     it("loads both comment levels with user-specific likes, deletion controls and legacy empty replies", async () => {
         const h = handler(2);
         const legacy = { ...comment(), _id: new ObjectId(), docId: new ObjectId(), owner: 3 };

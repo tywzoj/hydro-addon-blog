@@ -2,7 +2,46 @@ import { ObjectId } from "mongodb";
 
 import { BlogConfirmMessages, ReviewMessages } from "../../features/constants";
 import type { BlogDoc, BlogStatusDoc } from "../../features/types";
-import { confirmAction, createPost, expect, fillPost, submitPost, test } from "./fixtures";
+import { blogState, confirmAction, createPost, expect, fillPost, submitPost, test } from "./fixtures";
+
+test("article JSON responses omit IPs for readers, authors and root while preserving storage", async ({
+    page,
+    viewer,
+    editor,
+    db,
+}) => {
+    const path = await createPost(page, "Article IP privacy");
+    const docId = new ObjectId(path.split("/").pop()!);
+    const posts = db.collection<BlogDoc>("document");
+    const stored = (await posts.findOne({ docType: 70, docId }))!;
+    expect(stored.ip).toEqual(expect.any(String));
+    for (const reader of [page, viewer, editor]) {
+        for (const prefix of ["", "/d/blogrestricted"]) {
+            for (const target of ["/blog", "/blog/2", path, ...(reader === viewer ? [] : [`${path}/edit`])]) {
+                const response = await reader.request.get(`${prefix}${target}`, {
+                    headers: { Accept: "application/json" },
+                });
+                expect(response.ok(), await response.text()).toBe(true);
+                const body = (await response.json()) as { ddoc?: BlogDoc; ddocs?: BlogDoc[] };
+                const doc = body.ddoc ?? body.ddocs?.find((entry) => entry.docId.toString() === docId.toHexString());
+                expect(doc).toMatchObject({ title: "Article IP privacy" });
+                expect(doc).not.toHaveProperty("ip");
+            }
+        }
+    }
+    expect((await posts.findOne({ docType: 70, docId }))?.ip).toBe(stored.ip);
+    const pinned = await editor.request.post(`${path}/edit`, {
+        headers: { Referer: page.url(), Accept: "application/json" },
+        form: { operation: "pin", pin: "true" },
+    });
+    expect(pinned.ok(), await pinned.text()).toBe(true);
+    const updated = (await posts.findOne({ docType: 70, docId }))!;
+    expect(updated).toMatchObject({ pin: true, ip: expect.any(String) });
+    const editAudit = await db.collection("oplog").findOne({ type: "blog.edit", docId });
+    expect(editAudit).toMatchObject({ ip: stored.ip, operateIp: expect.any(String) });
+    const response = await page.request.get(path, { headers: { Accept: "application/json" } });
+    expect(await response.json()).not.toHaveProperty("ddoc.ip");
+});
 
 test("draft publication and edits persist across real author and viewer sessions", async ({ page, viewer, db }) => {
     const title = "E2E draft publication";
@@ -38,26 +77,62 @@ test("a non-owner cannot create, edit, or delete another user's posts", async ({
     const title = "E2E protected post";
     const path = await createPost(page, title);
     const docId = new ObjectId(path.split("/").pop()!);
+    const sentinel = await createPost(page, "E2E unrelated protected post");
+    const thread = await page.request.post(path, {
+        headers: { Referer: page.url(), Accept: "application/json" },
+        data: { operation: "reply", content: "Protected article thread" },
+    });
+    expect(thread.ok(), await thread.text()).toBe(true);
+    const { drid } = (await thread.json()) as { drid: string };
+    const before = await blogState(db, [path, sentinel]);
     await viewer.goto("/blog/2", { waitUntil: "domcontentloaded" });
     for (const target of ["/blog/2/create", `${path}/edit`]) {
         const response = await viewer.goto(target, { waitUntil: "domcontentloaded" });
         expect(response?.status()).toBe(403);
     }
-    for (const operation of ["submit", "delete"]) {
-        const response = await viewer.request.post(`${path}/edit`, {
+    for (const operation of ["submit", "delete", "pin", "publish"]) {
+        const response = await viewer.request.post(`${path}/edit?uid=3&did=${sentinel.split("/").pop()!}`, {
             headers: { Referer: viewer.url() },
-            form: { operation, title: "Unauthorized mutation", content: "Rejected body", draft: "false", pin: "false" },
+            data: {
+                operation,
+                title: "Unauthorized mutation",
+                content: "Rejected body",
+                draft: false,
+                pin: true,
+                uid: 3,
+                owner: 3,
+                did: sentinel.split("/").pop()!,
+                role: "root",
+            },
         });
         expect(response.status()).toBe(403);
+        expect(await blogState(db, [path, sentinel])).toEqual(before);
     }
     const creation = await viewer.request.post("/blog/2/create", {
         headers: { Referer: viewer.url() },
-        form: { operation: "submit", title: "Unauthorized creation", content: "Rejected body" },
+        data: { operation: "submit", title: "Unauthorized creation", content: "Rejected body", uid: 3, owner: 3 },
     });
     expect(creation.status()).toBe(403);
+    const commentDeletion = await viewer.request.post(path, {
+        headers: { Referer: viewer.url() },
+        data: { operation: "delete_reply", drid, owner: 3 },
+    });
+    expect(commentDeletion.status()).toBe(403);
+    const mismatchedAuthor = await page.request.post(`/blog/3/${docId.toHexString()}/edit`, {
+        headers: { Referer: page.url() },
+        data: { operation: "delete", uid: 2 },
+    });
+    expect(mismatchedAuthor.ok()).toBe(false);
+    expect(await blogState(db, [path, sentinel])).toEqual(before);
     const posts = db.collection<BlogDoc>("document");
     expect((await posts.findOne({ docId }))?.title).toBe(title);
     expect(await posts.countDocuments({ title: "Unauthorized creation" })).toBe(0);
+    const permitted = await page.request.post(`${path}/edit`, {
+        headers: { Referer: page.url() },
+        data: { operation: "pin", pin: true },
+    });
+    expect(permitted.ok(), await permitted.text()).toBe(true);
+    expect(await posts.findOne({ docId })).toMatchObject({ pin: true });
     await page.goto(path, { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
 });

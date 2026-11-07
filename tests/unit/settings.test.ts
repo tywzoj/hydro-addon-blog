@@ -2,7 +2,7 @@ import type { Context, Handler as HydroHandler } from "hydrooj";
 import type { Collection } from "mongodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { BLOG_DEFAULT, BLOG_PERM } from "../../features/permission";
+import { BLOG_DEFAULT, BLOG_PERM, BlogPermissionError } from "../../features/permission";
 import { BlogReviewModel } from "../../features/review.model";
 import { applySettingsHandler, parsePermissions } from "../../features/settings.handler";
 import type { BlogAssignment, BlogSettings } from "../../features/settings.model";
@@ -77,6 +77,13 @@ describe("blog settings persistence", () => {
         expect((await BlogSettingsModel.policy(makeUser(2))).role).toBe("default");
         expect((await BlogSettingsModel.policy(makeUser(0, 0))).role).toBe("guest");
         expect(assignments.findOne).toHaveBeenCalledTimes(2);
+        settings.roles.find((role) => role.name === "default")!.permissions = "0";
+        const nextRequest = new Handler();
+        nextRequest.user = request.user;
+        const refreshed = await BlogSettingsModel.forRequest(nextRequest as unknown as HydroHandler);
+        expect(refreshed.has("ACCESS")).toBe(false);
+        expect(refreshed.role).toBe("default");
+        expect(assignments.findOne).toHaveBeenCalledTimes(3);
     });
 
     it("rejects missing effective roles instead of granting fallback permissions", () => {
@@ -444,6 +451,43 @@ describe("settings handler boundaries", () => {
         reminders: "true",
         intervalMinutes: "1440",
     };
+
+    it.each([
+        ["blog_settings", "postReviewSettings"],
+        ["blog_settings_roles", "postReviewSettings"],
+        ["blog_settings_permissions", "postReviewSettings"],
+        ["blog_settings_users", "postReviewSettings"],
+        ["blog_settings_roles", "postAdd"],
+        ["blog_settings_roles", "postDelete"],
+        ["blog_settings_roles", "postDeleteRoles"],
+        ["blog_settings_permissions", "post"],
+        ["blog_settings_users", "postAssign"],
+        ["blog_settings_users", "postSetUsers"],
+    ] as const)("does not let sudo substitute for management authority at %s / %s", async (name, operation) => {
+        const h = handler(name, BLOG_DEFAULT);
+        h.session.sudo = true;
+        h.request.body.permissions = { guest: ["0", "1"] };
+        const approve = vi.spyOn(BlogReviewModel, "approvePending").mockResolvedValue(0);
+        await expect(
+            dispatchHandler({ prepare: () => h.prepare() }, "post", () =>
+                h[operation]({
+                    ...disabled,
+                    confirmDisable: true,
+                    role: "root",
+                    roles: "root",
+                    uid: "2",
+                    uids: [2, 3],
+                }),
+            ),
+        ).rejects.toBeInstanceOf(BlogPermissionError);
+        expect(findOne).not.toHaveBeenCalled();
+        expect(updateOne).not.toHaveBeenCalled();
+        expect(assignments.bulkWrite).not.toHaveBeenCalled();
+        expect(approve).not.toHaveBeenCalled();
+        expect(OplogModel.log).not.toHaveBeenCalled();
+        expect(MessageModel.send).not.toHaveBeenCalled();
+        expect(h.back).not.toHaveBeenCalled();
+    });
 
     it("uses the system domain only for sudo links", () => {
         const baseUrl = vi.spyOn(Handler.prototype, "url");

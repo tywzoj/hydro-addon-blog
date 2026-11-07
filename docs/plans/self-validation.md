@@ -230,3 +230,157 @@ a claim of exhaustive application or concurrency verification.
 E2E and MCP were not rerun for this test-only extension: no production handler,
 model, template or browser behavior changed. Existing real-Hydro coverage remains
 separate evidence. No current-head CI run or compatibility matrix is claimed.
+
+### Data Authorization Regression Extension
+
+The next extension starts from `da0798a` and focuses on addon data safety:
+unauthorized create/read/update/delete, independent permissions, target binding,
+private responses and denial before business side effects. It does not restore
+the abandoned general-security suite or introduce framework attack probes.
+
+Acceptance criteria are source-derived denials with meaningful positive
+controls, protected-state comparisons after rejected requests, per-request
+authorization after role revocation, and preservation of existing allowed
+operations. Any demonstrated business defect requires maintainer confirmation
+before a production fix.
+
+The changes add 28 UT cases, extend existing request-policy and review identity
+assertions, add two real-session revocation E2E cases, and strengthen four existing
+E2E scenarios. The shared `blogState` helper captures articles/comments,
+statuses, receipts and scoped business messages/audits through read-only database
+queries. Unrelated sentinel articles help detect accidental query widening.
+The [testing inventory](../testing.md#data-authorization-regression-inventory)
+maps each boundary to its regression.
+
+Important boundaries preserved:
+
+- Authentication is still required even if a guest mask includes write grants.
+- Own and others grants remain separate, and metadata operations do not acquire
+  an unrelated content-edit requirement.
+- New requests reload policy; neither an old browser session nor valid sudo
+  restores a revoked grant.
+- Unreadable drafts deny comment writes/deletion, but authorized moderation of
+  a readable draft remains allowed.
+- A completed hidden-report receipt can be acknowledged by its reporter without
+  exposing hidden content or repeating counts, messages and audits. Pending
+  receipt recovery is a different contract and is not required to be write-free.
+- Safely ignored extra fields are not treated as an error requirement. Trusted
+  identity, ownership and review state remain server-controlled.
+
+Source review did not establish a confirmed business authorization bypass.
+It did identify an unresolved privacy-contract question: article `ip` is
+persisted by `features/model.ts:35-40`, updated from the current editor request
+by `features/handler.ts:290`, and is not removed by
+`features/review.model.ts:39-56`. Additional source inspection established that
+the installed framework's `base.ts:95` JSON path and `serializer.ts:3` do not
+strip `ip`. The default source path therefore retains it for article JSON
+readers; this is source evidence, not a separate runtime observation. Unlike
+comment-IP exclusion, its intended audience was not explicitly defined at that
+point. The maintainer was unavailable for the initial confirmation, so the
+test-only extension made no production fix. The later confirmed decision and
+implementation are recorded under [Article IP Response Fix](#article-ip-response-fix).
+
+The read-only security review covered production paths at `da0798a`, not just the
+test diff (line references below precede the IP response fix):
+
+| Boundary | Source basis |
+| --- | --- |
+| Admission and URL-author binding | `features/handler.base.ts:14`, `features/handler.base.ts:46` |
+| Strict ownership grants and independent mutation checks | `features/permission.ts:91`, `features/handler.ts:274` |
+| Article-scoped comment and nested reply lookup | `features/comments.model.ts:23`, `features/comments.model.ts:33` |
+| Reviewer authority, authenticated reporter identity and conditional writes | `features/review.handler.ts:59`, `features/review.handler.ts:145`, `features/review.model.ts:126` |
+| Management permission, request-local policy and stale settings | `features/settings.handler.ts:62`, `features/settings.model.ts:174`, `features/settings.model.ts:183` |
+
+Local validation uses Node.js `24.22.1`, Hydro `5.0.7`, framework `0.3.2` and UI
+`4.58.5`. `yarn lint`, `yarn typecheck` (41 files) and `yarn test:coverage` pass:
+356 UT, with the same 99.84% scoped branch coverage. The increase is in
+authorization/data assertions, not a coverage-percentage claim.
+
+The focused command below passed five business cases and six real login cases
+in the owned runtime. Artifacts: `test-results/hydro-blog-47669-d5a38d4a/`.
+
+```sh
+yarn test:e2e --grep 'a non-owner cannot|revoked delegates|comments validate target chains|review reports deduplicate|global settings role assignment'
+```
+
+Before the final review/reset revocation case and batch role-deletion denial
+were added, `yarn test:e2e` passed all 43 cases (six authentication setups and
+37 business scenarios).
+Artifacts: `test-results/hydro-blog-49168-5a68b992/`. Both the focused and full
+runs exited successfully; their named MongoDB containers, temporary Hydro
+storage and saved authentication directories were confirmed removed. A final
+`yarn lint`, `yarn typecheck` and `yarn test:coverage` also passed on the current
+tree with 356 UT. The final additions passed lint, type checking and the following
+focused run (two business cases and six real login cases), with artifacts under
+`test-results/hydro-blog-56629-53ccfa15/`:
+
+```sh
+yarn test:e2e --grep 'global settings role assignment|review and reset revocation'
+```
+
+The final `yarn test:e2e` run passed all 44 cases (six authentication setups and
+38 business scenarios), including review/reset revocation and batch role-deletion
+denial. Artifacts: `test-results/hydro-blog-57423-b6fe5eac/`. The focused and final
+runs' named MongoDB containers, temporary Hydro storage and saved authentication
+directories were confirmed removed. Production sources and runtime/coverage
+configuration remain unchanged.
+
+No separate MCP browser session was needed for these request/data assertions;
+the real-browser suite is the runtime evidence. No deployment security
+certification, additional browser/platform matrix, or current-head remote CI
+result is implied.
+
+### Article IP Response Fix
+
+On 2026-11-07, the maintainer confirmed that IP addresses must not be returned
+and authorized the production fix. The acceptance criteria are: no article or
+legacy embedded reply IP in ordinary or review response objects, no privilege
+exception, unchanged stored IPs/audit snapshots, preserved review tokens and
+unchanged authorization.
+
+The shared response-only `articleForResponse` projection is applied at all six
+article response paths: home/user lists, detail/editor, review queue/detail.
+It clones articles and legacy replies rather than mutating prepared documents.
+The existing review-metadata projection remains separate because edit/delete
+audit snapshots also use it. Database reads/writes, authorization, dependency
+versions and native audit calls are unchanged.
+
+Upstream research rechecked official Hydro commit
+`3bae56fe8edddff12346bcb1c8281269c94688d8`:
+`framework/framework/serializer.ts` does not exclude IP fields, and
+`packages/hydrooj/src/model/oplog.ts` persists supplied audit data along with
+the operator's `operateIp`. The installed framework `0.3.2` and Hydro `5.0.7`
+match these relevant behaviors. The addon therefore filters response copies
+explicitly rather than relying on framework serialization or modifying audit
+data. The general official documentation was consulted; these source paths
+define the specific serialization/audit contract.
+
+Before the fix, eleven new UT cases failed on returned IPs. Two new real-Hydro
+JSON cases also failed with returned loopback addresses, confirming the prior
+source-derived propagation at runtime. Expected-failure artifacts:
+`test-results/article-ip-ut-before.log` and
+`test-results/hydro-blog-63710-33d1102a/`.
+
+Post-fix validation:
+
+```sh
+yarn lint
+yarn typecheck
+yarn test:coverage
+yarn test:e2e --grep 'JSON responses omit IPs|guest policy and domain independence'
+```
+
+Lint, the 41-file scoped type check and all 367 UT pass; scoped branch coverage
+remains 99.84%. The focused E2E run passes nine cases (six real logins and three
+business cases), including author/viewer/root, reviewer and guest JSON checks,
+restricted-domain routes, retained database/audit IPs and successful review
+approval. Artifacts: `test-results/hydro-blog-64446-97637f89/`.
+Both the expected-failure and passing runs removed their owned MongoDB containers,
+temporary Hydro storage and authentication files; cleanup was checked explicitly.
+
+The preceding full 44-case browser run belongs to the test-only extension;
+the now-46-case full suite was not rerun for this response-only fix. The focused
+cases cover every changed response path, and the full UT suite covers existing
+policy and write behavior. No separate MCP session or remote CI run is claimed.
+The legacy inline-reply regression uses UT fixtures rather than E2E database
+writes. No production data was modified.

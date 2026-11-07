@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 
 import type { BlogCommentDoc, BlogDoc } from "../../features/types";
 import { accounts } from "./accounts";
-import { createPost, expect, test } from "./fixtures";
+import { blogState, createPost, expect, test } from "./fixtures";
 
 async function post(page: Page, path: string, data: Record<string, string | boolean | number | undefined>) {
     return page.request.post(path, {
@@ -146,7 +146,17 @@ test("comments validate target chains and remain immutable with draft likes disa
     await viewer.goto(path, { waitUntil: "domcontentloaded" });
     const { drid } = await addComment(viewer, path, "Original comment");
     const { drrid } = await addComment(viewer, path, "Original reply", drid);
+    const stored = (await db.collection<BlogCommentDoc>("document").findOne({ docId: new ObjectId(drid) }))!;
+    expect(stored.ip).toBeTruthy();
+    expect(stored.reply![0].ip).toBeTruthy();
+    const response = await viewer.request.get(path, { headers: { Accept: "application/json" } });
+    const body = (await response.json()) as { comments: { ip?: string; reply: { ip?: string }[] }[] };
+    expect(body.comments).toHaveLength(1);
+    expect(body.comments[0].reply).toHaveLength(1);
+    expect(body.comments[0]).not.toHaveProperty("ip");
+    expect(body.comments[0].reply[0]).not.toHaveProperty("ip");
     const other = await createPost(page, "Other comments article");
+    const boundState = await blogState(db, [path, other]);
     for (const data of [
         { operation: "tail_reply", drid: drid!, content: "Wrong article" },
         { operation: "delete_reply", drid: drid! },
@@ -154,11 +164,14 @@ test("comments validate target chains and remain immutable with draft likes disa
         { operation: "like", drid: drid!, drrid: drrid!, liked: true },
     ]) {
         expect((await post(editor, other, data)).ok()).toBe(false);
+        expect(await blogState(db, [path, other])).toEqual(boundState);
     }
     const second = await addComment(viewer, path, "Second top");
+    const immutableState = await blogState(db, [path, other]);
     expect((await post(editor, path, { operation: "delete_tail_reply", drid: second.drid!, drrid: drrid! })).ok()).toBe(
         false,
     );
+    expect(await blogState(db, [path, other])).toEqual(immutableState);
     for (const operation of ["edit_reply", "edit_tail_reply", "set_lock", "reaction"]) {
         expect(
             (
@@ -174,16 +187,32 @@ test("comments validate target chains and remain immutable with draft likes disa
         ).toBe(false);
     }
     expect((await editor.request.get(`${path}/${drid}/raw`)).ok()).toBe(false);
+    expect(await blogState(db, [path, other])).toEqual(immutableState);
     expect((await post(page, `${path}/edit`, { operation: "publish", draft: true })).ok()).toBe(true);
+    const withdrawnState = await blogState(db, [path, other]);
     expect((await viewer.goto(path, { waitUntil: "domcontentloaded" }))?.status()).toBe(403);
+    for (const data of [
+        { operation: "reply", content: "@[](/user/2) unreadable draft" },
+        { operation: "tail_reply", drid: drid!, content: "@[](/user/2) unreadable draft" },
+        { operation: "like", drid: drid!, liked: true },
+        { operation: "like", drid: drid!, drrid: drrid!, liked: false },
+        { operation: "delete_reply", drid: drid! },
+        { operation: "delete_tail_reply", drid: drid!, drrid: drrid! },
+    ]) {
+        expect((await post(viewer, path, data)).status()).toBe(403);
+        expect(await blogState(db, [path, other])).toEqual(withdrawnState);
+    }
     for (const liked of [true, false]) {
         expect((await post(editor, path, { operation: "like", drid: drid!, drrid: drrid!, liked })).status()).toBe(403);
     }
     expect((await post(editor, path, { operation: "reply", content: "Draft comment" })).status()).toBe(403);
+    expect(await blogState(db, [path, other])).toEqual(withdrawnState);
+    const otherBeforeModeration = await blogState(db, [other]);
     await editor.goto(path, { waitUntil: "domcontentloaded" });
     await expect(editor.locator("[data-blog-like]")).toHaveCount(0);
     await expect(editor.locator("#blog-comments")).toContainText("Original comment");
     expect((await post(editor, path, { operation: "delete_tail_reply", drid: drid!, drrid: drrid! })).ok()).toBe(true);
+    expect(await blogState(db, [other])).toEqual(otherBeforeModeration);
     expect((await post(page, `${path}/edit`, { operation: "publish", draft: false })).ok()).toBe(true);
     await viewer.goto(path, { waitUntil: "domcontentloaded" });
     await expect(viewer.locator("#blog-comments")).toContainText("Original comment");

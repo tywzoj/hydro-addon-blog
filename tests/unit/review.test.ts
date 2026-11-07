@@ -549,6 +549,38 @@ describe("native review handler boundaries", () => {
         return handler;
     }
 
+    it.each(["/blog/review", "/blog/review/:did"])(
+        "omits article IPs at %s without hiding review tokens",
+        async (path) => {
+            article = makeBlog({
+                ip: "192.0.2.20",
+                reviewPending: true,
+                contentVersion: 2,
+                reviewGeneration: 3,
+                reportCount: 4,
+                reply: [{ _id: new ObjectId(), owner: 3, content: "Legacy reply", ip: "192.0.2.21" }],
+            });
+            const handler = reviewer(path);
+            const cursor = { project: vi.fn(), sort: vi.fn() };
+            cursor.project.mockReturnValue(cursor);
+            cursor.sort.mockReturnValue(cursor);
+            DocumentModel.getMulti.mockReturnValue(cursor);
+            reports.find.mockReturnValue(cursor);
+            const list = path === "/blog/review";
+            handler.ctx.db.paginate.mockResolvedValue([list ? [snapshot()] : [], 1, 1]);
+            UserModel.getList.mockResolvedValue({});
+            DocumentModel.count.mockResolvedValue(1);
+            await dispatchHandler(handler, "get", () => handler.get({ domainId: "system" }));
+            const body = handler.response.body as { ddoc?: BlogDoc; ddocs?: BlogDoc[] };
+            const exposed = list ? body.ddocs![0] : body.ddoc!;
+            expect(exposed).not.toHaveProperty("ip");
+            expect(exposed.reply[0]).not.toHaveProperty("ip");
+            expect(exposed).toMatchObject({ contentVersion: 2, reviewGeneration: 3, reportCount: 4 });
+            expect(article.ip).toBe("192.0.2.20");
+            expect(article.reply[0].ip).toBe("192.0.2.21");
+        },
+    );
+
     it("loads review targets by converted ID and rejects missing targets", async () => {
         const handler = reviewer();
         await handler._prepare({ domainId: "restricted", did: article!.docId.toHexString() });
@@ -658,11 +690,18 @@ describe("native review handler boundaries", () => {
                 domainId: "restricted",
                 version: "0",
                 comments: "  Please review  ",
+                reporter: 3,
+                uid: 3,
+                owner: 9,
+                reportCount: 999,
             }),
         );
         expect(handler.limitRate).toHaveBeenCalledWith("report_blog", 3600, 60);
         expect(receipts.size).toBe(1);
-        expect(article).toMatchObject({ reportCount: 1, draft: reportLimit === 0 });
+        expect(article).toMatchObject({ owner: 1, reportCount: 1, draft: reportLimit === 0 });
+        expect([...receipts.values()]).toEqual([
+            expect.objectContaining({ reporter: 9, version: 0, comments: "Please review" }),
+        ]);
         expect(OplogModel.log).toHaveBeenCalledWith(
             handler,
             "blog.report",
@@ -755,9 +794,23 @@ describe("native review handler boundaries", () => {
         ).rejects.toThrow();
         const handler = reviewer("/blog/review/:did/reset", BLOG_PERM.RESET_REVIEW_COUNTERS);
         const prepare = vi.spyOn(handler, "prepare");
-        await dispatchHandler(handler, "post", () => handler.postResetReview({ domainId: "system", revision: "0" }));
+        await dispatchHandler(handler, "post", () =>
+            handler.postResetReview({
+                domainId: "system",
+                revision: "0",
+                draft: false,
+                requiresReview: false,
+                owner: 9,
+            }),
+        );
         expect(prepare).toHaveBeenCalledOnce();
-        expect(article).toMatchObject({ draft: true, requiresReview: true, rejectionCount: 0, reportCount: 0 });
+        expect(article).toMatchObject({
+            owner: 1,
+            draft: true,
+            requiresReview: true,
+            rejectionCount: 0,
+            reportCount: 0,
+        });
     });
 
     it("hides report counts from reset-only users without denying their reset operation", async () => {

@@ -7,7 +7,7 @@ import { ObjectId } from "mongodb";
 import { ReviewMessages } from "../../features/constants";
 import type { BlogDoc, BlogSettings } from "../../features/types";
 import { accounts } from "./accounts";
-import { confirmAction, createPost, expect, fillPost, submitPost, test as base } from "./fixtures";
+import { blogState, confirmAction, createPost, expect, fillPost, submitPost, test as base } from "./fixtures";
 
 const test = base.extend<{ reporters: Page[] }>({
     reporters: async ({ browser, baseURL }, use) => {
@@ -174,6 +174,41 @@ test.afterEach(async ({ editor }) => {
         });
         expect(deleted.ok()).toBe(true);
     }
+});
+
+test("review JSON responses omit IPs without losing decision tokens or stored addresses", async ({
+    page,
+    viewer,
+    editor,
+    db,
+}) => {
+    await configure(editor, "before", false);
+    await reviewerRole(editor, ["ACCESS", "REVIEW"]);
+    const path = await makePost(page, "Review IP privacy");
+    const stored = await postDoc(db, path);
+    expect(stored.ip).toEqual(expect.any(String));
+    for (const reader of [viewer, editor]) {
+        for (const prefix of ["", "/d/blogrestricted"]) {
+            const queue = await reader.request.get(`${prefix}/blog/review`, {
+                headers: { Accept: "application/json" },
+            });
+            expect(queue.ok()).toBe(true);
+            const { ddocs } = (await queue.json()) as { ddocs: BlogDoc[] };
+            const entry = ddocs.find((doc) => doc.docId.toString() === did(path).toHexString());
+            expect(entry).toMatchObject({ title: stored.title, reviewPending: true });
+            expect(entry).not.toHaveProperty("ip");
+            const response = await reader.request.get(`${prefix}${reviewPath(path)}`, {
+                headers: { Accept: "application/json" },
+            });
+            expect(response.ok()).toBe(true);
+            const { ddoc } = (await response.json()) as { ddoc: BlogDoc };
+            expect(ddoc).not.toHaveProperty("ip");
+            expect(ddoc).toMatchObject({ title: stored.title, reviewGeneration: stored.reviewGeneration });
+        }
+    }
+    expect((await postDoc(db, path)).ip).toBe(stored.ip);
+    expect((await decide(viewer, path, "approve")).ok()).toBe(true);
+    expect(await postDoc(db, path)).toMatchObject({ draft: false, ip: stored.ip });
 });
 
 test("review before publication enforces reviewer-only access, approval, comments and stale decisions", async ({
@@ -467,6 +502,17 @@ test("review reports deduplicate, cross the strict threshold, restore visibility
     expect(doc).toMatchObject({ draft: true, reportCount: 4, reviewPending: true });
     expect(doc.firstPublishAt).toEqual(initial.firstPublishAt);
     expect((await viewer.goto(path, navigation))?.status()).toBe(403);
+    const hiddenState = await blogState(db, [path]);
+    const ownReceipt = await report(viewer, path, 0, "Must not replace the accepted private report");
+    expect(ownReceipt.ok()).toBe(true);
+    expect(await ownReceipt.json()).toMatchObject({ reported: true, duplicate: true });
+    expect(await ownReceipt.text()).not.toContain("private report");
+    expect(await ownReceipt.text()).not.toContain(initial.content);
+    expect(await blogState(db, [path])).toEqual(hiddenState);
+    const foreignReceipt = await report(reporters[2], path, 0, "Cannot borrow another reporter's acknowledgement");
+    expect(foreignReceipt.status()).toBe(403);
+    expect(await foreignReceipt.text()).not.toContain(initial.content);
+    expect(await blogState(db, [path])).toEqual(hiddenState);
     expect(
         await db.collection("message").countDocuments({
             to: 2,
@@ -562,6 +608,68 @@ test("review rejection limit and independent reset preserve holds through withdr
     expect((await publication(page, path, false)).ok()).toBe(true);
     expect(await postDoc(db, path)).toMatchObject({ draft: true, reviewPending: true });
     expect((await decide(editor, path, "approve")).ok()).toBe(true);
+    expect(await postDoc(db, path)).toMatchObject({ draft: false, requiresReview: false });
+});
+
+test("review and reset revocation rejects captured requests without changing protected data", async ({
+    page,
+    viewer,
+    editor,
+    db,
+}) => {
+    await configure(editor, "before", false);
+    await reviewerRole(editor, ["ACCESS", "REVIEW", "RESET_REVIEW_COUNTERS"]);
+    const path = await makePost(page, "Review revocation private target");
+    const sentinel = await makePost(page, "Review revocation unrelated sentinel");
+    expect((await decide(viewer, path, "reject", "Authorized rejection")).ok()).toBe(true);
+    expect((await publication(page, path, false)).ok()).toBe(true);
+    const captured = await tokens(viewer, path);
+    await viewer.goto(`${reviewPath(path)}/reset`, navigation);
+    const revision = await viewer.locator('input[name="revision"]').inputValue();
+    const pending = await postDoc(db, path);
+    expect(pending).toMatchObject({
+        reviewPending: true,
+        rejectionCount: 1,
+        reviewGeneration: Number(captured.generation),
+        writeRevision: Number(revision),
+    });
+    expect(pending.contentVersion ?? 0).toBe(Number(captured.version));
+
+    await reviewerRole(editor, ["ACCESS", "VIEW_PUBLISHED"]);
+    const before = await blogState(db, [path, sentinel]);
+    for (const prefix of ["", "/d/blogrestricted"]) {
+        for (const target of ["/blog/review", reviewPath(path), `${reviewPath(path)}/reset`]) {
+            const denied = await viewer.request.get(`${prefix}${target}`, {
+                headers: { Accept: "application/json" },
+            });
+            expect(denied.status()).toBe(403);
+            expect(await denied.text()).not.toContain("Review revocation private target");
+            expect(await blogState(db, [path, sentinel])).toEqual(before);
+        }
+        for (const decision of ["approve", "reject"]) {
+            const denied = await viewer.request.post(`${prefix}${reviewPath(path)}`, {
+                headers: headers(viewer),
+                form: { operation: "decide", ...captured, decision, comments: "Denied after revocation" },
+            });
+            expect(denied.status()).toBe(403);
+            expect(await blogState(db, [path, sentinel])).toEqual(before);
+        }
+        const deniedReset = await viewer.request.post(`${prefix}${reviewPath(path)}/reset`, {
+            headers: headers(viewer),
+            form: { operation: "reset_review", revision },
+        });
+        expect(deniedReset.status()).toBe(403);
+        expect(await blogState(db, [path, sentinel])).toEqual(before);
+    }
+
+    await reviewerRole(editor, ["ACCESS", "REVIEW", "RESET_REVIEW_COUNTERS"]);
+    const reset = await viewer.request.post(`${reviewPath(path)}/reset`, {
+        headers: headers(viewer),
+        form: { operation: "reset_review", revision },
+    });
+    expect(reset.ok(), await reset.text()).toBe(true);
+    expect(await postDoc(db, path)).toMatchObject({ rejectionCount: 0, reviewPending: true, draft: true });
+    expect((await decide(viewer, path, "approve")).ok()).toBe(true);
     expect(await postDoc(db, path)).toMatchObject({ draft: false, requiresReview: false });
 });
 

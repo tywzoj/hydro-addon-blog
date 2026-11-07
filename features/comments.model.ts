@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 
-import type { Context, ObjectId } from "hydrooj";
+import type { Context, Filter, ObjectId } from "hydrooj";
 import { DocumentModel, DocumentNotFoundError, ValidationError } from "hydrooj";
-import type { Collection, Filter } from "mongodb";
+import type { Collection } from "mongodb";
 
 import { BlogMessages, SYSTEM_DOMAIN, TYPE_BLOG, TYPE_BLOG_COMMENT } from "./constants";
 import type { BlogCommentDoc, BlogCommentStatus, BlogDoc, BlogReplyDoc } from "./types";

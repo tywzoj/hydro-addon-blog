@@ -36,6 +36,8 @@ For version-sensitive decisions, record the upstream commit, tag, or installed p
 - Reuse existing constants, types, helpers, and localization mechanisms.
 - Prefer tools, APIs, utilities, and reusable code exposed by Hydro. Inspect the compatible upstream implementation before adding an equivalent; implement a custom alternative only when no suitable exposed implementation exists, and document why reuse is not possible.
 - Keep shared contracts consistent across server code, templates, frontend code, and translations.
+- Apply the [Hydro-first dependency policy](#third-party-dependencies) to all
+  third-party runtime values and types, not only MongoDB.
 - Preserve the dependency patching workflow. Inspect relevant patches when changing affected dependencies.
 - Add concise English comments only when they clarify non-obvious intent or constraints.
 
@@ -58,6 +60,37 @@ The project's coverage goal includes both UT and E2E; neither replaces the other
 - Follow `features/constants.ts`: centralize shared domain/protocol strings and meaningful numeric settings, and reuse them across models, handlers, frontend code, and localization instead of repeating literals.
 - Prefer `as const` value objects for related values and derive literal unions with `typeof` and `keyof`. Reuse named types for repeated object shapes or `Pick`/union declarations; do not maintain a separate literal-type list for values already defined at runtime.
 - Keep constants at the smallest useful scope, and do not merge equal values with different meanings. Preserve persisted identifiers, permission bits, wire values, and defaults during extraction. Ordinary arithmetic, declarative template markup, and independent test expectations need not be replaced merely because the same text appears elsewhere.
+
+### Third-Party Dependencies
+
+For every third-party dependency, first check whether Hydro exposes the required
+runtime value, type, or equivalent API. If it does, use that public export:
+`hydrooj` for server code, or the appropriate supported Hydro frontend API.
+Direct third-party imports or new direct dependencies are allowed only when no
+suitable Hydro export exists for the supported version and execution context.
+Convenience or an existing dependency declaration is not an exception.
+
+Before adding or changing a third-party import:
+
+1. Inspect the official Hydro source and compatible installed public exports.
+   Do not assume an export exists or import private Hydro internals as a workaround.
+2. Prefer the Hydro export for both runtime values and type-only imports.
+3. If no suitable export exists, document the checked source/version and why
+   direct use is necessary in the PR and relevant development documentation.
+   Declare only the dependency and scope actually needed.
+
+For MongoDB, addon runtime values such as `ObjectId` must come from `hydrooj`.
+Prefer Hydro's `Filter` and `ObjectId` types too. Types that Hydro does not directly
+export, such as `Collection` and `SortDirection`, may use `import type` from
+`mongodb`. ESLint enforces this known boundary for the addon entry, features,
+frontend and ordinary unit tests; the same source-checking policy applies to
+other third-party libraries even when no lint guard exists yet.
+
+Standalone verification tools and the Hydro test mock use the MongoDB driver
+because they must provision isolated databases or supply the mocked API without
+bootstrapping the application being tested. This is a documented execution-boundary
+exception, not a general exemption for tests; ordinary unit tests use Hydro exports.
+Node.js built-in modules are not third-party dependencies.
 
 ### UI and Styling
 

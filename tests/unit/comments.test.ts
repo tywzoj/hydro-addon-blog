@@ -1,5 +1,5 @@
 import type { Context } from "hydrooj";
-import { ObjectId } from "mongodb";
+import { ObjectId } from "hydrooj";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BlogCommentHandler } from "../../features/comments.handler";

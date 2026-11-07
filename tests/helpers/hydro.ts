@@ -5,7 +5,7 @@ import type * as Permissions from "@hydrooj/common/permission";
 import type * as Decorators from "@hydrooj/framework/decorators";
 import type * as Errors from "@hydrooj/framework/error";
 import type * as Validators from "@hydrooj/framework/validator";
-import type { ObjectId } from "mongodb";
+import { ObjectId } from "mongodb";
 import { vi } from "vitest";
 
 import type { BlogCommentDoc, BlogDoc, BlogStatusDoc } from "../../features/types";
@@ -17,6 +17,7 @@ export const { param } = load("@hydrooj/framework/decorators") as typeof Decorat
 export const { Types } = load("@hydrooj/framework/validator") as typeof Validators;
 export const { ValidationError, CreateError, ForbiddenError } = load("@hydrooj/framework/error") as typeof Errors;
 export const { PRIV } = load("@hydrooj/common/permission") as typeof Permissions;
+export { ObjectId };
 
 export class UserNotFoundError extends Error {}
 export class DiscussionNotFoundError extends Error {}

@@ -193,7 +193,18 @@ that an explicitly assigned, forced-root user appears once and that a later empt
 page remains empty. UT checks candidate filtering before joins, union
 deduplication before pagination, and page-only profile hydration.
 
-The suite uses one worker, no automatic retries, isolated browser contexts, focused-test rejection, and explicit timeouts. Empty selections and real assertion failures return nonzero exits. Keep fixtures unique within the run and promote new relevant failures into the suite. It does not establish every sorting/pagination outcome, all locales, or concurrent view deduplication. MCP checks supplement automated coverage for localized and narrow-screen settings UI.
+The suite uses one worker, up to two retries per failed test, isolated browser
+contexts, focused-test rejection, and explicit timeouts. A test gets at most
+three attempts; passing tests and the entire CI job are not rerun. Tests that
+pass only on retry are reported as flaky, while failures after all retries and
+empty selections return nonzero exits. Retry attempts share the run-owned
+database, so fixtures and cleanup must tolerate repeated setup and writes.
+Existing test/action/navigation and global timeouts remain unchanged; the global
+deadline can stop a run before all retry attempts finish. Keep fixtures unique
+within the run and promote new relevant failures into the suite. It does not
+establish every sorting/pagination outcome, all locales, or concurrent view
+deduplication. MCP checks supplement automated coverage for localized and
+narrow-screen settings UI.
 
 Navigation waits for DOM readiness and then asserts actual page controls/content.
 It does not wait for third-party avatars or unrelated resources to finish before

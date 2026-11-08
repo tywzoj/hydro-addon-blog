@@ -79,7 +79,9 @@ also checked against official Hydro commit
 `packages/ui-default/templates/components/paginator.html`.
 The browser regression follows next/previous links for every sort on home and
 user lists, including the restricted-domain routes, and verifies that changing
-sort still resets pagination.
+sort still resets pagination. Route cases are separate tests under the unchanged
+30-second limit; suite hooks create shared posts through native handlers and
+delete those posts afterward.
 
 Permission/settings cases execute the actual policy: effective roles, forced/manual
 root, strict own/others selection, guest identity boundaries, empty masks,

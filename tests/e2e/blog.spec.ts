@@ -4,43 +4,65 @@ import { BlogConfirmMessages, ReviewMessages } from "../../features/shared/const
 import type { BlogDoc, BlogStatusDoc } from "../../features/shared/types";
 import { blogState, confirmAction, createPost, expect, fillPost, submitPost, test } from "./fixtures";
 
-test("blog pagination preserves selected sorting on home and user lists", async ({ page, viewer }) => {
-    await page.goto("/blog/2", { waitUntil: "domcontentloaded" });
-    for (let index = 0; index < 11; index++) {
-        const response = await page.request.post("/blog/2/create", {
-            headers: { Referer: page.url(), Accept: "application/json" },
-            form: {
-                operation: "submit",
-                title: `Pagination post ${index}`,
-                content: "Pagination fixture",
-                draft: "false",
-            },
-        });
-        expect(response.ok(), await response.text()).toBe(true);
-    }
-    for (const path of ["/blog", "/blog/2", "/d/blogrestricted/blog", "/d/blogrestricted/blog/2"]) {
-        for (const sort of ["views", "latest", "latest_update"]) {
-            await viewer.goto(`${path}?sort=${sort}`, { waitUntil: "domcontentloaded" });
-            await expect(viewer.locator("#blog-list-sort")).toHaveValue(sort);
-            await viewer.locator(".pager__item.next").click();
-            await expect(viewer).toHaveURL((url) => url.pathname === path && url.searchParams.get("page") === "2");
-            expect(new URL(viewer.url()).searchParams.get("sort")).toBe(sort);
-            await expect(viewer.locator("#blog-list-sort")).toHaveValue(sort);
-            await viewer.locator(".pager__item.previous").click();
-            await expect(viewer).toHaveURL(
-                (url) =>
-                    url.pathname === path &&
-                    url.searchParams.get("page") === "1" &&
-                    url.searchParams.get("sort") === sort,
-            );
+test.describe("blog pagination preserves selected sorting", () => {
+    const fixtureIds: string[] = [];
+
+    test.beforeAll(async ({ request, baseURL }) => {
+        for (let index = 0; index < 11; index++) {
+            const response = await request.post("/blog/2/create", {
+                headers: { Referer: `${baseURL}/blog/2`, Accept: "application/json" },
+                form: {
+                    operation: "submit",
+                    title: `Pagination post ${index}`,
+                    content: "Pagination fixture",
+                    draft: "false",
+                },
+            });
+            expect(response.ok(), await response.text()).toBe(true);
+            fixtureIds.push(((await response.json()) as { did: string }).did);
         }
+    });
+
+    test.afterAll(async ({ request, baseURL }) => {
+        for (const did of fixtureIds) {
+            const response = await request.post(`/blog/2/${did}/edit`, {
+                headers: { Referer: `${baseURL}/blog/2`, Accept: "application/json" },
+                form: { operation: "delete" },
+            });
+            expect(response.ok(), await response.text()).toBe(true);
+        }
+    });
+
+    for (const path of ["/blog", "/blog/2", "/d/blogrestricted/blog", "/d/blogrestricted/blog/2"]) {
+        test(`on ${path}`, async ({ viewer }) => {
+            for (const sort of ["views", "latest", "latest_update"]) {
+                await viewer.goto(`${path}?sort=${sort}`, { waitUntil: "domcontentloaded" });
+                await expect(viewer.locator("#blog-list-sort")).toHaveValue(sort);
+                await viewer.locator(".pager__item.next").click();
+                await expect(viewer).toHaveURL((url) => url.pathname === path && url.searchParams.get("page") === "2");
+                expect(new URL(viewer.url()).searchParams.get("sort")).toBe(sort);
+                await expect(viewer.locator("#blog-list-sort")).toHaveValue(sort);
+                await viewer.locator(".pager__item.previous").click();
+                await expect(viewer).toHaveURL(
+                    (url) =>
+                        url.pathname === path &&
+                        url.searchParams.get("page") === "1" &&
+                        url.searchParams.get("sort") === sort,
+                );
+            }
+        });
     }
-    await viewer.goto("/blog/2?page=2&sort=views", { waitUntil: "domcontentloaded" });
-    await viewer.locator("#blog-list-sort").selectOption("latest");
-    await expect(viewer).toHaveURL(
-        (url) =>
-            url.pathname === "/blog/2" && url.searchParams.get("sort") === "latest" && !url.searchParams.has("page"),
-    );
+
+    test("changing sort resets the page", async ({ viewer }) => {
+        await viewer.goto("/blog/2?page=2&sort=views", { waitUntil: "domcontentloaded" });
+        await viewer.locator("#blog-list-sort").selectOption("latest");
+        await expect(viewer).toHaveURL(
+            (url) =>
+                url.pathname === "/blog/2" &&
+                url.searchParams.get("sort") === "latest" &&
+                !url.searchParams.has("page"),
+        );
+    });
 });
 
 test("article JSON responses omit IPs for readers, authors and root while preserving storage", async ({

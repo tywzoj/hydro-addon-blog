@@ -1,7 +1,7 @@
 import { ObjectId } from "mongodb";
 
-import { BlogConfirmMessages, ReviewMessages } from "../../features/constants";
-import type { BlogDoc, BlogStatusDoc } from "../../features/types";
+import { BlogConfirmMessages, ReviewMessages } from "../../features/shared/constants";
+import type { BlogDoc, BlogStatusDoc } from "../../features/shared/types";
 import { blogState, confirmAction, createPost, expect, fillPost, submitPost, test } from "./fixtures";
 
 test("article JSON responses omit IPs for readers, authors and root while preserving storage", async ({

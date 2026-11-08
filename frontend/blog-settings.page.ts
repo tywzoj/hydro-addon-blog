@@ -11,7 +11,7 @@ import {
 } from "@hydrooj/ui-default";
 import type { Udoc } from "hydrooj/src/interface";
 
-import type { BlogOperation } from "../features/constants";
+import type { BlogOperation } from "../features/shared/constants";
 import {
     BLOG_SETTINGS_PAGES,
     BlogMessages,
@@ -20,7 +20,7 @@ import {
     SYSTEM_DOMAIN,
     TEMPLATE_BLOG_SETTINGS_ROLES,
     TEMPLATE_BLOG_SETTINGS_USERS,
-} from "../features/constants";
+} from "../features/shared/constants";
 
 const DIALOG_CONFIRM_ACTION = "ok" as const;
 const DIALOG_SHOWN_EVENT = "vjDomDialogShown";

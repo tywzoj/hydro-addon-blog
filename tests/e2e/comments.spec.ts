@@ -1,7 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 import { ObjectId } from "mongodb";
 
-import type { BlogCommentDoc, BlogDoc } from "../../features/types";
+import type { BlogCommentDoc, BlogDoc } from "../../features/shared/types";
 import { accounts } from "./accounts";
 import { blogState, createPost, expect, test } from "./fixtures";
 

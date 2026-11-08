@@ -22,13 +22,13 @@ import {
     REVIEW_MINUTE_MS,
     ReviewModes,
     SYSTEM_DOMAIN,
-} from "./constants";
-import type { BlogIdentity } from "./permission";
-import { BlogPolicy } from "./permission";
-import type { BlogAssignment, BlogReviewSettings, BlogRole, BlogSettings } from "./types";
+} from "../shared/constants";
+import type { BlogAssignment, BlogReviewSettings, BlogRole, BlogSettings } from "../shared/types";
+import type { BlogIdentity } from "./settings.policy";
+import { BlogPolicy } from "./settings.policy";
 
-export { BUILTIN_BLOG_ROLES } from "./constants";
-export type { BlogAssignment, BlogRole, BlogSettings } from "./types";
+export { BUILTIN_BLOG_ROLES } from "../shared/constants";
+export type { BlogAssignment, BlogRole, BlogSettings } from "../shared/types";
 
 declare module "hydrooj" {
     interface Collections {

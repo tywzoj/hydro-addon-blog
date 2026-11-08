@@ -1,11 +1,11 @@
 import type { ObjectId, User } from "hydrooj";
 import { DiscussionNotFoundError, Handler, param, Types, UserModel, UserNotFoundError } from "hydrooj";
 
-import { BlogConfirmMessages, BlogPermissions, ReviewMessages, SYSTEM_DOMAIN } from "./constants";
-import { BlogModel } from "./model";
-import type { BlogPolicy } from "./permission";
-import { BlogSettingsModel } from "./settings.model";
-import type { BlogDoc } from "./types";
+import { BlogModel } from "../articles/article.model";
+import { BlogSettingsModel } from "../settings/settings.model";
+import type { BlogPolicy } from "../settings/settings.policy";
+import { BlogConfirmMessages, BlogPermissions, ReviewMessages, SYSTEM_DOMAIN } from "../shared/constants";
+import type { BlogDoc } from "../shared/types";
 
 export class BlogBaseHandler extends Handler {
     noCheckPermView = true;

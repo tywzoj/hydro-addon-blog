@@ -1,6 +1,6 @@
 import { addPage, i18n, NamedPage } from "@hydrooj/ui-default";
 
-import { SYSTEM_DOMAIN } from "../features/constants";
+import { SYSTEM_DOMAIN } from "../features/shared/constants";
 
 addPage(
     new NamedPage(["user_detail"], () => {

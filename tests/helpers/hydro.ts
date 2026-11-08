@@ -8,7 +8,7 @@ import type * as Validators from "@hydrooj/framework/validator";
 import { ObjectId } from "mongodb";
 import { vi } from "vitest";
 
-import type { BlogCommentDoc, BlogDoc, BlogStatusDoc } from "../../features/types";
+import type { BlogCommentDoc, BlogDoc, BlogStatusDoc } from "../../features/shared/types";
 
 const load = createRequire(resolve("package.json"));
 load("@hydrooj/register");

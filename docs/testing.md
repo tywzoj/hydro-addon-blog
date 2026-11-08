@@ -22,12 +22,31 @@ yarn test:coverage
 # Optional interactive development:
 yarn test:watch
 # Focus a regression without changing discovery rules:
-yarn test tests/unit/model.test.ts
+yarn test tests/unit/article.model.test.ts
 ```
 
 `yarn test` and `yarn test:coverage` are non-watch commands. Coverage reports are generated under ignored `coverage/`, including HTML and a JSON summary. Coverage targets article, comment, review and settings models/handlers, review notifications, shared recipient-localized message delivery, shared handler preparation, and the permission policy; it is not a whole-project or E2E coverage claim. No percentage threshold is imposed as a substitute for meaningful assertions.
 
 Vitest discovers `tests/unit/**/*.test.ts`, rejects empty discovery or empty suites, disallows focused `.only` tests, and applies five-second test/hook timeouts. CI additionally limits the UT step to five minutes. Ordinary tests are offline and need neither Docker nor a browser. Use the same non-watch command locally and in CI.
+
+`bootstrap.test.ts` exercises the real composition root and registration
+functions with isolated storage initializers. It checks awaited initialization,
+static-before-parameterized route order, stable route/handler names, UI/worker
+registration order and fail-fast startup. It does not initialize a real database
+or execute the injected worker; E2E covers those runtime boundaries.
+
+Coverage follows the feature directories, including extracted
+`article.projection.ts` and `review.policy.ts`. Moving a function is not a reason
+to remove its existing assertions or exclude it from coverage. The
+[structure-refactor record](plans/structure-refactor.md) compares the same
+behavioral scope before and after the move.
+
+`i18n.test.ts` checks complete per-language catalogs, the intentional English
+source-text fallback, interpolation/link placeholders, route-title aliases and
+independent catalog objects across addon applications. Type checking additionally
+rejects missing and unknown translated keys. Locale data is not a custom
+translation engine: real-Hydro E2E checks the actual dialogs, stale-client-catalog
+fallback and recipient-language notifications.
 
 The test boundary is intentionally explicit:
 
@@ -67,7 +86,7 @@ article publication/control regressions. Temporary deletion and receipt-integrit
 mutations were both detected by the new tests.
 
 The remaining reported branch is the view-count skip path in
-`features/handler.ts`. Existing assertions verify both a previously viewed article
+`features/articles/article.handler.ts`. Existing assertions verify both a previously viewed article
 and anonymous reads without additional count/status writes, but the installed
 V8 reporter gives this path a negative hit count, including in a focused run.
 Treat this as a measurement limitation in the recorded environment, not evidence

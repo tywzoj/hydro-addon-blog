@@ -2,8 +2,8 @@ import type { Context } from "hydrooj";
 import { ObjectId } from "hydrooj";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { BlogCommentModel } from "../../features/comments.model";
-import { BlogModel, ensureIndexes } from "../../features/model";
+import { BlogModel } from "../../features/articles/article.model";
+import { BlogCommentModel } from "../../features/comments/comment.model";
 import { makeBlog } from "../helpers/fixtures";
 import { DocumentModel, ValidationError } from "../helpers/hydro";
 
@@ -183,7 +183,7 @@ describe("persistence mutations", () => {
 describe("blog indexes", () => {
     it("scopes every list index to system blog documents in the shared collection", async () => {
         const ensure = vi.fn<(...args: unknown[]) => Promise<void>>();
-        await ensureIndexes({ db: { ensureIndexes: ensure } } as unknown as Context);
+        await BlogModel.init({ db: { ensureIndexes: ensure } } as unknown as Context);
 
         const [collection, ...indexes] = ensure.mock.calls[0];
         expect(collection).toBe(DocumentModel.coll);

@@ -4,7 +4,7 @@ import {
     ReviewDecisions,
     ReviewMessages,
     ReviewModes,
-} from "../features/constants";
+} from "../features/shared/constants";
 
 export function isSubmitShortcut(
     event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey" | "isComposing">,

@@ -78,8 +78,9 @@ Each run writes `test-results/<run-id>/`, ignored by Git: HTML report, failure s
 MongoDB readiness is bounded to 30 seconds, Hydro startup to 90 seconds, browser
 tests to 900 seconds globally, and the parent test process to 930 seconds. CI
 bounds the complete E2E step to twenty minutes, including startup and cleanup.
-The global bounds accommodate the real periodic reminder, not retries or relaxed
-assertions. Ordinary single-test/action/navigation limits remain unchanged; the
+Failed tests may retry twice within the same global bounds; retries do not
+extend the deadline or relax assertions. Ordinary single-test/action/navigation
+limits remain unchanged; the
 real-timer reminder case explicitly allows 170 seconds. Shutdown escalates from
 SIGTERM to SIGKILL for owned child processes. Normal success/failure, empty
 selection, invalid configuration, and SIGINT/SIGTERM trigger owned-resource cleanup.

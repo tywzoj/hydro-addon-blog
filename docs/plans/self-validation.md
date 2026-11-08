@@ -123,6 +123,30 @@ Runtime integration findings: Cordis services require injection; Hydro's page ma
 
 PR #8's [validation run 42183061237](https://github.com/tywzoj/hydro-addon-blog/actions/runs/42183061237) passed on commit `bf9ec331803762ffbce95b031d57091ecaae276b` on 2026-11-06. The Ubuntu 26 runner completed dependency installation, lint, 65 UT, and nine Playwright checks, with Hydro storage under its writable temporary directory. This is evidence for that commit and runner, not every future head or deployment.
 
+### Bounded E2E Retries
+
+On 2026-11-08, the maintainer requested two retries for each failed task point.
+Playwright now permits two retries per failed test in local and CI E2E, not
+whole-job retries. Passing tests are not rerun, recovered tests remain visible
+as flaky, and exhausted failures still fail validation. Test/action/navigation
+and global deadlines remain unchanged. Retry attempts use a fresh worker/browser
+but retain the run-owned database; native fixture cleanup remains required.
+Temporary probes against the managed runtime verified one attempt for a passing
+test, exactly three attempts and flaky reporting for recovery on retry 2, and
+exactly three attempts plus a nonzero exit for an exhausted failure. JSON report
+assertions checked retry indices `[0, 1, 2]`; the probes were removed afterward.
+Lint, project type checking, and twelve focused real-Hydro E2E cases passed with
+the new policy, including pagination and pending withdrawal.
+Current-head CI validation remains pending.
+
+The first retry-enabled CI run exercised both retry attempts but exposed an
+unscoped review-notification count: retained messages from earlier attempts
+made later attempts fail. The assertion now filters by the current article ID
+as well as recipient and content. Repeating the complete pre-publication review
+case twice against one disposable database passed both attempts, plus six login
+setups; lint and type checking also passed. Unrelated review navigation failures
+still require current-head CI evidence.
+
 ### Project-Scoped Type Checking
 
 On 2026-11-07, `yarn typecheck` was added using the installed TypeScript 5.9.3

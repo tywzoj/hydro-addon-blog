@@ -404,7 +404,13 @@ test("review before publication enforces reviewer-only access, approval, comment
     ).toBeVisible();
     expect((await postDoc(db, path)).rejectionCount).toBe(1);
     expect(
-        await db.collection("message").countDocuments({ to: 2, content: { $regex: "Please clarify the article" } }),
+        await db.collection("message").countDocuments({
+            to: 2,
+            $and: [
+                { content: { $regex: "Please clarify the article" } },
+                { content: { $regex: did(path).toHexString() } },
+            ],
+        }),
     ).toBe(1);
     expect((await publication(page, path, false)).ok()).toBe(true);
     await page.goto(`${path}/edit`, navigation);

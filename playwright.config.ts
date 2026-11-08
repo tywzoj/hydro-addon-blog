@@ -13,7 +13,7 @@ export default defineConfig({
     outputDir: join(output, "artifacts"),
     fullyParallel: false,
     workers: 1,
-    retries: 0,
+    retries: 2,
     forbidOnly: true,
     timeout: 30000,
     globalTimeout: 900000,

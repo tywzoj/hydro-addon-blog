@@ -67,6 +67,22 @@ The test boundary is intentionally explicit:
 
 Model cases cover publication transitions, legacy reads, reply/counter updates, deletion/status cleanup, per-user star-only updates, index scoping, and propagated persistence failures. Handler cases cover route ordering/gates, target-user/post preparation, list filters/sorts/pagination, permission delegation, input rejection, write/rate-limit/audit behavior, sequential views, star conversion, and success/failure responses.
 
+`blog-list.template.test.ts` renders the actual blog list and installed native
+paginator, isolating unrelated layout/user/article macros and pagination-window
+selection. It checks every navigation-link kind for all three supported sorts.
+This standalone template test loads Nunjucks from the installed UI package's
+dependency context: Hydro 5.0.7 does not publicly export a template environment,
+and the UI's `TemplateService` requires application services. No addon runtime
+dependency or private Hydro API is introduced. The native `add_qs` contract was
+also checked against official Hydro commit
+`8962db1ef4a28f6f56d0fc9395e54fc1bb7a3f1d`,
+`packages/ui-default/templates/components/paginator.html`.
+The browser regression follows next/previous links for every sort on home and
+user lists, including the restricted-domain routes, and verifies that changing
+sort still resets pagination. Route cases are separate tests under the unchanged
+30-second limit; suite hooks create shared posts through native handlers and
+delete those posts afterward.
+
 Permission/settings cases execute the actual policy: effective roles, forced/manual
 root, strict own/others selection, guest identity boundaries, empty masks,
 role creation/deletion/recreation, stale configuration saves, matrix validation,
@@ -177,7 +193,18 @@ that an explicitly assigned, forced-root user appears once and that a later empt
 page remains empty. UT checks candidate filtering before joins, union
 deduplication before pagination, and page-only profile hydration.
 
-The suite uses one worker, no automatic retries, isolated browser contexts, focused-test rejection, and explicit timeouts. Empty selections and real assertion failures return nonzero exits. Keep fixtures unique within the run and promote new relevant failures into the suite. It does not establish every sorting/pagination outcome, all locales, or concurrent view deduplication. MCP checks supplement automated coverage for localized and narrow-screen settings UI.
+The suite uses one worker, up to two retries per failed test, isolated browser
+contexts, focused-test rejection, and explicit timeouts. A test gets at most
+three attempts; passing tests and the entire CI job are not rerun. Tests that
+pass only on retry are reported as flaky, while failures after all retries and
+empty selections return nonzero exits. Retry attempts share the run-owned
+database, so fixtures and cleanup must tolerate repeated setup and writes.
+Existing test/action/navigation and global timeouts remain unchanged; the global
+deadline can stop a run before all retry attempts finish. Keep fixtures unique
+within the run and promote new relevant failures into the suite. It does not
+establish every sorting/pagination outcome, all locales, or concurrent view
+deduplication. MCP checks supplement automated coverage for localized and
+narrow-screen settings UI.
 
 Navigation waits for DOM readiness and then asserts actual page controls/content.
 It does not wait for third-party avatars or unrelated resources to finish before

@@ -139,6 +139,14 @@ Lint, project type checking, and twelve focused real-Hydro E2E cases passed with
 the new policy, including pagination and pending withdrawal.
 Current-head CI validation remains pending.
 
+The first retry-enabled CI run exercised both retry attempts but exposed an
+unscoped review-notification count: retained messages from earlier attempts
+made later attempts fail. The assertion now filters by the current article ID
+as well as recipient and content. Repeating the complete pre-publication review
+case twice against one disposable database passed both attempts, plus six login
+setups; lint and type checking also passed. Unrelated review navigation failures
+still require current-head CI evidence.
+
 ### Project-Scoped Type Checking
 
 On 2026-11-07, `yarn typecheck` was added using the installed TypeScript 5.9.3

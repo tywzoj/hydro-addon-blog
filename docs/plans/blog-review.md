@@ -821,6 +821,20 @@ Report counts now require `REVIEW` in list/detail/editor/reset HTML and JSON.
 Authorship or reset-only authority does not grant count access; rejection
 feedback and the independent reset action remain available as before.
 
+The 2026-11-08 display refinement supersedes the detail/editor HTML behavior:
+report counts appear only on authorized review queue/detail and counter reset
+pages. Article detail and editor pages omit them even for reviewers; stored
+counters, JSON access, review status, and reset-only privacy remain unchanged.
+The existing report E2E scenario covers both omitted displays and all three
+retained displays.
+
+Verification reproduced the reviewer detail failure before the fix. Lint,
+project typecheck, and 186 related article/review UT passed. The updated report
+E2E scenario passed in `hydro-blog-5894-08d8b62b` (seven tests including
+authentication); the reset-only rejection-limit scenario also passed during
+the preceding run. Declared Playwright MCP independently verified all five
+page displays with one accepted report in a disposable local Hydro instance.
+
 Follow-up verification: lint and project typecheck passed; `yarn test` passed
 226 tests. `yarn test:e2e --grep 'review before publication|review reports|review rejection limit'`
 passed nine tests in `hydro-blog-4759-b711a444`, including sidebar order/current

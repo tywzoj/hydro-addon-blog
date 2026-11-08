@@ -619,8 +619,14 @@ test("review reports deduplicate, cross the strict threshold, restore visibility
         expect(await detailJSON.text()).not.toContain("private report");
         expect(await detailJSON.text()).not.toContain("data-report-markup");
     }
-    await expect(editor.locator(".section__footer")).toContainText("Reports: 2");
+    await expect(editor.locator(".section__footer")).not.toContainText("Reports:");
     await expect(editor.locator(".section__footer")).not.toContainText("another report");
+    await editor.goto(`${path}/edit`, navigation);
+    await expect(editor.locator(".medium-9.columns")).not.toContainText("Reports:");
+    await editor.goto("/blog/review", navigation);
+    await expect(editor.locator(".section__list__item").filter({ hasText: initial.title })).toContainText("Reports: 2");
+    await editor.goto(`${reviewPath(path)}/reset`, navigation);
+    await expect(editor.locator(".section__body").first()).toContainText("Reports: 2");
     for (const target of [path, `${path}/edit`, "/blog", "/blog/2"]) {
         const authorJSON = await page.request.get(target, { headers: { Accept: "application/json" } });
         expect(authorJSON.ok()).toBe(true);
@@ -631,6 +637,7 @@ test("review reports deduplicate, cross the strict threshold, restore visibility
         "Review reported publication · Report review",
     );
     await expect(editor.locator(".section__body").filter({ hasText: "Report review" })).toHaveCount(0);
+    await expect(editor.locator(".section__body").first()).toContainText("Reports: 2");
     const entries = editor.locator(".section__body > .section__body");
     const reporterEntry = entries.filter({ hasText: reportComments });
     await expect(reporterEntry).toContainText("Reporter:");

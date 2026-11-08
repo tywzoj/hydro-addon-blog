@@ -12,7 +12,7 @@
         {{ nothing.render('No post yet...') }}
       {% else %}
         {{ blog_list.render(ddocs, scenario, is_owner) }}
-        {% if page and dpcount %}{{ paginator.render(page, dpcount) }}{% endif %}
+        {% if page and dpcount %}{{ paginator.render(page, dpcount, add_qs=('sort=' ~ sort)) }}{% endif %}
       {% endif %}
     </div>
   </div>

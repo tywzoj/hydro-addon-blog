@@ -67,6 +67,20 @@ The test boundary is intentionally explicit:
 
 Model cases cover publication transitions, legacy reads, reply/counter updates, deletion/status cleanup, per-user star-only updates, index scoping, and propagated persistence failures. Handler cases cover route ordering/gates, target-user/post preparation, list filters/sorts/pagination, permission delegation, input rejection, write/rate-limit/audit behavior, sequential views, star conversion, and success/failure responses.
 
+`blog-list.template.test.ts` renders the actual blog list and installed native
+paginator, isolating unrelated layout/user/article macros and pagination-window
+selection. It checks every navigation-link kind for all three supported sorts.
+This standalone template test loads Nunjucks from the installed UI package's
+dependency context: Hydro 5.0.7 does not publicly export a template environment,
+and the UI's `TemplateService` requires application services. No addon runtime
+dependency or private Hydro API is introduced. The native `add_qs` contract was
+also checked against official Hydro commit
+`8962db1ef4a28f6f56d0fc9395e54fc1bb7a3f1d`,
+`packages/ui-default/templates/components/paginator.html`.
+The browser regression follows next/previous links for every sort on home and
+user lists, including the restricted-domain routes, and verifies that changing
+sort still resets pagination.
+
 Permission/settings cases execute the actual policy: effective roles, forced/manual
 root, strict own/others selection, guest identity boundaries, empty masks,
 role creation/deletion/recreation, stale configuration saves, matrix validation,

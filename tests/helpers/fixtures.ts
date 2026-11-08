@@ -1,6 +1,6 @@
 import { ObjectId } from "hydrooj";
 
-import type { BlogDoc } from "../../features/types";
+import type { BlogDoc } from "../../features/shared/types";
 
 export function makeBlog(update: Partial<BlogDoc> = {}): BlogDoc {
     return {

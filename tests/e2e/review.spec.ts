@@ -4,8 +4,8 @@ import type { Browser, BrowserContext, Page } from "@playwright/test";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 
-import { ReviewMessages } from "../../features/constants";
-import type { BlogDoc, BlogSettings } from "../../features/types";
+import { ReviewMessages } from "../../features/shared/constants";
+import type { BlogDoc, BlogSettings } from "../../features/shared/types";
 import { accounts } from "./accounts";
 import { blogState, confirmAction, createPost, expect, fillPost, submitPost, test as base } from "./fixtures";
 

@@ -1,6 +1,6 @@
 import { addPage, i18n, NamedPage, Notification, request } from "@hydrooj/ui-default";
 
-import { BlogMessages, BlogOperations, TEMPLATE_BLOG_DETAIL } from "../features/constants";
+import { BlogMessages, BlogOperations, TEMPLATE_BLOG_DETAIL } from "../features/shared/constants";
 
 async function setLike(button: HTMLButtonElement) {
     if (button.disabled) return;

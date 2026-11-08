@@ -1,8 +1,8 @@
 import type { Page } from "@playwright/test";
 import type { Udoc } from "hydrooj/src/interface";
 
-import type { BlogPermission } from "../../features/permission";
-import type { BlogAssignment, BlogDoc, BlogSettings } from "../../features/types";
+import type { BlogPermission } from "../../features/settings/settings.policy";
+import type { BlogAssignment, BlogDoc, BlogSettings } from "../../features/shared/types";
 import { accounts } from "./accounts";
 import { blogState, confirmAction, createPost, expect, fillPost, test } from "./fixtures";
 

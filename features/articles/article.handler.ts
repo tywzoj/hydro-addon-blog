@@ -2,8 +2,12 @@ import type { Context, Filter } from "hydrooj";
 import { OplogModel, param, Types, UserModel } from "hydrooj";
 import type { SortDirection } from "mongodb";
 
-import { BlogCommentHandler } from "./comments.handler";
-import type { SortKey } from "./constants";
+import { BlogCommentHandler } from "../comments/comment.handler";
+import { BlogBaseHandler, BlogUserBaseHandler, BlogUserPostBaseHandler } from "../common/base.handler";
+import { toTemplate } from "../common/templates";
+import { BlogReviewModel } from "../review/review.model";
+import { BlogSettingsModel } from "../settings/settings.model";
+import type { SortKey } from "../shared/constants";
 import {
     BLOG_CREATE_RATE_LIMIT,
     BLOG_FIRST_PAGE,
@@ -23,13 +27,10 @@ import {
     TEMPLATE_BLOG_DETAIL,
     TEMPLATE_BLOG_EDIT,
     TEMPLATE_BLOG_LIST,
-} from "./constants";
-import { BlogBaseHandler, BlogUserBaseHandler, BlogUserPostBaseHandler } from "./handler.base";
-import { BlogModel } from "./model";
-import { articleForReader, articleForResponse, BlogReviewModel } from "./review.model";
-import { BlogSettingsModel } from "./settings.model";
-import type { BlogContentUpdate, BlogDoc } from "./types";
-import { toTemplate } from "./utils";
+} from "../shared/constants";
+import type { BlogContentUpdate, BlogDoc } from "../shared/types";
+import { BlogModel } from "./article.model";
+import { articleForReader, articleForResponse } from "./article.projection";
 
 // Convert JSON false/0 without treating omitted fields as explicit false.
 const OptionalBoolean = [
@@ -38,7 +39,7 @@ const OptionalBoolean = [
     "convert",
 ] as const;
 
-export const SortKeyMap: Record<SortKey, Partial<Record<keyof BlogDoc, SortDirection>>> = {
+export const ARTICLE_SORTS: Record<SortKey, Partial<Record<keyof BlogDoc, SortDirection>>> = {
     [SortKeys.Views]: { views: -1 },
     [SortKeys.Latest]: { firstPublishAt: -1 },
     [SortKeys.LatestUpdate]: { updateAt: -1 },
@@ -52,7 +53,7 @@ class BlogListHandler extends BlogBaseHandler {
         const [ddocs, dpcount] = await this.ctx.db.paginate(
             BlogModel.getMulti({
                 draft: { $ne: true },
-            }).sort(SortKeyMap[sort]),
+            }).sort(ARTICLE_SORTS[sort]),
             page,
             BLOG_POSTS_PER_PAGE,
         );
@@ -100,7 +101,7 @@ class BlogListUserHandler extends BlogUserBaseHandler {
         const [ddocs, dpcount] = await this.ctx.db.paginate(
             BlogModel.getMulti(query).sort({
                 pin: -1,
-                ...SortKeyMap[sort],
+                ...ARTICLE_SORTS[sort],
             }),
             page,
             BLOG_POSTS_PER_PAGE,
@@ -320,7 +321,7 @@ class BlogUserPostEditHandler extends BlogUserPostBaseHandler {
     }
 }
 
-export function applyHandler(ctx: Context) {
+export function applyArticleHandlers(ctx: Context) {
     ctx.Route(ROUTE_BLOG_LIST_HOME, "/blog", BlogListHandler);
     ctx.Route(ROUTE_BLOG_LIST_USER, "/blog/:uid", BlogListUserHandler);
     // The create must be placed before the detail route, otherwise it will be treated as a did parameter

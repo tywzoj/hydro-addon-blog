@@ -2,16 +2,16 @@ import type { Context, Handler as HydroHandler } from "hydrooj";
 import type { Collection } from "mongodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { BLOG_DEFAULT, BLOG_PERM, BlogPermissionError } from "../../features/permission";
-import { BlogReviewModel } from "../../features/review.model";
-import { applySettingsHandler, parsePermissions } from "../../features/settings.handler";
-import type { BlogAssignment, BlogSettings } from "../../features/settings.model";
+import { BlogReviewModel } from "../../features/review/review.model";
+import { applySettingsHandlers, parsePermissions } from "../../features/settings/settings.handler";
+import type { BlogAssignment, BlogSettings } from "../../features/settings/settings.model";
 import {
     BlogSettingsModel,
     initialSettings,
     permissionMatrixRoles,
     resolveBlogPolicy,
-} from "../../features/settings.model";
+} from "../../features/settings/settings.model";
+import { BLOG_DEFAULT, BLOG_PERM, BlogPermissionError } from "../../features/settings/settings.policy";
 import { makeBlog } from "../helpers/fixtures";
 import {
     dispatchHandler,
@@ -427,7 +427,7 @@ interface SettingsHandler extends Handler {
 
 describe("settings handler boundaries", () => {
     const routes = new Map<string, new () => SettingsHandler>();
-    applySettingsHandler({
+    applySettingsHandlers({
         Route: (name: string, _path: string, Class: new () => SettingsHandler) => routes.set(name, Class),
     } as unknown as Context);
 

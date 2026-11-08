@@ -6,6 +6,7 @@ This directory retains project direction, implementation plans, and consequentia
 
 | Plan | Status | Scope |
 | --- | --- | --- |
+| [Behavior-preserving structure refactor](structure-refactor.md) | Completed locally | Feature ownership, enforced dependency/naming rules, uniform model initialization, typed locale catalogs and explicit entry points; local UT/E2E/MCP evidence by delivery phase. |
 | [Blog article review](blog-review.md) | Completed locally; [PR #11](https://github.com/tywzoj/hydro-addon-blog/pull/11) | Three review modes, recoverable reports, review/reset permissions, native reminders/audit, confirmed disabling, localized dialogs, and lifecycle documentation. Local evidence and crash limits are retained; PR checks record commit-specific CI. |
 | [Blog comments and permission matrix](blog-comments.md) | Completed locally | Immutable two-level comments, likes/unlikes, four global permission grants, native deletion/notification behavior, and local UT/E2E/MCP evidence. |
 | [Global blog settings and permissions](blog-permissions.md) | Completed locally | Domain-independent roles, 17 permissions, self-only article creation, native UX audit/fixes, and local UT/E2E/MCP evidence. Review workflows remain deferred. |
@@ -13,6 +14,12 @@ This directory retains project direction, implementation plans, and consequentia
 | [Self-validation investigation](self-validation-investigation.md) | Completed | Experiments, upstream research, container recommendation, and explicit unverified boundaries. |
 
 A planned capability is not implemented or validated until the corresponding change supplies evidence. The index records delivery status; individual plans retain their baseline, decisions, and outcomes.
+
+Source paths and line numbers in historical records refer to their recorded
+revisions. For the current feature layout, use the
+[project structure](../project-structure.md) and
+[refactor path map](structure-refactor.md#source-path-map), rather than rewriting
+historical evidence after a file move.
 
 ## Maintaining Plans
 

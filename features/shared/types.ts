@@ -7,9 +7,9 @@ import type {
     ReviewDecision,
     ReviewMode,
     ReviewReason,
+    TYPE_BLOG,
     TYPE_BLOG_COMMENT,
 } from "./constants";
-import type { TYPE_BLOG } from "./model";
 
 export interface BlogDoc {
     _id: ObjectId;

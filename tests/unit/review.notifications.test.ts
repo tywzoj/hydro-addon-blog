@@ -2,11 +2,11 @@ import type { Context, User } from "hydrooj";
 import { ObjectId } from "hydrooj";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { BLOG_PERM, DEFAULT_REVIEW_SETTINGS } from "../../features/constants";
-import { BlogReviewModel } from "../../features/review.model";
-import { BlogReviewNotifications } from "../../features/review.notifications";
-import { BlogSettingsModel, initialSettings, resolveBlogPolicy } from "../../features/settings.model";
-import type { BlogAssignment, BlogSettings } from "../../features/types";
+import { BlogReviewModel } from "../../features/review/review.model";
+import { BlogReviewNotifications } from "../../features/review/review.notifications";
+import { BlogSettingsModel, initialSettings, resolveBlogPolicy } from "../../features/settings/settings.model";
+import { BLOG_PERM, DEFAULT_REVIEW_SETTINGS } from "../../features/shared/constants";
+import type { BlogAssignment, BlogSettings } from "../../features/shared/types";
 import { makeBlog } from "../helpers/fixtures";
 import { DocumentModel, makeUser, MessageModel, PRIV, ScheduleModel, SystemModel, UserModel } from "../helpers/hydro";
 

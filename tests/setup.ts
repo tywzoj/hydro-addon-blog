@@ -1,8 +1,8 @@
 import type { Collection } from "mongodb";
 import { afterAll, afterEach, beforeEach, vi } from "vitest";
 
-import { BlogReviewModel } from "../features/review.model";
-import type { BlogReport } from "../features/types";
+import { BlogReviewModel } from "../features/review/review.model";
+import type { BlogReport } from "../features/shared/types";
 
 vi.mock("hydrooj", () => import("./helpers/hydro"));
 vi.stubGlobal("Hydro", { model: {} });

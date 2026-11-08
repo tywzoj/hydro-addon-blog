@@ -2,13 +2,13 @@ import type { Context } from "hydrooj";
 import { ObjectId } from "hydrooj";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { BlogCommentHandler } from "../../features/comments.handler";
-import { BlogCommentModel, ensureCommentIndexes } from "../../features/comments.model";
-import { BLOG_DEFAULT, BLOG_PERM, BlogPermissions } from "../../features/constants";
-import { BlogModel } from "../../features/model";
-import { BlogPermissionError, BlogPolicy } from "../../features/permission";
-import { initialSettings, resolveBlogPolicy } from "../../features/settings.model";
-import type { BlogCommentDoc } from "../../features/types";
+import { BlogModel } from "../../features/articles/article.model";
+import { BlogCommentHandler } from "../../features/comments/comment.handler";
+import { BlogCommentModel } from "../../features/comments/comment.model";
+import { initialSettings, resolveBlogPolicy } from "../../features/settings/settings.model";
+import { BlogPermissionError, BlogPolicy } from "../../features/settings/settings.policy";
+import { BLOG_DEFAULT, BLOG_PERM, BlogPermissions } from "../../features/shared/constants";
+import type { BlogCommentDoc } from "../../features/shared/types";
 import { makeBlog } from "../helpers/fixtures";
 import {
     dispatchHandler,
@@ -150,7 +150,7 @@ describe("comment persistence", () => {
 
     it("keeps comment and like indexes scoped within the shared collections", async () => {
         const ensureIndexes = vi.fn();
-        await ensureCommentIndexes({ db: { ensureIndexes } } as unknown as Context);
+        await BlogCommentModel.init({ db: { ensureIndexes } } as unknown as Context);
         expect(ensureIndexes.mock.calls).toEqual([
             [
                 DocumentModel.coll,

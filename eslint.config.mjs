@@ -8,6 +8,32 @@ import tseslint from "typescript-eslint";
 const IGNORED_FILES = ["node_modules/**", "coverage/**", "test-results/**", "playwright-report/**"];
 const JS_FILES = ["**/*.{js,cjs,mjs}"];
 const TS_FILES = ["**/*.{ts,cts,mts}"];
+const HYDRO_IMPORT_RESTRICTIONS = {
+    paths: [
+        {
+            name: "mongodb",
+            allowTypeImports: true,
+            message: "Import runtime MongoDB values from hydrooj; mongodb imports must be type-only.",
+        },
+    ],
+    patterns: [
+        {
+            group: ["mongodb"],
+            importNames: ["Filter", "ObjectId"],
+            message: "Import Filter and ObjectId from hydrooj, including type-only imports.",
+        },
+    ],
+};
+const FEATURE_IMPORT_RESTRICTIONS = {
+    ...HYDRO_IMPORT_RESTRICTIONS,
+    patterns: [
+        ...HYDRO_IMPORT_RESTRICTIONS.patterns,
+        {
+            regex: "^\\.{1,2}/?$|(?:^|/)(?:articles|comments|integration|review|settings|index(?:\\.ts)?)/?$",
+            message: "Feature internals must import concrete modules, not composition-root entry points.",
+        },
+    ],
+};
 
 export default defineConfig(
     prettierRecommended,
@@ -59,6 +85,11 @@ export default defineConfig(
         files: TS_FILES,
         rules: {
             "@typescript-eslint/consistent-type-imports": "error",
+            "@typescript-eslint/naming-convention": [
+                "error",
+                { selector: "typeLike", format: ["PascalCase"] },
+                { selector: "function", format: ["camelCase"], leadingUnderscore: "allow" },
+            ],
             "@typescript-eslint/explicit-module-boundary-types": "off",
             "@typescript-eslint/no-empty-interface": "off",
             "@typescript-eslint/no-unsafe-enum-comparison": "off",
@@ -82,21 +113,68 @@ export default defineConfig(
     {
         files: ["index.ts", "features/**/*.ts", "frontend/**/*.ts", "tests/unit/**/*.ts", "tests/helpers/fixtures.ts"],
         rules: {
+            "no-restricted-imports": ["error", HYDRO_IMPORT_RESTRICTIONS],
+        },
+    },
+    {
+        files: ["features/**/*.ts"],
+        rules: {
+            "no-restricted-imports": ["error", FEATURE_IMPORT_RESTRICTIONS],
+        },
+    },
+    {
+        files: ["features/shared/**/*.ts"],
+        rules: {
             "no-restricted-imports": [
                 "error",
                 {
                     paths: [
                         {
-                            name: "mongodb",
+                            name: "hydrooj",
                             allowTypeImports: true,
-                            message: "Import runtime MongoDB values from hydrooj; mongodb imports must be type-only.",
+                            message: "Shared contracts may reference Hydro types, not runtime services.",
                         },
                     ],
                     patterns: [
                         {
-                            group: ["mongodb"],
-                            importNames: ["Filter", "ObjectId"],
-                            message: "Import Filter and ObjectId from hydrooj, including type-only imports.",
+                            regex: "^(?!\\./|hydrooj$)",
+                            message: "Shared contracts must depend only on sibling contracts and Hydro types.",
+                        },
+                    ],
+                },
+            ],
+        },
+    },
+    {
+        files: ["frontend/**/*.ts"],
+        rules: {
+            "no-restricted-imports": [
+                "error",
+                {
+                    ...HYDRO_IMPORT_RESTRICTIONS,
+                    patterns: [
+                        ...HYDRO_IMPORT_RESTRICTIONS.patterns,
+                        {
+                            regex: "(?:^|/)features/(?!shared/)|(?:^|/)index(?:\\.ts)?$",
+                            message: "Browser code may import shared contracts, not server modules or entry points.",
+                        },
+                    ],
+                },
+            ],
+        },
+    },
+    {
+        files: ["features/**/*.model.ts", "features/**/*.policy.ts", "features/**/*.projection.ts"],
+        rules: {
+            "no-restricted-imports": [
+                "error",
+                {
+                    ...FEATURE_IMPORT_RESTRICTIONS,
+                    patterns: [
+                        ...FEATURE_IMPORT_RESTRICTIONS.patterns,
+                        {
+                            regex: "(?:^|/)(?:[^/]+\\.handler(?:\\.ts)?$|common/|integration/|frontend/|index(?:\\.ts)?$)",
+                            message: "Models, policies and projections must not import request or UI orchestration.",
                         },
                     ],
                 },

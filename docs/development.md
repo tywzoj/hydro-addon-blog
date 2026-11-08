@@ -55,9 +55,49 @@ The project's coverage goal includes both UT and E2E; neither replaces the other
 
 ## Code Requirements
 
+### Identifier and File Naming
+
+- Name feature directories by domain (`articles`, `comments`, `review`,
+  `settings`). Name files by subject and responsibility: `article.model.ts`,
+  `comment.handler.ts`, `review.policy.ts`, `article.projection.ts`.
+  Avoid generic feature files named `model.ts`, `handler.ts` or `utils.ts`.
+- Use `PascalCase` for classes, interfaces, type aliases and related `as const`
+  value objects; use `camelCase` for functions, methods, parameters and locals.
+  Use `UPPER_SNAKE_CASE` for standalone module constants and lookup tables.
+  ESLint enforces type/class and standalone function naming; method/property
+  names remain compatible with Hydro lifecycle and serialized contracts.
+  Hydro parameter descriptors retain the existing `OptionalBoolean` and
+  `OptionalReviewComment` style, matching framework descriptors such as `Types`.
+- Name route registration functions `apply<Feature>Handlers`. Each persistent
+  model exposes `static async init(ctx: Context)` for its storage initialization,
+  including index-only setup; invoke these methods explicitly from the
+  composition root. Keep the root framework entry named `apply`.
+  Feature modules must not register routes simply by being imported.
+- Name tests for the subject under test (`article.model.test.ts`,
+  `article.handler.test.ts`, `settings.policy.test.ts`). Workflow suites that
+  intentionally cover several layers may retain feature-level names such as
+  `comments.test.ts` or `review.test.ts`.
+- Treat existing handler class names, lifecycle methods, `postXxx` operations,
+  public model methods, route IDs, permission keys/bits, template context keys,
+  database fields, collection/index names, translation keys and wire values as
+  compatibility identifiers. Do not normalize these during an internal rename.
+  In particular, Hydro derives event names from handler class names.
+- Retain Hydro vocabulary (`ddoc`, `udoc`, `did`, `uid`, `drid`, `drrid`) at
+  framework and template boundaries. Use descriptive names for new internal
+  concepts instead of renaming serialized fields or introducing aliases for
+  every existing framework identifier.
+
+Follow the [module boundaries](project-structure.md#dependency-boundaries).
+Expose root-level integration through a feature's explicit named-export
+`index.ts`; keep implementation-to-implementation imports pointed at concrete
+files. Entry points do not own initialization, business logic or wildcard exports.
+When moving code, update explicit imports, coverage targets and current guide
+links in the same change. A naming cleanup is not authorization to rewrite
+queries, validation, defaults, error handling or operation ordering.
+
 ### Constants and Shared Types
 
-- Follow `features/constants.ts`: centralize shared domain/protocol strings and meaningful numeric settings, and reuse them across models, handlers, frontend code, and localization instead of repeating literals.
+- Follow `features/shared/constants.ts`: centralize shared domain/protocol strings and meaningful numeric settings, and reuse them across models, handlers, frontend code, and localization instead of repeating literals.
 - Prefer `as const` value objects for related values and derive literal unions with `typeof` and `keyof`. Reuse named types for repeated object shapes or `Pick`/union declarations; do not maintain a separate literal-type list for values already defined at runtime.
 - Keep constants at the smallest useful scope, and do not merge equal values with different meanings. Preserve persisted identifiers, permission bits, wire values, and defaults during extraction. Ordinary arithmetic, declarative template markup, and independent test expectations need not be replaced merely because the same text appears elsewhere.
 
@@ -91,6 +131,38 @@ because they must provision isolated databases or supply the mocked API without
 bootstrapping the application being tested. This is a documented execution-boundary
 exception, not a general exemption for tests; ordinary unit tests use Hydro exports.
 Node.js built-in modules are not third-party dependencies.
+
+### Localization
+
+Keep application translations in `features/integration/locales/`: one explicit
+dictionary per Hydro locale ID (`en`, `zh`, `zh_TW`, `ko`). Do not encode languages
+as positional array entries or mix translation data into registration functions.
+Keep dictionary entries in corresponding order across languages.
+
+`en.ts` defines the required translated-key set. Other catalogs use
+`satisfies BlogLocale` to reject missing or misspelled keys without widening
+the dictionary to `Record<string, string>`. Computed sort-label keys use
+`as const` so their literal types remain checkable. Preserve symbolic keys from
+the shared constants catalog rather than copying permission or route IDs.
+
+Nine existing article labels intentionally rely on Hydro's source-text fallback
+in English. `SOURCE_TEXT_KEYS` records this exception and requires their
+translations in the other catalogs; do not register English identity entries
+for them as an incidental cleanup. Likewise, do not copy Hydro-owned labels
+into the addon unless an intentional override is required.
+
+When adding an addon-owned translation, update English and all three translated
+catalogs together. Preserve interpolation positions and format suffixes such as
+`{0}` and `{4:link}`. Keep route-title aliases aligned with their feature titles.
+Run `yarn typecheck` and `yarn test tests/unit/i18n.test.ts`, plus the affected
+real-Hydro language/notification flows from the testing guide.
+
+`applyBlogI18n` only registers fresh copies through `ctx.i18n.load`; Hydro retains
+ownership of lookup, fallback, update events and disposal. Do not share the same
+dictionary object between addon applications: Hydro removes registrations by
+object identity. This boundary was checked against installed Hydro 5.0.7 and
+the official `packages/hydrooj/src/lib/i18n.ts` at commit
+`3bae56fe8edddff12346bcb1c8281269c94688d8`.
 
 ### UI and Styling
 

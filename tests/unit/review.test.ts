@@ -3,6 +3,13 @@ import { ObjectId } from "hydrooj";
 import type { Collection } from "mongodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { BlogModel } from "../../features/articles/article.model";
+import { articleForReader } from "../../features/articles/article.projection";
+import { applyReviewHandlers } from "../../features/review/review.handler";
+import { BlogReviewModel } from "../../features/review/review.model";
+import { publicationUpdate, reviewComment } from "../../features/review/review.policy";
+import { BlogSettingsModel } from "../../features/settings/settings.model";
+import { BlogPolicy } from "../../features/settings/settings.policy";
 import {
     BLOG_PERM,
     DEFAULT_REVIEW_SETTINGS,
@@ -10,13 +17,8 @@ import {
     ReviewMessages,
     ReviewModes,
     ReviewReasons,
-} from "../../features/constants";
-import { BlogModel } from "../../features/model";
-import { BlogPolicy } from "../../features/permission";
-import { applyReviewHandler } from "../../features/review.handler";
-import { articleForReader, BlogReviewModel, publicationUpdate, reviewComment } from "../../features/review.model";
-import { BlogSettingsModel } from "../../features/settings.model";
-import type { BlogDoc, BlogReport } from "../../features/types";
+} from "../../features/shared/constants";
+import type { BlogDoc, BlogReport } from "../../features/shared/types";
 import { makeBlog } from "../helpers/fixtures";
 import type { Handler } from "../helpers/hydro";
 import {
@@ -539,7 +541,7 @@ describe("native review handler boundaries", () => {
         postReport: (args: Record<string, unknown>) => Promise<void>;
     }
     const register = vi.fn<(name: string, path: string, Class: new () => ReviewHandler) => void>();
-    applyReviewHandler({ Route: register } as unknown as Context);
+    applyReviewHandlers({ Route: register } as unknown as Context);
     const routes = new Map(register.mock.calls.map(([, path, Class]) => [path, Class]));
 
     function reviewer(path = "/blog/review/:did", mask = BLOG_PERM.REVIEW) {

@@ -1,6 +1,6 @@
 import { CreateError, ForbiddenError, PRIV, PrivilegeError, ValidationError } from "hydrooj";
 
-import type { BlogAction, BlogPermission } from "./constants";
+import type { BlogAction, BlogPermission } from "../shared/constants";
 import {
     ANONYMOUS_USER_ID,
     BLOG_PERM,
@@ -9,11 +9,11 @@ import {
     BlogMessages,
     BlogPermissions,
     ReviewMessages,
-} from "./constants";
-import type { BlogVisibility } from "./types";
+} from "../shared/constants";
+import type { BlogVisibility } from "../shared/types";
 
-export type { BlogAction, BlogPermission } from "./constants";
-export { BLOG_ALL, BLOG_DEFAULT, BLOG_KNOWN, BLOG_PERM } from "./constants";
+export type { BlogAction, BlogPermission } from "../shared/constants";
+export { BLOG_ALL, BLOG_DEFAULT, BLOG_KNOWN, BLOG_PERM } from "../shared/constants";
 
 export const BLOG_PERMISSIONS = Object.entries(BLOG_PERM).map(([name, bit], index) => ({
     name: name as BlogPermission,

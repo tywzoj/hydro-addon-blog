@@ -1,7 +1,7 @@
 import type { Context } from "hydrooj";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { sendBlogMessage } from "../../features/notifications";
+import { sendBlogMessage } from "../../features/common/notifications";
 import { MessageModel, SystemModel, UserModel } from "../helpers/hydro";
 
 const translate = vi.fn<(message: string, languages: string[]) => string>();

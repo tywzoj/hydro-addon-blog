@@ -1,7 +1,8 @@
 import type { ObjectId } from "hydrooj";
 import { OplogModel, param, Types, UserModel } from "hydrooj";
 
-import { BlogCommentModel, commentIds, commentOwners } from "./comments.model";
+import { BlogUserPostBaseHandler } from "../common/base.handler";
+import { sendBlogMessage } from "../common/notifications";
 import {
     BLOG_COMMENT_NOTICE_LENGTH,
     BLOG_COMMENT_RATE_LIMIT,
@@ -9,9 +10,8 @@ import {
     BlogMessages,
     ROUTE_BLOG_POST_DETAIL,
     SYSTEM_DOMAIN,
-} from "./constants";
-import { BlogUserPostBaseHandler } from "./handler.base";
-import { sendBlogMessage } from "./notifications";
+} from "../shared/constants";
+import { BlogCommentModel, commentIds, commentOwners } from "./comment.model";
 
 export class BlogCommentHandler extends BlogUserPostBaseHandler {
     post() {

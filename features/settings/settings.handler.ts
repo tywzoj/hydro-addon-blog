@@ -1,7 +1,11 @@
 import type { Context } from "hydrooj";
 import { OplogModel, param, requireSudo, Types, UserModel, ValidationError } from "hydrooj";
 
-import type { ReviewMode } from "./constants";
+import { BlogBaseHandler } from "../common/base.handler";
+import { sendBlogMessage } from "../common/notifications";
+import { toTemplate } from "../common/templates";
+import { BlogReviewModel } from "../review/review.model";
+import type { ReviewMode } from "../shared/constants";
 import {
     BLOG_FIRST_PAGE,
     BLOG_NONE,
@@ -24,14 +28,10 @@ import {
     TEMPLATE_BLOG_SETTINGS_PERMISSIONS,
     TEMPLATE_BLOG_SETTINGS_ROLES,
     TEMPLATE_BLOG_SETTINGS_USERS,
-} from "./constants";
-import { BlogBaseHandler } from "./handler.base";
-import { sendBlogMessage } from "./notifications";
-import { BLOG_PERMISSIONS } from "./permission";
-import { BlogReviewModel } from "./review.model";
+} from "../shared/constants";
+import type { BlogRole } from "../shared/types";
 import { BlogSettingsModel, permissionMatrixRoles } from "./settings.model";
-import type { BlogRole } from "./types";
-import { toTemplate } from "./utils";
+import { BLOG_PERMISSIONS } from "./settings.policy";
 
 export function parsePermissions(input: unknown, roles: BlogRole[]) {
     if (!input || typeof input !== "object" || Array.isArray(input)) throw new ValidationError("permissions");
@@ -222,7 +222,7 @@ class BlogRoleUserHandler extends BlogSettingsHandler {
     }
 }
 
-export function applySettingsHandler(ctx: Context) {
+export function applySettingsHandlers(ctx: Context) {
     ctx.Route(ROUTE_BLOG_SETTINGS, "/blog/settings", BlogSettingsHandler);
     ctx.Route(ROUTE_BLOG_SETTINGS_ROLES, "/blog/settings/roles", BlogRoleHandler);
     ctx.Route(ROUTE_BLOG_SETTINGS_PERMISSIONS, "/blog/settings/permissions", BlogPermissionHandler);

@@ -1,7 +1,12 @@
 import type { Context, ObjectId } from "hydrooj";
 import { OplogModel, param, Types, UserModel, ValidationError } from "hydrooj";
 
-import type { ReviewDecision } from "./constants";
+import { articleForResponse } from "../articles/article.projection";
+import { BlogBaseHandler, BlogUserPostBaseHandler } from "../common/base.handler";
+import { sendBlogMessage } from "../common/notifications";
+import { toTemplate } from "../common/templates";
+import { BlogSettingsModel } from "../settings/settings.model";
+import type { ReviewDecision } from "../shared/constants";
 import {
     BLOG_REPORT_RATE_LIMIT,
     BlogAuditEvents,
@@ -16,13 +21,10 @@ import {
     ROUTE_BLOG_REVIEW_DETAIL,
     ROUTE_BLOG_REVIEW_RESET,
     SYSTEM_DOMAIN,
-} from "./constants";
-import { BlogBaseHandler, BlogUserPostBaseHandler } from "./handler.base";
-import { sendBlogMessage } from "./notifications";
-import { articleForResponse, BlogReviewModel, OptionalReviewComment } from "./review.model";
-import { BlogSettingsModel } from "./settings.model";
-import type { BlogDoc } from "./types";
-import { toTemplate } from "./utils";
+} from "../shared/constants";
+import type { BlogDoc } from "../shared/types";
+import { BlogReviewModel } from "./review.model";
+import { OptionalReviewComment } from "./review.policy";
 
 class BlogReviewListHandler extends BlogBaseHandler {
     prepare() {
@@ -192,7 +194,7 @@ class BlogReportHandler extends BlogUserPostBaseHandler {
     }
 }
 
-export function applyReviewHandler(ctx: Context) {
+export function applyReviewHandlers(ctx: Context) {
     ctx.Route(ROUTE_BLOG_REVIEW, "/blog/review", BlogReviewListHandler);
     ctx.Route(ROUTE_BLOG_REVIEW_RESET, "/blog/review/:did/reset", BlogReviewResetHandler);
     ctx.Route(ROUTE_BLOG_REVIEW_DETAIL, "/blog/review/:did", BlogReviewDetailHandler);

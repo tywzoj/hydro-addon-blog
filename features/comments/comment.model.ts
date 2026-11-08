@@ -4,8 +4,8 @@ import type { Context, Filter, ObjectId } from "hydrooj";
 import { DocumentModel, DocumentNotFoundError, ValidationError } from "hydrooj";
 import type { Collection } from "mongodb";
 
-import { BlogMessages, SYSTEM_DOMAIN, TYPE_BLOG, TYPE_BLOG_COMMENT } from "./constants";
-import type { BlogCommentDoc, BlogCommentStatus, BlogDoc, BlogReplyDoc } from "./types";
+import { BlogMessages, SYSTEM_DOMAIN, TYPE_BLOG, TYPE_BLOG_COMMENT } from "../shared/constants";
+import type { BlogCommentDoc, BlogCommentStatus, BlogDoc, BlogReplyDoc } from "../shared/types";
 
 declare module "hydrooj" {
     interface DocType {
@@ -19,6 +19,19 @@ declare module "hydrooj" {
 export class BlogCommentModel {
     static coll = DocumentModel.coll as Collection<BlogCommentDoc>;
     static statuses = DocumentModel.collStatus as Collection<BlogCommentStatus>;
+
+    static async init(ctx: Context) {
+        await ctx.db.ensureIndexes(BlogCommentModel.coll, {
+            name: "blogCommentsByArticle",
+            key: { parentId: 1, _id: -1 },
+            partialFilterExpression: { domainId: SYSTEM_DOMAIN, docType: TYPE_BLOG_COMMENT, parentType: TYPE_BLOG },
+        });
+        await ctx.db.ensureIndexes(BlogCommentModel.statuses, {
+            name: "blogCommentLikesByArticle",
+            key: { parentId: 1, commentId: 1 },
+            partialFilterExpression: { domainId: SYSTEM_DOMAIN, docType: TYPE_BLOG_COMMENT },
+        });
+    }
 
     static filter(did: ObjectId): Filter<BlogCommentDoc> {
         return { domainId: SYSTEM_DOMAIN, docType: TYPE_BLOG_COMMENT, parentType: TYPE_BLOG, parentId: did };
@@ -181,19 +194,6 @@ export class BlogCommentModel {
         const [{ target }, status] = await Promise.all([this.get(did, drid, drrid), this.statuses.findOne(identity)]);
         return { drid, ...(drrid ? { drrid } : {}), nLike: target.nLike || 0, liked: status?.liked || false };
     }
-}
-
-export async function ensureCommentIndexes(ctx: Context) {
-    await ctx.db.ensureIndexes(BlogCommentModel.coll, {
-        name: "blogCommentsByArticle",
-        key: { parentId: 1, _id: -1 },
-        partialFilterExpression: { domainId: SYSTEM_DOMAIN, docType: TYPE_BLOG_COMMENT, parentType: TYPE_BLOG },
-    });
-    await ctx.db.ensureIndexes(BlogCommentModel.statuses, {
-        name: "blogCommentLikesByArticle",
-        key: { parentId: 1, commentId: 1 },
-        partialFilterExpression: { domainId: SYSTEM_DOMAIN, docType: TYPE_BLOG_COMMENT },
-    });
 }
 
 export function commentOwners(comments: BlogCommentDoc[]) {

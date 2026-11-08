@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { BlogConfirmMessages, BlogOperations, ReviewMessages } from "../../features/constants";
+import { BlogConfirmMessages, BlogOperations, ReviewMessages } from "../../features/shared/constants";
 import { confirmationMessage, isSubmitShortcut } from "../../frontend/blog-confirmation";
 
 describe("article submission shortcuts", () => {

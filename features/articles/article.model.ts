@@ -1,13 +1,14 @@
 import type { Context, Filter, NumberKeys, ObjectId } from "hydrooj";
 import { DocumentModel, ValidationError } from "hydrooj";
 
-import { BlogCommentModel } from "./comments.model";
-import { BlogMessages, SYSTEM_DOMAIN, TYPE_BLOG } from "./constants";
-import { DEFAULT_REVIEW_SETTINGS, ReviewModes, ReviewReasons } from "./constants";
-import { BlogReviewModel, publicationUpdate } from "./review.model";
-import type { BlogDoc, BlogReviewSettings, BlogStatusDoc, BlogUpdate } from "./types";
+import { BlogCommentModel } from "../comments/comment.model";
+import { BlogReviewModel } from "../review/review.model";
+import { publicationUpdate } from "../review/review.policy";
+import { BlogMessages, SYSTEM_DOMAIN, TYPE_BLOG } from "../shared/constants";
+import { DEFAULT_REVIEW_SETTINGS, ReviewModes, ReviewReasons } from "../shared/constants";
+import type { BlogDoc, BlogReviewSettings, BlogStatusDoc, BlogUpdate } from "../shared/types";
 
-export { TYPE_BLOG } from "./constants";
+export { TYPE_BLOG } from "../shared/constants";
 
 declare module "hydrooj" {
     interface Model {
@@ -23,6 +24,52 @@ declare module "hydrooj" {
 }
 
 export class BlogModel {
+    static async init(ctx: Context) {
+        // The document collection is shared across all docTypes; restrict every index to blog docs only.
+        const partialFilterExpression: Filter<BlogDoc> = {
+            domainId: SYSTEM_DOMAIN,
+            docType: TYPE_BLOG,
+        };
+
+        await ctx.db.ensureIndexes(
+            DocumentModel.coll,
+            // Home list: no owner filter; sort by a single key.
+            // draft is queried as an inequality (e.g. {$ne: true}), so keep it trailing in the compound index.
+            {
+                key: { views: -1, draft: 1 },
+                name: "blogHomeByViews",
+                partialFilterExpression,
+            },
+            {
+                key: { firstPublishAt: -1, draft: 1 },
+                name: "blogHomeByFirstPublish",
+                partialFilterExpression,
+            },
+            {
+                key: { updateAt: -1, draft: 1 },
+                name: "blogHomeByUpdateAt",
+                partialFilterExpression,
+            },
+            // User list: owner equality, pin then sort key.
+            // draft is queried as an inequality (e.g. {$ne: true}), so keep it trailing in the compound index.
+            {
+                key: { owner: 1, pin: -1, views: -1, draft: 1 },
+                name: "blogUserByViews",
+                partialFilterExpression,
+            },
+            {
+                key: { owner: 1, pin: -1, firstPublishAt: -1, draft: 1 },
+                name: "blogUserByFirstPublish",
+                partialFilterExpression,
+            },
+            {
+                key: { owner: 1, pin: -1, updateAt: -1, draft: 1 },
+                name: "blogUserByUpdateAt",
+                partialFilterExpression,
+            },
+        );
+    }
+
     static async add(
         owner: number,
         title: string,
@@ -145,52 +192,6 @@ export class BlogModel {
     ): Promise<BlogStatusDoc> {
         return (await DocumentModel.setStatus(SYSTEM_DOMAIN, TYPE_BLOG, did, uid, $set)) as BlogStatusDoc;
     }
-}
-
-export async function ensureIndexes(ctx: Context) {
-    // The document collection is shared across all docTypes; restrict every index to blog docs only.
-    const partialFilterExpression: Filter<BlogDoc> = {
-        domainId: SYSTEM_DOMAIN,
-        docType: TYPE_BLOG,
-    };
-
-    await ctx.db.ensureIndexes(
-        DocumentModel.coll,
-        // Home list: no owner filter; sort by a single key.
-        // draft is queried as an inequality (e.g. {$ne: true}), so keep it trailing in the compound index.
-        {
-            key: { views: -1, draft: 1 },
-            name: "blogHomeByViews",
-            partialFilterExpression,
-        },
-        {
-            key: { firstPublishAt: -1, draft: 1 },
-            name: "blogHomeByFirstPublish",
-            partialFilterExpression,
-        },
-        {
-            key: { updateAt: -1, draft: 1 },
-            name: "blogHomeByUpdateAt",
-            partialFilterExpression,
-        },
-        // User list: owner equality, pin then sort key.
-        // draft is queried as an inequality (e.g. {$ne: true}), so keep it trailing in the compound index.
-        {
-            key: { owner: 1, pin: -1, views: -1, draft: 1 },
-            name: "blogUserByViews",
-            partialFilterExpression,
-        },
-        {
-            key: { owner: 1, pin: -1, firstPublishAt: -1, draft: 1 },
-            name: "blogUserByFirstPublish",
-            partialFilterExpression,
-        },
-        {
-            key: { owner: 1, pin: -1, updateAt: -1, draft: 1 },
-            name: "blogUserByUpdateAt",
-            partialFilterExpression,
-        },
-    );
 }
 
 global.Hydro.model.blog = BlogModel;

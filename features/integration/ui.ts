@@ -1,15 +1,15 @@
 import type { Context, Handler } from "hydrooj";
 
+import { BlogSettingsModel } from "../settings/settings.model";
 import {
     BlogPermissions,
     ReviewModes,
     ROUTE_BLOG_LIST_HOME,
     ROUTE_BLOG_LIST_USER,
     ROUTE_BLOG_REVIEW,
-} from "./constants";
-import { BlogSettingsModel } from "./settings.model";
+} from "../shared/constants";
 
-export function injectUI(ctx: Context) {
+export function applyBlogUI(ctx: Context) {
     ctx.on("handler/before", async (handler) => {
         const policy = await BlogSettingsModel.forRequest(handler);
         const review = await BlogSettingsModel.review();

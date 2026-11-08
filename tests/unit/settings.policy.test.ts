@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { BLOG_ALL, BLOG_DEFAULT, BLOG_PERM, BlogPermissionError, BlogPolicy } from "../../features/permission";
-import { initialSettings, resolveBlogPolicy } from "../../features/settings.model";
+import { initialSettings, resolveBlogPolicy } from "../../features/settings/settings.model";
+import {
+    BLOG_ALL,
+    BLOG_DEFAULT,
+    BLOG_PERM,
+    BlogPermissionError,
+    BlogPolicy,
+} from "../../features/settings/settings.policy";
 import { ForbiddenError, makeUser, PRIV, PrivilegeError, ValidationError } from "../helpers/hydro";
 
 describe("effective blog roles", () => {

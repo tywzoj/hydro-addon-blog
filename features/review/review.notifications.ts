@@ -4,6 +4,8 @@ import type { Context, User } from "hydrooj";
 import { DocumentModel, Logger, ObjectId, PRIV, ScheduleModel, SystemModel, UserModel } from "hydrooj";
 import type { Collection } from "mongodb";
 
+import { sendBlogMessage } from "../common/notifications";
+import { BlogSettingsModel, resolveBlogPolicy } from "../settings/settings.model";
 import {
     BlogCollections,
     DEFAULT_REVIEW_SETTINGS,
@@ -16,11 +18,9 @@ import {
     ROUTE_BLOG_REVIEW,
     SYSTEM_DOMAIN,
     TYPE_BLOG,
-} from "./constants";
-import { sendBlogMessage } from "./notifications";
+} from "../shared/constants";
+import type { BlogReviewRuntime } from "../shared/types";
 import { BlogReviewModel } from "./review.model";
-import { BlogSettingsModel, resolveBlogPolicy } from "./settings.model";
-import type { BlogReviewRuntime } from "./types";
 
 declare module "hydrooj" {
     interface Collections {

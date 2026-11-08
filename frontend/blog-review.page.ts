@@ -9,7 +9,7 @@ import {
     TEMPLATE_BLOG_DETAIL,
     TEMPLATE_BLOG_EDIT,
     TEMPLATE_BLOG_SETTINGS,
-} from "../features/constants";
+} from "../features/shared/constants";
 import { confirmationMessage, isSubmitShortcut } from "./blog-confirmation";
 
 function formConfirmation(form: HTMLFormElement, submitter: HTMLElement | null) {

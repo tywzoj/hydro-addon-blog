@@ -1,13 +1,13 @@
 import type { Context } from "hydrooj";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { BlogConfirmMessages, DEFAULT_REVIEW_SETTINGS, ReviewMessages } from "../../features/constants";
-import { applyHandler } from "../../features/handler";
-import { BLOG_DEFAULT, BLOG_PERM, BlogPermissionError, BlogPolicy } from "../../features/permission";
-import { BlogReviewModel } from "../../features/review.model";
-import { BlogSettingsModel, initialSettings, resolveBlogPolicy } from "../../features/settings.model";
-import type { BlogDoc, BlogStatusDoc } from "../../features/types";
-import { injectUI } from "../../features/ui";
+import { applyArticleHandlers } from "../../features/articles/article.handler";
+import { applyBlogUI } from "../../features/integration/ui";
+import { BlogReviewModel } from "../../features/review/review.model";
+import { BlogSettingsModel, initialSettings, resolveBlogPolicy } from "../../features/settings/settings.model";
+import { BLOG_DEFAULT, BLOG_PERM, BlogPermissionError, BlogPolicy } from "../../features/settings/settings.policy";
+import { BlogConfirmMessages, DEFAULT_REVIEW_SETTINGS, ReviewMessages } from "../../features/shared/constants";
+import type { BlogDoc, BlogStatusDoc } from "../../features/shared/types";
 import { makeBlog } from "../helpers/fixtures";
 import type { Handler } from "../helpers/hydro";
 import {
@@ -42,7 +42,7 @@ interface UnitHandler extends Handler {
 }
 
 const register = vi.fn<(name: string, path: string, Class: new () => UnitHandler, privilege: number) => void>();
-applyHandler({ Route: register } as unknown as Context);
+applyArticleHandlers({ Route: register } as unknown as Context);
 const routes = new Map(register.mock.calls.map(([, path, Class, privilege]) => [path, { Class, privilege }]));
 
 function createHandler(path: string, viewer = 1, privileges = PRIV.PRIV_USER_PROFILE) {
@@ -95,7 +95,7 @@ describe("route and preparation contracts", () => {
             vi.spyOn(BlogSettingsModel, "review").mockResolvedValue({ ...DEFAULT_REVIEW_SETTINGS, mode });
             const on = vi.fn<(event: string, listener: (h: UnitHandler) => Promise<void>) => void>();
             const inject = vi.fn();
-            injectUI({ on, injectUI: inject } as unknown as Context);
+            applyBlogUI({ on, injectUI: inject } as unknown as Context);
             const handler = createHandler("/blog", 2, PRIV.PRIV_USER_PROFILE | PRIV.PRIV_EDIT_SYSTEM);
             await on.mock.calls[0][1](handler);
             await handler.get({ domainId: "system" });

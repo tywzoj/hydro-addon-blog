@@ -1,4 +1,4 @@
-{% if ddoc.reviewPending or ddoc.requiresReview or ddoc.lastReview or (canViewReportCount and ddoc.reportCount is defined) %}
+{% if ddoc.reviewPending or ddoc.requiresReview or ddoc.lastReview %}
 <div class="section__body supplementary">
   {% if ddoc.reviewPending %}<p>{{ _('Pending review') }}</p>
   {% elif ddoc.requiresReview %}<p>{{ _('Review required') }}</p>{% endif %}
@@ -6,7 +6,6 @@
     <p>{{ _('Review rejected') }}</p>
     <pre>{{ ddoc.lastReview.comments }}</pre>
   {% endif %}
-  {% if canViewReportCount %}<p>{{ _('Reports') }}: {{ ddoc.reportCount|default(0) }}</p>{% endif %}
   {% if reviewBlocked %}<p>{{ _('Publication is blocked by the review rejection limit.') }}</p>{% endif %}
 </div>
 {% endif %}

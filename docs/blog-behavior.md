@@ -71,14 +71,16 @@ It is omitted when no action is available. Existing confirmation dialogs and
 independent action permissions remain unchanged. All action buttons are text-only,
 including Edit.
 
-Review status, reviewer-visible report counts
-and publication-blocking notices appear in the article footer alongside views,
-stars and reporting. Only the author sees their latest nonempty review comment
+Review status and publication-blocking notices appear in the article footer
+alongside views, stars and reporting. Only the author sees their latest nonempty review comment
 in a separate section below the article, before discussion comments. Non-authors,
 including reviewers and root, do not receive that feedback in ordinary article
 responses. Empty feedback sections are omitted, and feedback remains escaped text.
 
 Article detail never loads or exposes report comments, including for reviewers.
+Report counts are displayed only on authorized review queue/detail and counter
+reset pages, never on article detail or editor pages, including for reviewers.
+Existing reviewer-only JSON count access remains unchanged.
 Reports remain on the authorized review detail page, with each entry explicitly
 labeling its reporter through a native user link, alongside content version,
 acceptance time and escaped comments. That page retains its existing pagination

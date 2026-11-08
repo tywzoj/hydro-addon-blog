@@ -42,9 +42,6 @@
       {% if ddoc.lastReview and ddoc.lastReview.decision == 'reject' %}
         <li>{{ _('Review rejected') }}</li>
       {% endif %}
-      {% if canViewReportCount %}
-        <li>{{ _('Reports') }}: {{ ddoc.reportCount|default(0) }}</li>
-      {% endif %}
       {% if reviewBlocked %}<li>{{ _('Publication is blocked by the review rejection limit.') }}</li>{% endif %}
         <li>{{ _('{0} views').format(ddoc.views) }}</li>
       {% if controls.star %}

@@ -6,7 +6,7 @@ This directory retains project direction, implementation plans, and consequentia
 
 | Plan | Status | Scope |
 | --- | --- | --- |
-| [Behavior-preserving structure refactor](structure-refactor.md) | Completed locally | Feature ownership, enforced dependency/naming rules, uniform model initialization, typed locale catalogs and explicit entry points; local UT/E2E/MCP evidence by delivery phase. |
+| [Behavior-preserving structure refactor](structure-refactor.md) | Completed locally; [PR #15](https://github.com/tywzoj/hydro-addon-blog/pull/15) | Feature ownership, enforced dependency/naming rules, uniform model initialization, typed locale catalogs and explicit entry points; local UT/E2E/MCP evidence by delivery phase. |
 | [Blog article review](blog-review.md) | Completed locally; [PR #11](https://github.com/tywzoj/hydro-addon-blog/pull/11) | Three review modes, recoverable reports, review/reset permissions, native reminders/audit, confirmed disabling, localized dialogs, and lifecycle documentation. Local evidence and crash limits are retained; PR checks record commit-specific CI. |
 | [Blog comments and permission matrix](blog-comments.md) | Completed locally | Immutable two-level comments, likes/unlikes, four global permission grants, native deletion/notification behavior, and local UT/E2E/MCP evidence. |
 | [Global blog settings and permissions](blog-permissions.md) | Completed locally | Domain-independent roles, 17 permissions, self-only article creation, native UX audit/fixes, and local UT/E2E/MCP evidence. Review workflows remain deferred. |

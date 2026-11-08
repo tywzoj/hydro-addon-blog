@@ -2,7 +2,8 @@
 
 ## Status and Baseline
 
-Completed locally. Baseline: `2d744d94998aa457870c94efb15002c21c82bce9`,
+Completed locally; [PR #15](https://github.com/tywzoj/hydro-addon-blog/pull/15).
+Baseline: `2d744d94998aa457870c94efb15002c21c82bce9`,
 2026-11-08, Node 24.22.1, Yarn 1.22.22, Hydro 5.0.7,
 framework 0.3.2 and default UI 4.58.5.
 
